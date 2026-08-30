@@ -1,0 +1,9 @@
+{
+  "name": "craftora-marketplace-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
+  "dependencies": { "@vitejs/plugin-vue": "latest", "pinia": "latest", "vue": "latest", "vue-router": "latest", "vite": "latest" },
+  "devDependencies": {}
+}

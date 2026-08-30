@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" fill="none">
+  <rect width="120" height="120" fill="#f5f0e9"/>
+  <rect x="8" y="8" width="32" height="32" fill="#292622"/>
+  <rect x="80" y="8" width="32" height="32" fill="#292622"/>
+  <rect x="8" y="80" width="32" height="32" fill="#292622"/>
+  <rect x="52" y="52" width="8" height="8" fill="#c75f3e"/>
+  <rect x="68" y="52" width="8" height="8" fill="#292622"/>
+  <rect x="52" y="68" width="8" height="8" fill="#292622"/>
+  <rect x="84" y="68" width="16" height="8" fill="#292622"/>
+  <rect x="68" y="84" width="8" height="16" fill="#292622"/>
+  <text x="60" y="112" text-anchor="middle" fill="#746f68" font-family="Arial,sans-serif" font-size="8">¢f QR</text>
+</svg>
