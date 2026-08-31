@@ -11,3 +11,14 @@ npm run dev
 
 # 创新
 添加创意工坊模式，用户可以手动制作手串等饰品。
+
+
+
+
+# 网页的启动方式
+npm run dev
+
+
+# 管理系统的启动方式
+后端：node server/index.js
+前端：npx vite --port 5174

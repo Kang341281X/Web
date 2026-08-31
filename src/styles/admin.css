@@ -1,0 +1,370 @@
+/* ===== 后台管理系统 — Element Plus 主题定制 ===== */
+
+:root {
+  /* 主色调：Element Plus 蓝 */
+  --el-color-primary: #409eff;
+  --el-color-primary-light-3: #79bbff;
+  --el-color-primary-light-5: #a0cfff;
+  --el-color-primary-light-7: #c6e2ff;
+  --el-color-primary-light-8: #d9ecff;
+  --el-color-primary-light-9: #ecf5ff;
+  --el-color-primary-dark-2: #337ecc;
+
+  /* 圆角 */
+  --el-border-radius-base: 4px;
+  --el-border-radius-small: 2px;
+
+  /* 过渡 */
+  --el-transition-duration: 0.3s;
+}
+
+/* ===== 布局 ===== */
+.admin-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: #f0f2f5;
+}
+
+/* 侧边栏 */
+.admin-aside {
+  background: #001529;
+  transition: width 0.3s;
+  overflow-x: hidden;
+  flex-shrink: 0;
+}
+.admin-aside--collapsed {
+  width: 64px !important;
+}
+.admin-aside-logo {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  background: #002140;
+}
+.admin-aside-logo .logo-icon {
+  font-size: 24px;
+  color: var(--el-color-primary);
+  flex-shrink: 0;
+}
+.admin-aside-logo span {
+  transition: opacity 0.2s;
+}
+.admin-aside--collapsed .admin-aside-logo span {
+  opacity: 0;
+  width: 0;
+}
+
+/* 侧边栏菜单 */
+.admin-aside .el-menu {
+  border-right: none;
+  background: transparent;
+}
+.admin-aside .el-menu-item,
+.admin-aside .el-sub-menu__title {
+  color: rgba(255, 255, 255, 0.65);
+  height: 50px;
+  line-height: 50px;
+}
+.admin-aside .el-menu-item:hover,
+.admin-aside .el-sub-menu__title:hover {
+  background: #003a6c !important;
+  color: #fff;
+}
+.admin-aside .el-menu-item.is-active {
+  background: var(--el-color-primary) !important;
+  color: #fff;
+}
+.admin-aside .el-sub-menu .el-menu-item {
+  background: #000c17 !important;
+}
+.admin-aside .el-sub-menu .el-menu-item:hover {
+  background: #003a6c !important;
+}
+.admin-aside .el-sub-menu .el-menu-item.is-active {
+  background: var(--el-color-primary) !important;
+}
+
+/* ===== 顶部导航栏 ===== */
+.admin-header {
+  height: 60px;
+  background: #fff;
+  border-bottom: 1px solid #e8e8e8;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+.admin-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.admin-header-trigger {
+  font-size: 20px;
+  cursor: pointer;
+  color: #333;
+  transition: color 0.2s;
+  padding: 4px;
+}
+.admin-header-trigger:hover {
+  color: var(--el-color-primary);
+}
+.admin-header-breadcrumb {
+  font-size: 14px;
+  color: #666;
+}
+.admin-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.admin-header-icon {
+  font-size: 18px;
+  color: #555;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.admin-header-icon:hover {
+  color: var(--el-color-primary);
+}
+
+/* 用户头像下拉 */
+.admin-user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+.admin-user-trigger:hover {
+  background: #f5f5f5;
+}
+.admin-user-name {
+  font-size: 14px;
+  color: #333;
+}
+
+/* ===== 主内容区 ===== */
+.admin-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  min-width: 0;
+}
+.admin-page-card {
+  margin-bottom: 20px;
+}
+
+/* ===== 仪表盘统计卡片 ===== */
+.dashboard-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.dashboard-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.dashboard-stat-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.dashboard-stat-icon--blue { background: #ecf5ff; color: #409eff; }
+.dashboard-stat-icon--green { background: #f0f9eb; color: #67c23a; }
+.dashboard-stat-icon--orange { background: #fdf6ec; color: #e6a23c; }
+.dashboard-stat-icon--red { background: #fef0f0; color: #f56c6c; }
+.dashboard-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #303030;
+  line-height: 1.2;
+}
+.dashboard-stat-label {
+  font-size: 13px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+/* ===== 分类进度条 ===== */
+.category-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.category-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.category-progress-name {
+  width: 100px;
+  font-size: 13px;
+  color: #606266;
+  flex-shrink: 0;
+}
+.category-progress-count {
+  width: 40px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303030;
+  flex-shrink: 0;
+}
+
+/* ===== 最近商品列表 ===== */
+.recent-product-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.recent-product-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.recent-product-item:last-child {
+  border-bottom: none;
+}
+.recent-product-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #f5f5f5;
+  flex-shrink: 0;
+}
+.recent-product-info {
+  flex: 1;
+  min-width: 0;
+}
+.recent-product-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303030;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recent-product-sub {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+/* ===== 商品管理工具栏 ===== */
+.admin-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.admin-toolbar-left {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-width: 300px;
+}
+.admin-toolbar-right {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ===== 表格图片缩略 ===== */
+.product-row-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #f5f5f5;
+}
+
+/* ===== 表单页 ===== */
+.admin-form-page {
+  max-width: 700px;
+}
+.form-tip-text {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.6;
+}
+.form-tip-text code {
+  background: #f5f7fa;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  color: #e6a23c;
+}
+
+/* ===== 移动端遮罩 ===== */
+.admin-aside-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 2000;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 992px) {
+  .dashboard-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 768px) {
+  .admin-aside {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 2001;
+  }
+  .admin-aside--mobile-hidden {
+    transform: translateX(-100%);
+  }
+  .admin-aside {
+    transition: transform 0.3s;
+  }
+  .admin-header-breadcrumb {
+    display: none;
+  }
+  .admin-user-name {
+    display: none;
+  }
+  .admin-toolbar-left {
+    min-width: 0;
+    flex-direction: column;
+  }
+  .admin-main {
+    padding: 12px;
+  }
+}
+@media (max-width: 480px) {
+  .dashboard-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
