@@ -5,7 +5,8 @@ const emails = ['support@craftora.com', 'hello@craftora.com', 'contact@craftora.
 const socials = [
   { key: 'douyin', src: '/assets/images/contact/qr-douyin.svg' },
   { key: 'xiaohongshu', src: '/assets/images/contact/qr-xiaohongshu.svg' },
-  { key: 'tiktok', src: '/assets/images/contact/qr-tiktok.svg' }
+  { key: 'tiktok', src: '/assets/images/contact/qr-tiktok.svg' },
+  { key: 'telegram', src: '/assets/images/contact/qr-telegram.svg' }
 ]
 </script>
 <template>

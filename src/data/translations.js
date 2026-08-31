@@ -3,7 +3,7 @@ export const languageOptions = [
 ]
 const zh = {
   home:'首页', products:'全部商品', categories:'分类', search:'搜索', favorites:'收藏', cart:'购物车', login:'登录', guest:'访客', account:'我的账户', language:'语言', searchSuggestions:'搜索建议', recentSearches:'最近搜索', showAllSearches:'显示全部记录', collapseSearches:'收起记录', removeSearch:'删除搜索记录', clearSearch:'清除搜索内容',
-  contactUs:'联系我们', contactPhone:'联系电话', contactEmail:'邮箱', douyin:'抖音', xiaohongshu:'小红书', tiktok:'TikTok',
+  contactUs:'联系我们', contactPhone:'联系电话', contactEmail:'邮箱', douyin:'抖音', xiaohongshu:'小红书', tiktok:'TikTok', telegram:'Telegram',
   searchPlaceholder:'搜索手作、礼物或店铺', popular:'人气手作', trending:'正在流行', newArrivals:'本周新作', specialOffers:'精选优惠',
   heroEyebrow:'把生活，过成一件作品', heroTitle:'遇见由双手创造的美好', heroText:'从独立创作者的工作台，来到你的日常生活。', explore:'探索手作', viewAll:'查看全部', addCart:'加入购物车', added:'已加入',
   buyNow:'立即购买', price:'价格', originalPrice:'原价', rating:'评分', seller:'店铺', stock:'库存', quantity:'数量', description:'商品介绍', specifications:'商品规格', shipping:'配送信息', reviews:'买家评价', related:'你可能也喜欢',

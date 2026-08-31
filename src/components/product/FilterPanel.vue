@@ -6,7 +6,7 @@ import { useLanguageStore } from '../../stores/language'
 import PanelSelect from './PanelSelect.vue'
 
 const props = defineProps({ modelValue: Object })
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'applyPrice'])
 const language = useLanguageStore()
 const filters = ref({ ...props.modelValue })
 
@@ -19,22 +19,21 @@ const currency = computed(() => getCurrency(language.locale))
 
 const clear = () => {
   filters.value = { category: 'all', minPriceInput: '', maxPriceInput: '', sale: false, isNew: false }
+  emit('applyPrice', { min: null, max: null })
 }
 
-const onMinInput = () => {
+const applyPrice = () => {
   const min = parsePriceInput(filters.value.minPriceInput)
   const max = parsePriceInput(filters.value.maxPriceInput)
+  let finalMin = min
+  let finalMax = max
   if (min != null && max != null && min > max) {
-    filters.value.maxPriceInput = filters.value.minPriceInput
+    finalMin = max
+    finalMax = min
+    filters.value.minPriceInput = finalMin != null ? String(finalMin) : ''
+    filters.value.maxPriceInput = finalMax != null ? String(finalMax) : ''
   }
-}
-
-const onMaxInput = () => {
-  const min = parsePriceInput(filters.value.minPriceInput)
-  const max = parsePriceInput(filters.value.maxPriceInput)
-  if (min != null && max != null && max < min) {
-    filters.value.minPriceInput = filters.value.maxPriceInput
-  }
+  emit('applyPrice', { min: finalMin, max: finalMax })
 }
 </script>
 <template>
@@ -67,7 +66,6 @@ const onMaxInput = () => {
               min="0"
               step="any"
               :placeholder="language.t('priceInputPlaceholder')"
-              @input="onMinInput"
             />
           </div>
         </label>
@@ -82,11 +80,11 @@ const onMaxInput = () => {
               min="0"
               step="any"
               :placeholder="language.t('priceInputPlaceholder')"
-              @input="onMaxInput"
             />
           </div>
         </label>
       </div>
+      <button class="price-confirm-button" type="button" @click="applyPrice">{{ language.t('confirmPrice') }}</button>
     </div>
     <label class="check-label"><input v-model="filters.sale" type="checkbox" /> {{ language.t('discount') }}</label>
     <label class="check-label"><input v-model="filters.isNew" type="checkbox" /> {{ language.t('newOnly') }}</label>
