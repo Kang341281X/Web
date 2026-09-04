@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { unlink, mkdir, writeFile } from 'node:fs/promises'
+import { unlink, mkdir, writeFile, rm } from 'node:fs/promises'
 import { extname, resolve, relative, sep } from 'node:path'
 
 const TYPES = { jpeg: '.jpg', png: '.png', webp: '.webp' }
@@ -33,5 +33,10 @@ export async function remove(path) {
   if (relative(base, target).startsWith('..')) return
   try { await unlink(target) } catch (error) { if (error.code !== 'ENOENT') throw error }
 }
+export async function removeDirectory(folder) {
+  const base = root(); const target = resolve(base, folder)
+  if (relative(base, target).startsWith('..') || target === base) return
+  try { await rm(target, { recursive: true, force: true }) } catch (error) { console.error(`无法清理上传目录 ${folder}`, error) }
+}
 export function getUrl(path) { return path ? `${String(process.env.PUBLIC_BASE_URL || 'http://localhost:3001').replace(/\/$/, '')}${path}` : null }
-export default { save, delete: remove, getUrl, validateImage }
+export default { save, delete: remove, deleteDirectory: removeDirectory, getUrl, validateImage }

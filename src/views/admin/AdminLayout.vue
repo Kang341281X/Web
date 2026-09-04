@@ -1,21 +1,19 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { useAdminStore } from '../../stores/admin'
 import { useUserStore } from '../../stores/user'
-import { useExcel } from '../../composables/useExcel'
+import api from '../../services/api'
 import {
   Fold, Expand, Setting, Goods, DataLine,
   ArrowDown, Back, Download, Document,
   User, SwitchButton, UserFilled
 } from '@element-plus/icons-vue'
 
-const admin = useAdminStore()
 const userStore = useUserStore()
 const router = useRouter()
 const route = useRoute()
-const { exportProducts, downloadTemplate } = useExcel()
+const menuCategories = ref([])
 
 const isCollapsed = ref(false)
 const isMobile = ref(false)
@@ -37,12 +35,13 @@ function toggleSidebar() {
 }
 
 // 当前激活菜单
-const activeMenu = computed(() => route.path)
+const activeMenu = computed(() => route.fullPath)
 
 // 面包屑
 const breadcrumb = computed(() => {
   if (route.path === '/admin') return ['首页', '仪表盘']
   if (route.path === '/admin/products') return ['首页', '商品管理']
+  if (route.path === '/admin/categories') return ['首页', '商品分类']
   if (route.path === '/admin/settings') return ['首页', '系统设置']
   if (route.path === '/admin/admins') return ['首页', '管理员信息']
   if (route.path === '/admin/profile') return ['个人中心']
@@ -64,22 +63,23 @@ function handleUserCommand(command) {
   }
 }
 
-// 导出
-function handleExport() {
-  exportProducts(admin.products)
-  ElMessage.success('商品列表已导出')
-}
-
-function handleTemplate() {
-  downloadTemplate()
-  ElMessage.success('导入模板已下载')
-}
-
 // 菜单选择
 function handleMenuSelect(index) {
   router.push(index)
   if (isMobile.value) mobileDrawerVisible.value = false
 }
+
+async function loadMenuCategories() {
+  try {
+    const { data } = await api.get('/categories')
+    menuCategories.value = data.data.filter(category => category.status)
+  } catch {
+    // 初始密码尚未修改或网络异常时，保留主菜单；页面本身会给出具体错误。
+  }
+}
+onMounted(loadMenuCategories)
+watch(() => userStore.adminUser?.must_change_password, value => { if (!value) loadMenuCategories() })
+watch(() => route.fullPath, () => loadMenuCategories())
 </script>
 <template>
   <div class="admin-layout">
@@ -112,15 +112,10 @@ function handleMenuSelect(index) {
               <el-icon><Goods /></el-icon>
               <span>商品管理</span>
             </template>
-            <el-menu-item index="/admin/products">商品列表</el-menu-item>
+            <el-menu-item index="/admin/products">全部商品</el-menu-item>
+            <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}商品信息</el-menu-item>
           </el-sub-menu>
-          <el-sub-menu index="/admin/data-group">
-            <template #title>
-              <el-icon><Document /></el-icon>
-              <span>数据导入导出</span>
-            </template>
-            <el-menu-item index="/admin/products">导入导出</el-menu-item>
-          </el-sub-menu>
+          <el-menu-item index="/admin/categories"><el-icon><Document /></el-icon><span>商品分类</span></el-menu-item>
           <el-menu-item index="/admin/settings">
             <el-icon><Setting /></el-icon>
             <span>系统设置</span>
@@ -156,16 +151,10 @@ function handleMenuSelect(index) {
             <el-icon><Goods /></el-icon>
             <span>商品管理</span>
           </template>
-          <el-menu-item index="/admin/products">商品列表</el-menu-item>
+          <el-menu-item index="/admin/products">全部商品</el-menu-item>
+          <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}商品信息</el-menu-item>
         </el-sub-menu>
-        <el-sub-menu index="/admin/data-group">
-          <template #title>
-            <el-icon><Document /></el-icon>
-            <span>数据导入导出</span>
-          </template>
-          <el-menu-item index="/admin/products" @click.stop="handleExport">导出商品列表</el-menu-item>
-          <el-menu-item index="/admin/products" @click.stop="handleTemplate">下载导入模板</el-menu-item>
-        </el-sub-menu>
+        <el-menu-item index="/admin/categories"><el-icon><Document /></el-icon><template #title>商品分类</template></el-menu-item>
         <el-menu-item index="/admin/settings">
           <el-icon><Setting /></el-icon>
           <template #title>系统设置</template>
@@ -192,11 +181,6 @@ function handleMenuSelect(index) {
           </el-breadcrumb>
         </div>
         <div class="admin-header-right">
-          <el-tooltip content="导出数据" placement="bottom">
-            <span class="admin-header-icon" @click="handleExport">
-              <el-icon><Download /></el-icon>
-            </span>
-          </el-tooltip>
           <el-tooltip content="返回前台" placement="bottom">
             <span class="admin-header-icon" @click="router.push('/')">
               <el-icon><Back /></el-icon>

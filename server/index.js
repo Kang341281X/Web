@@ -5,6 +5,8 @@ import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import adminRouter from './routes/admin.js'
 import adminsRouter from './routes/admins.js'
+import categoriesRouter from './routes/categories.js'
+import productsRouter from './routes/products.js'
 
 const app = express()
 const port = Number(process.env.PORT || 3001)
@@ -25,6 +27,8 @@ app.use('/uploads', express.static(uploadDir, { fallthrough: false, maxAge: '1d'
 app.get('/api/health', (_req, res) => res.json({ success: true }))
 app.use('/api/admin', adminRouter)
 app.use('/api/admins', adminsRouter)
+app.use('/api/categories', categoriesRouter)
+app.use('/api/products', productsRouter)
 app.use((err, _req, res, _next) => {
   console.error(err)
   if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ success: false, message: '图片大小不能超过 5MB' })
