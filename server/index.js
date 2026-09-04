@@ -1,116 +1,33 @@
+import './config/env.js'
 import express from 'express'
-import Database from 'better-sqlite3'
 import cors from 'cors'
-import bcrypt from 'bcryptjs'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+import { mkdir } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import adminRouter from './routes/admin.js'
+import adminsRouter from './routes/admins.js'
 
 const app = express()
-const PORT = 3001
+const port = Number(process.env.PORT || 3001)
+const uploadDir = resolve(process.env.UPLOAD_DIR || './uploads')
 
-// 中间件
-app.use(cors())
-app.use(express.json())
-
-// ===== 初始化 SQLite 数据库 =====
-const db = new Database(join(__dirname, 'data.db'))
-db.pragma('journal_mode = WAL')
-
-// 创建 admin_users 表
-db.exec(`
-  CREATE TABLE IF NOT EXISTS admin_users (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    username    TEXT NOT NULL UNIQUE,
-    password    TEXT NOT NULL,
-    email       TEXT,
-    role        TEXT DEFAULT 'admin',
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_login  DATETIME
-  )
-`)
-
-// 插入默认管理员账号（如果不存在）
-const existing = db.prepare('SELECT id FROM admin_users WHERE username = ?').get('admin')
-if (!existing) {
-  const hashedPassword = bcrypt.hashSync('admin123', 10)
-  db.prepare(`
-    INSERT INTO admin_users (username, password, email, role)
-    VALUES (?, ?, ?, ?)
-  `).run('admin', hashedPassword, 'admin@craftora.com', 'admin')
-  console.log('[DB] 默认管理员账号已创建: admin / admin123')
+if (!process.env.JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('生产环境必须配置 JWT_SECRET')
+  }
+  process.env.JWT_SECRET = 'development-only-change-this-jwt-secret-32chars'
+  console.warn('[Config] 未设置 JWT_SECRET，正在使用仅限本地开发的临时密钥；部署前必须配置 .env.production。')
 }
 
-// ===== 登录接口 =====
-app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body
-
-  if (!username || !password) {
-    return res.status(400).json({ success: false, message: '用户名和密码不能为空' })
-  }
-
-  // SQL 查询用户
-  const user = db.prepare('SELECT * FROM admin_users WHERE username = ?').get(username)
-
-  if (!user) {
-    return res.status(401).json({ success: false, message: '用户名或密码错误' })
-  }
-
-  // 验证密码
-  const isMatch = bcrypt.compareSync(password, user.password)
-  if (!isMatch) {
-    return res.status(401).json({ success: false, message: '用户名或密码错误' })
-  }
-
-  // 更新最后登录时间
-  db.prepare('UPDATE admin_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id)
-
-  // 生成简单 token（base64 编码 userId + 时间戳）
-  const token = Buffer.from(`${user.id}:${Date.now()}`).toString('base64')
-
-  res.json({
-    success: true,
-    token,
-    user: {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role
-    }
-  })
+await mkdir(resolve(uploadDir, 'avatars'), { recursive: true })
+app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') || true }))
+app.use(express.json({ limit: '1mb' }))
+app.use('/uploads', express.static(uploadDir, { fallthrough: false, maxAge: '1d' }))
+app.get('/api/health', (_req, res) => res.json({ success: true }))
+app.use('/api/admin', adminRouter)
+app.use('/api/admins', adminsRouter)
+app.use((err, _req, res, _next) => {
+  console.error(err)
+  if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ success: false, message: '图片大小不能超过 5MB' })
+  res.status(err.status || 500).json({ success: false, message: err.message || '服务器内部错误' })
 })
-
-// ===== 获取当前用户信息 =====
-app.get('/api/auth/me', (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '')
-  if (!token) {
-    return res.status(401).json({ success: false, message: '未登录' })
-  }
-  try {
-    const decoded = Buffer.from(token, 'base64').toString('utf-8')
-    const [userId] = decoded.split(':')
-    const user = db.prepare('SELECT id, username, email, role, created_at, last_login FROM admin_users WHERE id = ?').get(userId)
-    if (!user) {
-      return res.status(401).json({ success: false, message: '用户不存在' })
-    }
-    res.json({ success: true, user })
-  } catch {
-    return res.status(401).json({ success: false, message: 'Token 无效' })
-  }
-})
-
-// ===== 退出登录 =====
-app.post('/api/auth/logout', (req, res) => {
-  res.json({ success: true, message: '已退出登录' })
-})
-
-// ===== 启动服务器 =====
-app.listen(PORT, () => {
-  console.log(`\n[Server] 后端服务已启动: http://localhost:${PORT}`)
-  console.log(`[Server] API 端点:`)
-  console.log(`  POST /api/auth/login  - 管理员登录`)
-  console.log(`  GET  /api/auth/me     - 获取当前用户`)
-  console.log(`  POST /api/auth/logout - 退出登录\n`)
-})
+app.listen(port, () => console.log(`[Server] API service: http://localhost:${port}`))

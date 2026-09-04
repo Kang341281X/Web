@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { useAuth } from '../composables/useAuth'
+import api from '../services/api'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
@@ -29,6 +30,18 @@ export const useUserStore = defineStore('user', {
         localStorage.setItem('admin_user', JSON.stringify(result.user))
       }
       return result
+    },
+
+    async refreshAdminProfile() {
+      const { data } = await api.get('/admin/profile')
+      this.adminUser = data.user
+      localStorage.setItem('admin_user', JSON.stringify(data.user))
+      return data.user
+    },
+
+    setAdminUser(user) {
+      this.adminUser = user
+      localStorage.setItem('admin_user', JSON.stringify(user))
     },
 
     // 后台管理员退出

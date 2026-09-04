@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import api from '../services/api'
 
 /**
  * 认证 composable
@@ -12,13 +13,8 @@ export function useAuth() {
     loading.value = true
     errorMsg.value = ''
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) {
+      const { data } = await api.post('/admin/login', { username, password })
+      if (!data.success) {
         errorMsg.value = data.message || '登录失败'
         return { success: false, message: errorMsg.value }
       }
@@ -28,7 +24,7 @@ export function useAuth() {
         user: data.user
       }
     } catch (err) {
-      errorMsg.value = '网络错误，请检查后端服务是否启动'
+      errorMsg.value = err.response?.data?.message || '网络错误，请检查后端服务是否启动'
       return { success: false, message: errorMsg.value }
     } finally {
       loading.value = false

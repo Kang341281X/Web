@@ -109,7 +109,7 @@ function goHome() {
 
       <div class="login-footer">
         <span class="login-back" @click="goHome">← 返回前台首页</span>
-        <small class="login-hint">默认账号: admin / admin123</small>
+        <small class="login-hint">默认账号: admin / 123456</small>
       </div>
     </div>
   </div>

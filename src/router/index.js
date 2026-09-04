@@ -13,6 +13,8 @@ import AdminDashboard from '../views/admin/AdminDashboard.vue'
 import AdminProducts from '../views/admin/AdminProducts.vue'
 import AdminSettings from '../views/admin/AdminSettings.vue'
 import AdminLogin from '../views/admin/AdminLogin.vue'
+import AdminUsers from '../views/admin/AdminUsers.vue'
+import AdminProfile from '../views/admin/AdminProfile.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -33,7 +35,9 @@ const router = createRouter({
       children: [
         { path: '', component: AdminDashboard },
         { path: 'products', component: AdminProducts },
-        { path: 'settings', component: AdminSettings }
+        { path: 'settings', component: AdminSettings },
+        { path: 'profile', component: AdminProfile },
+        { path: 'admins', component: AdminUsers, meta: { requiresSuperAdmin: true } }
       ]
     },
     { path: '/:pathMatch(.*)*', component: NotFound }
@@ -46,6 +50,9 @@ router.beforeEach((to, from, next) => {
   // 需要登录但未登录 → 跳转登录页
   if (to.meta.requiresAuth && !userStore.isAdmin) {
     return next('/admin/login')
+  }
+  if (to.meta.requiresSuperAdmin && userStore.adminUser?.role !== 'super_admin') {
+    return next('/admin')
   }
   // 已登录用户访问登录页 → 跳转后台
   if (to.meta.guestOnly && userStore.isAdmin) {

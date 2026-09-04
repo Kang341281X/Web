@@ -8,7 +8,7 @@ import { useExcel } from '../../composables/useExcel'
 import {
   Fold, Expand, Setting, Goods, DataLine,
   ArrowDown, Back, Download, Document,
-  User, SwitchButton
+  User, SwitchButton, UserFilled
 } from '@element-plus/icons-vue'
 
 const admin = useAdminStore()
@@ -44,6 +44,8 @@ const breadcrumb = computed(() => {
   if (route.path === '/admin') return ['首页', '仪表盘']
   if (route.path === '/admin/products') return ['首页', '商品管理']
   if (route.path === '/admin/settings') return ['首页', '系统设置']
+  if (route.path === '/admin/admins') return ['首页', '管理员信息']
+  if (route.path === '/admin/profile') return ['个人中心']
   return ['首页']
 })
 
@@ -58,7 +60,7 @@ function handleUserCommand(command) {
       router.push('/admin/login')
     }).catch(() => {})
   } else if (command === 'profile') {
-    ElMessage.info('个人中心功能开发中')
+    router.push('/admin/profile')
   }
 }
 
@@ -79,7 +81,6 @@ function handleMenuSelect(index) {
   if (isMobile.value) mobileDrawerVisible.value = false
 }
 </script>
-
 <template>
   <div class="admin-layout">
     <!-- 移动端遮罩 -->
@@ -124,6 +125,10 @@ function handleMenuSelect(index) {
             <el-icon><Setting /></el-icon>
             <span>系统设置</span>
           </el-menu-item>
+          <el-menu-item v-if="userStore.adminUser?.role === 'super_admin'" index="/admin/admins">
+            <el-icon><User /></el-icon>
+            <span>管理员信息</span>
+          </el-menu-item>
         </el-menu>
       </div>
     </el-drawer>
@@ -165,6 +170,10 @@ function handleMenuSelect(index) {
           <el-icon><Setting /></el-icon>
           <template #title>系统设置</template>
         </el-menu-item>
+        <el-menu-item v-if="userStore.adminUser?.role === 'super_admin'" index="/admin/admins">
+          <el-icon><User /></el-icon>
+          <template #title>管理员信息</template>
+        </el-menu-item>
       </el-menu>
     </aside>
 
@@ -195,7 +204,7 @@ function handleMenuSelect(index) {
           </el-tooltip>
           <el-dropdown @command="handleUserCommand">
             <span class="admin-user-trigger">
-              <el-avatar :size="32" :icon="UserFilled" />
+              <el-avatar :size="32" :src="userStore.adminUser?.avatar_url || '/assets/images/avatars/avatar-placeholder.svg'" :icon="UserFilled" />
               <span class="admin-user-name">{{ userStore.adminUser?.username || '管理员' }}</span>
               <el-icon><ArrowDown /></el-icon>
             </span>
@@ -217,7 +226,3 @@ function handleMenuSelect(index) {
   </div>
 </template>
 
-<script>
-import { UserFilled } from '@element-plus/icons-vue'
-export default { data() { return { UserFilled } } }
-</script>
