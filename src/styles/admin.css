@@ -28,10 +28,11 @@
 
 /* 侧边栏 */
 .admin-aside {
-  background: #001529;
+  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
   transition: width 0.3s;
   overflow-x: hidden;
   flex-shrink: 0;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.08);
 }
 .admin-aside--collapsed {
   width: 64px !important;
@@ -47,11 +48,11 @@
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
-  background: #002140;
+  background: rgba(255,255,255,0.12);
 }
 .admin-aside-logo .logo-icon {
   font-size: 24px;
-  color: var(--el-color-primary);
+  color: #ffd666;
   flex-shrink: 0;
 }
 .admin-aside-logo span {
@@ -69,27 +70,28 @@
 }
 .admin-aside .el-menu-item,
 .admin-aside .el-sub-menu__title {
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(255, 255, 255, 0.78);
   height: 50px;
   line-height: 50px;
 }
 .admin-aside .el-menu-item:hover,
 .admin-aside .el-sub-menu__title:hover {
-  background: #003a6c !important;
+  background: rgba(255, 255, 255, 0.18) !important;
   color: #fff;
 }
 .admin-aside .el-menu-item.is-active {
-  background: var(--el-color-primary) !important;
+  background: rgba(255, 255, 255, 0.22) !important;
   color: #fff;
+  font-weight: 600;
 }
 .admin-aside .el-sub-menu .el-menu-item {
-  background: #000c17 !important;
+  background: rgba(0, 0, 0, 0.12) !important;
 }
 .admin-aside .el-sub-menu .el-menu-item:hover {
-  background: #003a6c !important;
+  background: rgba(255, 255, 255, 0.18) !important;
 }
 .admin-aside .el-sub-menu .el-menu-item.is-active {
-  background: var(--el-color-primary) !important;
+  background: rgba(255, 255, 255, 0.22) !important;
 }
 
 /* ===== 顶部导航栏 ===== */

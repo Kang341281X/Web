@@ -102,7 +102,7 @@ watch(() => route.fullPath, () => loadMenuCategories())
         <el-menu
           :default-active="activeMenu"
           background-color="transparent"
-          text-color="rgba(255,255,255,0.65)"
+          text-color="rgba(255,255,255,0.78)"
           active-text-color="#fff"
           @select="handleMenuSelect"
         >
@@ -141,7 +141,7 @@ watch(() => route.fullPath, () => loadMenuCategories())
       <el-menu
         :default-active="activeMenu"
         background-color="transparent"
-        text-color="rgba(255,255,255,0.65)"
+        text-color="rgba(255,255,255,0.78)"
         active-text-color="#fff"
         :collapse="isCollapsed"
         @select="handleMenuSelect"

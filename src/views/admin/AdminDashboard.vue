@@ -2,25 +2,30 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../../services/api'
-import { Goods, Files, Box, Warning, User, Document } from '@element-plus/icons-vue'
+import { useUserStore } from '../../stores/user'
+import { Goods, Files, Box, Warning, Document } from '@element-plus/icons-vue'
 
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
-const stats = ref({ totalProducts: 0, totalCategories: 0, todayNew: 0, monthNew: 0, lowStock: 0, totalAdmins: 0 })
+const stats = ref({ totalProducts: 0, totalCategories: 0, todayNew: 0, monthNew: 0, lowStock: 0 })
 const recentLogs = ref([])
 const categoryChart = ref(null)
 const trendChart = ref(null)
 const categoryData = ref([])
 const trendData = ref([])
 
+const isSuperAdmin = computed(() => userStore.adminUser?.role === 'super_admin')
+
 async function loadDashboard() {
   loading.value = true
   try {
-    const [productsRes, categoriesRes, logsRes, adminsRes] = await Promise.all([
+    const [productsRes, categoriesRes, ...rest] = await Promise.all([
       api.get('/products', { params: { page: 1, page_size: 1 } }),
       api.get('/categories'),
-      api.get('/logs', { params: { page: 1, page_size: 8 } }),
-      api.get('/admins', { params: { page: 1, page_size: 1 } }).catch(() => ({ data: { pagination: { total: 0 } } })),
+      isSuperAdmin.value
+        ? api.get('/logs', { params: { page: 1, page_size: 8 } })
+        : Promise.resolve({ data: { data: [] } }),
     ])
 
     const totalProducts = productsRes.data.pagination.total
@@ -28,11 +33,7 @@ async function loadDashboard() {
     const today = new Date().toISOString().slice(0, 10)
     const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
 
-    const [todayRes, monthRes, lowStockRes] = await Promise.all([
-      api.get('/products', { params: { page: 1, page_size: 1 } }).then(() => totalProducts),
-      api.get('/products', { params: { page: 1, page_size: 1 } }).then(() => totalProducts),
-      api.get('/products', { params: { page: 1, page_size: 100 } }),
-    ])
+    const lowStockRes = await api.get('/products', { params: { page: 1, page_size: 100 } })
 
     const allProducts = lowStockRes.data.data
     const todayNew = allProducts.filter(p => new Date(p.created_at).toISOString().slice(0, 10) === today).length
@@ -45,10 +46,9 @@ async function loadDashboard() {
       todayNew,
       monthNew,
       lowStock,
-      totalAdmins: adminsRes.data.pagination.total,
     }
 
-    recentLogs.value = logsRes.data.data
+    recentLogs.value = rest[0].data.data
 
     // 分类占比
     const catCount = {}
@@ -139,12 +139,6 @@ onMounted(loadDashboard)
           <div><div class="dashboard-stat-value">{{ stats.lowStock }}</div><div class="dashboard-stat-label">低库存预警(&lt;10)</div></div>
         </div>
       </el-card>
-      <el-card shadow="hover" body-style="padding: 20px;">
-        <div class="dashboard-stat-card">
-          <div class="dashboard-stat-icon dashboard-stat-icon--purple"><el-icon :size="28"><User /></el-icon></div>
-          <div><div class="dashboard-stat-value">{{ stats.totalAdmins }}</div><div class="dashboard-stat-label">管理员数</div></div>
-        </div>
-      </el-card>
     </div>
 
     <el-row :gutter="20" style="margin-top: 20px">
@@ -162,7 +156,7 @@ onMounted(loadDashboard)
       </el-col>
     </el-row>
 
-    <el-card shadow="never" class="admin-page-card" style="margin-top: 20px">
+    <el-card v-if="isSuperAdmin" shadow="never" class="admin-page-card" style="margin-top: 20px">
       <template #header>
         <div style="display:flex; justify-content:space-between; align-items:center">
           <span style="font-weight:600">最近操作日志</span>
@@ -190,7 +184,6 @@ onMounted(loadDashboard)
 .dashboard-stat-icon--green { background: #f0f9eb; color: #67c23a }
 .dashboard-stat-icon--orange { background: #fdf6ec; color: #e6a23c }
 .dashboard-stat-icon--red { background: #fef0f0; color: #f56c6c }
-.dashboard-stat-icon--purple { background: #f4f0ff; color: #a856ff }
 .dashboard-stat-value { font-size: 28px; font-weight: 700; color: #303133 }
 .dashboard-stat-label { font-size: 13px; color: #909399; margin-top: 2px }
 </style>

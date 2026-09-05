@@ -27,13 +27,16 @@ router.get('/categories', async (_req, res, next) => {
   }
 })
 
-// 商品列表（分页 + 筛选）
+// 商品列表（分页 + 筛选 + 排序）
 router.get('/products', async (req, res, next) => {
   try {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const pageSize = Math.min(Math.max(Number.parseInt(req.query.page_size, 10) || 20, 1), 100)
     const keyword = String(req.query.keyword || '').trim()
     const categoryId = req.query.category_id ? Number(req.query.category_id) : null
+    const sort = String(req.query.sort || 'recommended')
+    const minPrice = req.query.min_price != null && req.query.min_price !== '' ? Number(req.query.min_price) : null
+    const maxPrice = req.query.max_price != null && req.query.max_price !== '' ? Number(req.query.max_price) : null
 
     const clauses = ['p.status = 1']
     const params = []
@@ -46,11 +49,28 @@ router.get('/products', async (req, res, next) => {
       clauses.push('p.category_id = ?')
       params.push(categoryId)
     }
+    if (minPrice != null && Number.isFinite(minPrice)) {
+      clauses.push('p.price >= ?')
+      params.push(minPrice)
+    }
+    if (maxPrice != null && Number.isFinite(maxPrice)) {
+      clauses.push('p.price <= ?')
+      params.push(maxPrice)
+    }
     const where = `WHERE ${clauses.join(' AND ')}`
+
+    let orderClause = 'ORDER BY p.created_at DESC, p.id DESC'
+    if (sort === 'popular') {
+      orderClause = 'ORDER BY p.sales DESC, p.id DESC'
+    } else if (sort === 'newest') {
+      orderClause = 'ORDER BY p.created_at DESC, p.id DESC'
+    } else if (sort === 'rating') {
+      orderClause = 'ORDER BY p.sales DESC, p.id DESC'
+    }
 
     const [[{ total }]] = await db.execute(`SELECT COUNT(*) AS total FROM product p ${where}`, params)
     const [rows] = await db.execute(
-      `SELECT ${selectFields} FROM product p JOIN category c ON c.id = p.category_id ${where} ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`,
+      `SELECT ${selectFields} FROM product p JOIN category c ON c.id = p.category_id ${where} ${orderClause} LIMIT ? OFFSET ?`,
       [...params, pageSize, (page - 1) * pageSize]
     )
     res.json({

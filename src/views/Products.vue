@@ -9,9 +9,10 @@ import SortSelect from '../components/product/SortSelect.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
 const language = useLanguageStore()
-const filters = ref({ category: 'all', minPriceInput: '', maxPriceInput: '', sale: false, isNew: false })
+const filters = ref({ category: null, minPriceInput: '', maxPriceInput: '', sale: false, isNew: false })
 const sort = ref('recommended')
 const appliedPrice = ref({ min: null, max: null })
+const selectedCategory = ref(null)
 const products = ref([])
 const categories = ref([])
 const total = ref(0)
@@ -28,19 +29,16 @@ const priceBounds = computed(() => {
 async function load() {
   loading.value = true
   try {
-    const params = { page: page.value, page_size: pageSize.value }
-    if (filters.value.category !== 'all') {
-      const cat = categories.value.find(c => c.name === filters.value.category || c.id === filters.value.category)
-      if (cat) params.category_id = cat.id
-    }
+    const params = { page: page.value, page_size: pageSize.value, sort: sort.value }
+    if (selectedCategory.value != null) params.category_id = selectedCategory.value
     if (filters.value.keyword) params.keyword = filters.value.keyword
+    const { minCny, maxCny } = priceBounds.value
+    if (minCny != null) params.min_price = minCny
+    if (maxCny != null) params.max_price = maxCny
     const { products: list, pagination } = await fetchProducts(params)
     total.value = pagination.total
-    // 客户端价格筛选
+    // 客户端折扣筛选（后端无此字段筛选）
     let filtered = list
-    const { minCny, maxCny } = priceBounds.value
-    if (minCny != null) filtered = filtered.filter(p => p.price >= minCny)
-    if (maxCny != null) filtered = filtered.filter(p => p.price <= maxCny)
     if (filters.value.sale) filtered = filtered.filter(p => p.originalPrice > p.price)
     products.value = filtered
   } catch (error) {
@@ -51,15 +49,19 @@ async function load() {
   }
 }
 
-const filtered = computed(() => {
-  return [...products.value].sort((a, b) =>
-    sort.value === 'popular' ? b.sales - a.sales :
-    sort.value === 'newest' ? b.createdAt - a.createdAt :
-    sort.value === 'rating' ? b.rating - a.rating : 0
-  )
-})
+const filtered = computed(() => products.value)
 
 function search() { page.value = 1; load() }
+
+function onApplyPrice(event) {
+  appliedPrice.value = { ...event }
+  search()
+}
+
+function onSelectCategory(value) {
+  selectedCategory.value = value
+  search()
+}
 
 onMounted(async () => {
   try {
@@ -70,6 +72,6 @@ onMounted(async () => {
   await load()
 })
 
-watch(() => filters.value.category, () => search())
+watch(sort, () => search())
 </script>
-<template><section class="container page products-page"><div class="page-intro"><span class="eyebrow">{{ language.t('market') }}</span><h1>{{ language.t('products') }}</h1><p>{{ language.t('handmade') }} · {{ total }} {{ language.t('items') }}</p></div><div class="catalog-toolbar"><button class="filter-toggle" @click="$refs.filter?.classList.toggle('open')">☷ {{ language.t('filters') }}</button><p>{{ filtered.length }} {{ language.t('items') }}</p><SortSelect v-model="sort" /></div><div class="catalog-layout"><div ref="filter"><FilterPanel v-model="filters" @apply-price="appliedPrice = $event" /></div><ProductGrid v-if="filtered.length" :products="filtered" /><EmptyState v-else :title="language.t('noResults')" :action="language.t('continueShopping')">{{ language.t('craftedDescription') }}</EmptyState></div></section></template>
+<template><section class="container page products-page"><div class="page-intro"><span class="eyebrow">{{ language.t('market') }}</span><h1>{{ language.t('products') }}</h1><p>{{ language.t('handmade') }} · {{ total }} {{ language.t('items') }}</p></div><div class="catalog-toolbar"><button class="filter-toggle" @click="$refs.filter?.classList.toggle('open')">☷ {{ language.t('filters') }}</button><p>{{ filtered.length }} {{ language.t('items') }}</p><SortSelect v-model="sort" /></div><div class="catalog-layout"><div ref="filter"><FilterPanel v-model="filters" :categories="categories" @apply-price="onApplyPrice" @select-category="onSelectCategory" /></div><ProductGrid v-if="filtered.length" :products="filtered" /><EmptyState v-else :title="language.t('noResults')" :action="language.t('continueShopping')">{{ language.t('craftedDescription') }}</EmptyState></div></section></template>

@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useDropdown } from '../../composables/useDropdown'
 
 const props = defineProps({
-  modelValue: { type: [String, Number], required: true },
+  modelValue: { type: [String, Number], default: null, validator: () => true },
   options: { type: Array, required: true },
   order: { type: Array, default: null },
   ariaLabel: { type: String, default: '' },
@@ -25,8 +25,8 @@ const orderedOptions = computed(() => {
 const currentLabel = computed(() => props.options.find(option => option.value === props.modelValue)?.label ?? '')
 
 const choose = value => {
-  emit('update:modelValue', value)
   open.value = false
+  emit('update:modelValue', value)
 }
 </script>
 <template>

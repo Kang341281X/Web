@@ -1,39 +1,70 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { categories } from '../../data/categories'
+import { computed, nextTick, ref, watch } from 'vue'
 import { getCurrency, parsePriceInput } from '../../data/currency'
 import { useLanguageStore } from '../../stores/language'
 import PanelSelect from './PanelSelect.vue'
 
-const props = defineProps({ modelValue: Object })
-const emit = defineEmits(['update:modelValue', 'applyPrice'])
+const props = defineProps({
+  modelValue: Object,
+  categories: { type: Array, default: () => [] }
+})
+const emit = defineEmits(['update:modelValue', 'applyPrice', 'selectCategory'])
 const language = useLanguageStore()
 const filters = ref({ ...props.modelValue })
+const priceError = ref('')
 
-watch(filters, value => emit('update:modelValue', { ...value }), { deep: true })
-watch(() => props.modelValue, value => { filters.value = { ...value } }, { deep: true })
+let syncing = false
+watch(filters, value => {
+  if (syncing) return
+  emit('update:modelValue', { ...value })
+}, { deep: true })
+watch(() => props.modelValue, async value => {
+  syncing = true
+  filters.value = { ...value }
+  await nextTick()
+  syncing = false
+}, { deep: true })
 
-const categoryOptions = computed(() => categories.map(c => ({ value: c.id, label: language.category(c.id) })))
-const categoryOrder = computed(() => categories.map(c => c.id))
 const currency = computed(() => getCurrency(language.locale))
 
+const categoryOptions = computed(() => {
+  const allOption = { value: null, label: language.t('all') }
+  const catOptions = props.categories.map(c => ({ value: c.id, label: c.name }))
+  return [allOption, ...catOptions]
+})
+const categoryOrder = computed(() => [null, ...props.categories.map(c => c.id)])
+
+const onCategoryChange = value => {
+  filters.value.category = value
+  emit('update:modelValue', { ...filters.value })
+  emit('selectCategory', value)
+}
+
 const clear = () => {
-  filters.value = { category: 'all', minPriceInput: '', maxPriceInput: '', sale: false, isNew: false }
+  filters.value = { category: null, minPriceInput: '', maxPriceInput: '', sale: false, isNew: false }
+  priceError.value = ''
   emit('applyPrice', { min: null, max: null })
+  emit('selectCategory', null)
 }
 
 const applyPrice = () => {
-  const min = parsePriceInput(filters.value.minPriceInput)
-  const max = parsePriceInput(filters.value.maxPriceInput)
-  let finalMin = min
-  let finalMax = max
-  if (min != null && max != null && min > max) {
-    finalMin = max
-    finalMax = min
-    filters.value.minPriceInput = finalMin != null ? String(finalMin) : ''
-    filters.value.maxPriceInput = finalMax != null ? String(finalMax) : ''
+  priceError.value = ''
+  const rawMin = filters.value.minPriceInput
+  const rawMax = filters.value.maxPriceInput
+  const min = parsePriceInput(rawMin)
+  const max = parsePriceInput(rawMax)
+
+  // 检测无效值（负值或非数字）
+  if ((rawMin !== '' && rawMin != null && min == null) || (rawMax !== '' && rawMax != null && max == null)) {
+    priceError.value = language.t('priceErrorInvalid')
+    return
   }
-  emit('applyPrice', { min: finalMin, max: finalMax })
+  // 检测最低价大于最高价
+  if (min != null && max != null && min > max) {
+    priceError.value = language.t('priceErrorMinGreater')
+    return
+  }
+  emit('applyPrice', { min, max })
 }
 </script>
 <template>
@@ -45,11 +76,12 @@ const applyPrice = () => {
     <label class="filter-field">
       <span>{{ language.t('category') }}</span>
       <PanelSelect
-        v-model="filters.category"
+        :model-value="filters.category"
         :options="categoryOptions"
         :order="categoryOrder"
         :aria-label="language.t('category')"
         full-width
+        @update:model-value="onCategoryChange"
       />
     </label>
     <div class="filter-field filter-price">
@@ -85,6 +117,7 @@ const applyPrice = () => {
         </label>
       </div>
       <button class="price-confirm-button" type="button" @click="applyPrice">{{ language.t('confirmPrice') }}</button>
+      <p v-if="priceError" class="price-error">{{ priceError }}</p>
     </div>
     <label class="check-label"><input v-model="filters.sale" type="checkbox" /> {{ language.t('discount') }}</label>
     <label class="check-label"><input v-model="filters.isNew" type="checkbox" /> {{ language.t('newOnly') }}</label>
