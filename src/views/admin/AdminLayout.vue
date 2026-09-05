@@ -7,7 +7,7 @@ import api from '../../services/api'
 import {
   Fold, Expand, Setting, Goods, DataLine,
   ArrowDown, Back, Download, Document,
-  User, SwitchButton, UserFilled
+  User, SwitchButton, UserFilled, List
 } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
@@ -42,7 +42,8 @@ const breadcrumb = computed(() => {
   if (route.path === '/admin') return ['首页', '仪表盘']
   if (route.path === '/admin/products') return ['首页', '商品管理']
   if (route.path === '/admin/categories') return ['首页', '商品分类']
-  if (route.path === '/admin/settings') return ['首页', '系统设置']
+  if (route.path === '/admin/settings') return ['首页', '其他设置']
+  if (route.path === '/admin/logs') return ['首页', '操作日志']
   if (route.path === '/admin/admins') return ['首页', '管理员信息']
   if (route.path === '/admin/profile') return ['个人中心']
   return ['首页']
@@ -116,9 +117,10 @@ watch(() => route.fullPath, () => loadMenuCategories())
             <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}商品信息</el-menu-item>
           </el-sub-menu>
           <el-menu-item index="/admin/categories"><el-icon><Document /></el-icon><span>商品分类</span></el-menu-item>
+          <el-menu-item index="/admin/logs"><el-icon><List /></el-icon><span>操作日志</span></el-menu-item>
           <el-menu-item index="/admin/settings">
             <el-icon><Setting /></el-icon>
-            <span>系统设置</span>
+            <span>其他设置</span>
           </el-menu-item>
           <el-menu-item v-if="userStore.adminUser?.role === 'super_admin'" index="/admin/admins">
             <el-icon><User /></el-icon>
@@ -155,9 +157,10 @@ watch(() => route.fullPath, () => loadMenuCategories())
           <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}商品信息</el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/admin/categories"><el-icon><Document /></el-icon><template #title>商品分类</template></el-menu-item>
+        <el-menu-item index="/admin/logs"><el-icon><List /></el-icon><template #title>操作日志</template></el-menu-item>
         <el-menu-item index="/admin/settings">
           <el-icon><Setting /></el-icon>
-          <template #title>系统设置</template>
+          <template #title>其他设置</template>
         </el-menu-item>
         <el-menu-item v-if="userStore.adminUser?.role === 'super_admin'" index="/admin/admins">
           <el-icon><User /></el-icon>

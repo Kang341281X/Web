@@ -7,6 +7,10 @@ import adminRouter from './routes/admin.js'
 import adminsRouter from './routes/admins.js'
 import categoriesRouter from './routes/categories.js'
 import productsRouter from './routes/products.js'
+import importsRouter, { startImportCleanupTask } from './routes/imports.js'
+import logsRouter from './routes/logs.js'
+import settingsRouter from './routes/settings.js'
+import publicRouter from './routes/public.js'
 
 const app = express()
 const port = Number(process.env.PORT || 3001)
@@ -21,6 +25,8 @@ if (!process.env.JWT_SECRET) {
 }
 
 await mkdir(resolve(uploadDir, 'avatars'), { recursive: true })
+await mkdir(resolve(uploadDir, 'products'), { recursive: true })
+await mkdir(resolve(uploadDir, 'import-temp'), { recursive: true })
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') || true }))
 app.use(express.json({ limit: '1mb' }))
 app.use('/uploads', express.static(uploadDir, { fallthrough: false, maxAge: '1d' }))
@@ -29,9 +35,16 @@ app.use('/api/admin', adminRouter)
 app.use('/api/admins', adminsRouter)
 app.use('/api/categories', categoriesRouter)
 app.use('/api/products', productsRouter)
+app.use('/api/products', importsRouter)
+app.use('/api/logs', logsRouter)
+app.use('/api/settings', settingsRouter)
+app.use('/api/public', publicRouter)
 app.use((err, _req, res, _next) => {
   console.error(err)
   if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ success: false, message: '图片大小不能超过 5MB' })
   res.status(err.status || 500).json({ success: false, message: err.message || '服务器内部错误' })
 })
-app.listen(port, () => console.log(`[Server] API service: http://localhost:${port}`))
+app.listen(port, () => {
+  console.log(`[Server] API service: http://localhost:${port}`)
+  startImportCleanupTask()
+})

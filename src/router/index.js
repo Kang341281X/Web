@@ -16,6 +16,7 @@ import AdminLogin from '../views/admin/AdminLogin.vue'
 import AdminUsers from '../views/admin/AdminUsers.vue'
 import AdminProfile from '../views/admin/AdminProfile.vue'
 import AdminCategories from '../views/admin/AdminCategories.vue'
+import AdminLogs from '../views/admin/AdminLogs.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -38,6 +39,7 @@ const router = createRouter({
         { path: 'products', component: AdminProducts },
         { path: 'categories', component: AdminCategories },
         { path: 'settings', component: AdminSettings },
+        { path: 'logs', component: AdminLogs },
         { path: 'profile', component: AdminProfile },
         { path: 'admins', component: AdminUsers, meta: { requiresSuperAdmin: true } }
       ]

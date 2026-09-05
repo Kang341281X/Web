@@ -1,13 +1,24 @@
 <script setup>
+import { onMounted, ref } from 'vue'
 import { useLanguageStore } from '../../stores/language'
+import { fetchSettings } from '../../services/publicApi'
 const language = useLanguageStore()
-const emails = ['support@craftora.com', 'hello@craftora.com', 'contact@craftora.com']
+const settings = ref({})
+
 const socials = [
   { key: 'douyin', src: '/assets/images/contact/qr-douyin.svg' },
   { key: 'xiaohongshu', src: '/assets/images/contact/qr-xiaohongshu.svg' },
   { key: 'tiktok', src: '/assets/images/contact/qr-tiktok.svg' },
   { key: 'telegram', src: '/assets/images/contact/qr-telegram.svg' }
 ]
+
+onMounted(async () => {
+  try {
+    settings.value = await fetchSettings()
+  } catch (error) {
+    console.error('Failed to load site settings:', error)
+  }
+})
 </script>
 <template>
   <footer class="site-footer">
@@ -26,10 +37,16 @@ const socials = [
         <h4>{{ language.t('contactUs') }}</h4>
         <p class="footer-phone">
           <span>{{ language.t('contactPhone') }}</span>
-          <a href="tel:+864001234567">400-123-4567</a>
+          <a v-if="settings.contact_phone" :href="`tel:${settings.contact_phone}`">{{ settings.contact_phone }}</a>
         </p>
         <p class="footer-email-label">{{ language.t('contactEmail') }}</p>
-        <a v-for="email in emails" :key="email" :href="`mailto:${email}`">{{ email }}</a>
+        <a v-if="settings.contact_email" :href="`mailto:${settings.contact_email}`">{{ settings.contact_email }}</a>
+        <div class="footer-social-links">
+          <a v-if="settings.xiaohongshu" :href="`https://www.xiaohongshu.com/user/profile/${settings.xiaohongshu}`" target="_blank" rel="noopener">{{ language.t('xiaohongshu') }}</a>
+          <a v-if="settings.douyin" :href="`https://www.douyin.com/user/${settings.douyin}`" target="_blank" rel="noopener">{{ language.t('douyin') }}</a>
+          <a v-if="settings.tiktok" :href="`https://www.tiktok.com/${settings.tiktok}`" target="_blank" rel="noopener">{{ language.t('tiktok') }}</a>
+          <a v-if="settings.telegram" :href="settings.telegram" target="_blank" rel="noopener">{{ language.t('telegram') }}</a>
+        </div>
         <div class="footer-qr-grid">
           <figure v-for="item in socials" :key="item.key">
             <img :src="item.src" :alt="language.t(item.key)" width="88" height="88" />

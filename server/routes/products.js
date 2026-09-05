@@ -64,7 +64,7 @@ router.post('/', async (req, res, next) => {
   try {
     const item = await validateProduct(req.body)
     const [result] = await db.execute('INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [item.name, item.categoryId, item.price, item.originalPrice, item.stock, item.sales, item.unit, item.manufacturer, item.brand, item.description, item.detail, item.status])
-    await writeOperationLog(req.admin.id, 'create_product', item.name)
+    await writeOperationLog(req.admin.id, 'create_product', item.name, req)
     res.status(201).json({ success: true, data: await getProduct(result.insertId) })
   } catch (error) { next(error) }
 })
@@ -73,10 +73,10 @@ router.put('/:id', async (req, res, next) => {
     const id = Number(req.params.id); const item = await validateProduct(req.body)
     const [result] = await db.execute('UPDATE product SET name = ?, category_id = ?, price = ?, original_price = ?, stock = ?, sales = ?, unit = ?, manufacturer = ?, brand = ?, description = ?, detail = ?, status = ? WHERE id = ?', [item.name, item.categoryId, item.price, item.originalPrice, item.stock, item.sales, item.unit, item.manufacturer, item.brand, item.description, item.detail, item.status, id])
     if (!result.affectedRows) return res.status(404).json({ success: false, message: '商品不存在' })
-    await writeOperationLog(req.admin.id, 'update_product', String(id)); res.json({ success: true, data: await getProduct(id) })
+    await writeOperationLog(req.admin.id, 'update_product', String(id), req); res.json({ success: true, data: await getProduct(id) })
   } catch (error) { next(error) }
 })
-async function deleteProducts(ids, adminId) {
+async function deleteProducts(ids, adminId, req) {
   const uniqueIds = [...new Set(ids.map(Number).filter(Number.isInteger))]
   if (!uniqueIds.length) throw Object.assign(new Error('请选择商品'), { status: 400 })
   const connection = await db.getConnection()
@@ -84,11 +84,11 @@ async function deleteProducts(ids, adminId) {
     await connection.beginTransaction(); const [rows] = await connection.execute(`SELECT id, name FROM product WHERE id IN (${uniqueIds.map(() => '?').join(',')}) FOR UPDATE`, uniqueIds)
     if (!rows.length) throw Object.assign(new Error('商品不存在'), { status: 404 })
     await connection.execute(`DELETE FROM product WHERE id IN (${rows.map(() => '?').join(',')})`, rows.map(row => row.id)); await connection.commit()
-    await Promise.all(rows.map(row => storageService.deleteDirectory(`products/${row.id}`))); await writeOperationLog(adminId, 'delete_products', rows.map(row => row.id).join(',')); return rows.length
+    await Promise.all(rows.map(row => storageService.deleteDirectory(`products/${row.id}`))); await writeOperationLog(adminId, 'delete_products', rows.map(row => row.id).join(','), req); return rows.length
   } catch (error) { await connection.rollback(); throw error } finally { connection.release() }
 }
-router.delete('/:id', async (req, res, next) => { try { await deleteProducts([req.params.id], req.admin.id); res.json({ success: true, message: '商品已删除' }) } catch (error) { next(error) } })
-router.post('/batch-delete', async (req, res, next) => { try { const count = await deleteProducts(Array.isArray(req.body.ids) ? req.body.ids : [], req.admin.id); res.json({ success: true, message: `已删除 ${count} 个商品` }) } catch (error) { next(error) } })
+router.delete('/:id', async (req, res, next) => { try { await deleteProducts([req.params.id], req.admin.id, req); res.json({ success: true, message: '商品已删除' }) } catch (error) { next(error) } })
+router.post('/batch-delete', async (req, res, next) => { try { const count = await deleteProducts(Array.isArray(req.body.ids) ? req.body.ids : [], req.admin.id, req); res.json({ success: true, message: `已删除 ${count} 个商品` }) } catch (error) { next(error) } })
 router.post('/:id/images', upload.array('images', 10), async (req, res, next) => {
   const id = Number(req.params.id); const saved = []
   try {
@@ -148,6 +148,7 @@ router.post('/export', async (req, res, next) => {
     const sheet = XLSX.utils.json_to_sheet(rows.map((row, index) => ({ '序号': index + 1, '商品名称': row.name, '分类': row.category_name, '售价': Number(row.price), '原价': row.original_price === null ? '' : Number(row.original_price), '库存': row.stock, '销量': row.sales, '单位': row.unit || '', '生产厂家': row.manufacturer || '', '品牌': row.brand || '', '状态': row.status ? '上架' : '下架', '描述': row.description || '' })))
     const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, sheet, '商品数据'); const buffer = XLSX.write(book, { type: 'buffer', bookType: 'xlsx' })
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent('商品数据.xlsx')}`); res.send(buffer)
+    await writeOperationLog(req.admin.id, 'export_products', `导出商品：${mode === 'selected' ? `${ids.length}条` : '筛选结果'}`, req)
   } catch (error) { next(error) }
 })
 export default router

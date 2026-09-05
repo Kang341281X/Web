@@ -27,7 +27,7 @@ router.post('/', async (req, res, next) => {
     }
     const [result] = await db.execute('INSERT INTO category (name, parent_id, sort_order, status) VALUES (?, ?, ?, ?)', [category.name, category.parentId, category.sortOrder, category.status])
     const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, created_at, updated_at FROM category WHERE id = ?', [result.insertId])
-    await writeOperationLog(req.admin.id, 'create_category', category.name)
+    await writeOperationLog(req.admin.id, 'create_category', category.name, req)
     res.status(201).json({ success: true, data: rows[0] })
   } catch (error) { if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ success: false, message: '同一父级下已存在该分类名称' }); next(error) }
 })
@@ -39,7 +39,7 @@ router.put('/:id', async (req, res, next) => {
     const [result] = await db.execute('UPDATE category SET name = ?, parent_id = ?, sort_order = ?, status = ? WHERE id = ?', [category.name, category.parentId, category.sortOrder, category.status, id])
     if (!result.affectedRows) return res.status(404).json({ success: false, message: '分类不存在' })
     const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, created_at, updated_at FROM category WHERE id = ?', [id])
-    await writeOperationLog(req.admin.id, 'update_category', category.name)
+    await writeOperationLog(req.admin.id, 'update_category', category.name, req)
     res.json({ success: true, data: rows[0] })
   } catch (error) { if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ success: false, message: '同一父级下已存在该分类名称' }); next(error) }
 })
@@ -51,7 +51,7 @@ router.delete('/:id', async (req, res, next) => {
     if (productCount || childCount) return res.status(409).json({ success: false, message: productCount ? '该分类下有关联商品，请先转移或删除商品' : '该分类下存在子分类，请先处理子分类' })
     const [result] = await db.execute('DELETE FROM category WHERE id = ?', [id])
     if (!result.affectedRows) return res.status(404).json({ success: false, message: '分类不存在' })
-    await writeOperationLog(req.admin.id, 'delete_category', String(id))
+    await writeOperationLog(req.admin.id, 'delete_category', String(id), req)
     res.json({ success: true, message: '分类已删除' })
   } catch (error) { next(error) }
 })

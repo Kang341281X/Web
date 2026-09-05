@@ -19,7 +19,7 @@ export async function requireAuth(req, res, next) {
 
 export function requireSuperAdmin(req, res, next) {
   if (req.admin?.role !== 'super_admin') {
-    void writeOperationLog(req.admin?.id, 'unauthorized_admin_access', req.originalUrl)
+    void writeOperationLog(req.admin?.id, 'unauthorized_admin_access', req.originalUrl, req)
     return res.status(403).json({ success: false, message: '仅超级管理员可访问' })
   }
   next()
@@ -30,7 +30,40 @@ export function requirePasswordChanged(req, res, next) {
   next()
 }
 
-// 操作日志表将在后续模块创建；此处保留稳定调用点。
-export async function writeOperationLog(adminId, action, detail) {
-  console.warn(`[Audit placeholder] admin=${adminId ?? 'anonymous'} action=${action} detail=${detail}`)
+// 操作日志映射：action → { module, type }
+const LOG_MAP = {
+  login: { module: '登录', type: '登录' },
+  create_product: { module: '商品管理', type: '新增商品' },
+  update_product: { module: '商品管理', type: '编辑商品' },
+  delete_products: { module: '商品管理', type: '删除商品' },
+  import_products: { module: '商品管理', type: '导入确认' },
+  export_products: { module: '商品管理', type: '导出' },
+  create_category: { module: '分类管理', type: '新增分类' },
+  update_category: { module: '分类管理', type: '编辑分类' },
+  delete_category: { module: '分类管理', type: '删除分类' },
+  update_settings: { module: '其他设置', type: '修改设置' },
+  create_admin: { module: '管理员管理', type: '新增管理员' },
+  update_admin: { module: '管理员管理', type: '编辑管理员' },
+  delete_admin: { module: '管理员管理', type: '删除管理员' },
+  reset_admin_password: { module: '管理员管理', type: '重置密码' },
+  update_profile: { module: '其他设置', type: '修改个人信息' },
+  unauthorized_admin_access: { module: '其他设置', type: '越权访问' },
+}
+
+export async function writeOperationLog(adminId, action, detail, req) {
+  try {
+    const mapping = LOG_MAP[action] || { module: '其他', type: action }
+    let username = null
+    if (adminId) {
+      const [rows] = await db.execute('SELECT username FROM admin WHERE id = ?', [adminId])
+      username = rows[0]?.username || null
+    }
+    const ip = req?.ip || req?.socket?.remoteAddress || null
+    await db.execute(
+      'INSERT INTO operation_log (admin_id, admin_username, operation_type, operation_module, operation_desc, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+      [adminId || null, username, mapping.type, mapping.module, String(detail || '').slice(0, 500), ip]
+    )
+  } catch (error) {
+    console.error('写入操作日志失败:', error)
+  }
 }
