@@ -38,8 +38,8 @@ const router = createRouter({
         { path: '', component: AdminDashboard },
         { path: 'products', component: AdminProducts },
         { path: 'categories', component: AdminCategories },
-        { path: 'settings', component: AdminSettings },
-        { path: 'logs', component: AdminLogs },
+        { path: 'settings', component: AdminSettings, meta: { requiresSuperAdmin: true } },
+        { path: 'logs', component: AdminLogs, meta: { requiresSuperAdmin: true } },
         { path: 'profile', component: AdminProfile },
         { path: 'admins', component: AdminUsers, meta: { requiresSuperAdmin: true } }
       ]

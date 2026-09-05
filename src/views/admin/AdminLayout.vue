@@ -34,6 +34,8 @@ function toggleSidebar() {
   }
 }
 
+const isSuperAdmin = computed(() => userStore.adminUser?.role === 'super_admin')
+
 // 当前激活菜单
 const activeMenu = computed(() => route.fullPath)
 
@@ -117,12 +119,12 @@ watch(() => route.fullPath, () => loadMenuCategories())
             <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}商品信息</el-menu-item>
           </el-sub-menu>
           <el-menu-item index="/admin/categories"><el-icon><Document /></el-icon><span>商品分类</span></el-menu-item>
-          <el-menu-item index="/admin/logs"><el-icon><List /></el-icon><span>操作日志</span></el-menu-item>
-          <el-menu-item index="/admin/settings">
+          <el-menu-item v-if="isSuperAdmin" index="/admin/logs"><el-icon><List /></el-icon><span>操作日志</span></el-menu-item>
+          <el-menu-item v-if="isSuperAdmin" index="/admin/settings">
             <el-icon><Setting /></el-icon>
             <span>其他设置</span>
           </el-menu-item>
-          <el-menu-item v-if="userStore.adminUser?.role === 'super_admin'" index="/admin/admins">
+          <el-menu-item v-if="isSuperAdmin" index="/admin/admins">
             <el-icon><User /></el-icon>
             <span>管理员信息</span>
           </el-menu-item>
@@ -157,12 +159,12 @@ watch(() => route.fullPath, () => loadMenuCategories())
           <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}商品信息</el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/admin/categories"><el-icon><Document /></el-icon><template #title>商品分类</template></el-menu-item>
-        <el-menu-item index="/admin/logs"><el-icon><List /></el-icon><template #title>操作日志</template></el-menu-item>
-        <el-menu-item index="/admin/settings">
+        <el-menu-item v-if="isSuperAdmin" index="/admin/logs"><el-icon><List /></el-icon><template #title>操作日志</template></el-menu-item>
+        <el-menu-item v-if="isSuperAdmin" index="/admin/settings">
           <el-icon><Setting /></el-icon>
           <template #title>其他设置</template>
         </el-menu-item>
-        <el-menu-item v-if="userStore.adminUser?.role === 'super_admin'" index="/admin/admins">
+        <el-menu-item v-if="isSuperAdmin" index="/admin/admins">
           <el-icon><User /></el-icon>
           <template #title>管理员信息</template>
         </el-menu-item>

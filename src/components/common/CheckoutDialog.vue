@@ -121,6 +121,17 @@ async function handleDownload() {
     destroy-on-close
   >
     <el-alert
+      type="warning"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 16px"
+    >
+      <template #title>
+        本站暂不支持在线支付。请下载购物清单表格，通过以下联系方式与卖家沟通后完成下单。
+      </template>
+    </el-alert>
+
+    <el-alert
       v-if="downloaded"
       type="success"
       :closable="false"
