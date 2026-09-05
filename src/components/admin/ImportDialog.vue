@@ -39,17 +39,10 @@ const failRows = computed(() => {
 
 // ── 模板下载 ──────────────────────────────────────────
 async function downloadTemplate() {
-  try {
-    const response = await api.get('/products/import-template', { responseType: 'blob' })
-    const url = URL.createObjectURL(response.data)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'Products.xlsx'
-    link.click()
-    URL.revokeObjectURL(url)
-  } catch (error) {
-    ElMessage.error(error.response?.data?.message || '模板下载失败')
-  }
+  const link = document.createElement('a')
+  link.href = '/assets/Products.xlsx'
+  link.download = 'Products.xlsx'
+  link.click()
 }
 
 // ── 文件选择 ──────────────────────────────────────────

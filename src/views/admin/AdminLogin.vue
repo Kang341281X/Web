@@ -11,8 +11,9 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const loginForm = reactive({
-  username: '',
-  password: ''
+  username: localStorage.getItem('admin_saved_username') || '',
+  password: '',
+  remember: !!localStorage.getItem('admin_saved_username')
 })
 
 const rules = {
@@ -38,6 +39,11 @@ async function handleLogin() {
     const result = await userStore.adminLogin(loginForm.username, loginForm.password)
     loading.value = false
     if (result.success) {
+      if (loginForm.remember) {
+        localStorage.setItem('admin_saved_username', loginForm.username)
+      } else {
+        localStorage.removeItem('admin_saved_username')
+      }
       ElMessage.success(`欢迎回来，${result.user.username}`)
       router.push('/admin')
     } else {
@@ -66,11 +72,14 @@ function goHome() {
         :rules="rules"
         size="large"
         label-position="top"
+        autocomplete="on"
         @submit.prevent="handleLogin"
       >
         <el-form-item prop="username">
           <el-input
             v-model="loginForm.username"
+            name="username"
+            autocomplete="username"
             placeholder="请输入用户名"
             :prefix-icon="User"
             clearable
@@ -81,6 +90,8 @@ function goHome() {
         <el-form-item prop="password">
           <el-input
             v-model="loginForm.password"
+            name="password"
+            autocomplete="current-password"
             :type="showPassword ? 'text' : 'password'"
             placeholder="请输入密码"
             :prefix-icon="Lock"
@@ -93,6 +104,10 @@ function goHome() {
               </el-icon>
             </template>
           </el-input>
+        </el-form-item>
+
+        <el-form-item>
+          <el-checkbox v-model="loginForm.remember">记住我</el-checkbox>
         </el-form-item>
 
         <el-form-item>

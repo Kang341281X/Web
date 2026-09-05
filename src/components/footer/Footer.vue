@@ -12,6 +12,11 @@ const socials = [
   { key: 'telegram', src: '/assets/images/contact/qr-telegram.svg' }
 ]
 
+function qrSrc(key) {
+  const qrValue = settings.value[`${key}_qr`]
+  return qrValue || socials.find(s => s.key === key)?.src
+}
+
 onMounted(async () => {
   try {
     settings.value = await fetchSettings()
@@ -49,7 +54,7 @@ onMounted(async () => {
         </div>
         <div class="footer-qr-grid">
           <figure v-for="item in socials" :key="item.key">
-            <img :src="item.src" :alt="language.t(item.key)" width="88" height="88" />
+            <img :src="qrSrc(item.key)" :alt="language.t(item.key)" width="88" height="88" />
             <figcaption>{{ language.t(item.key) }}</figcaption>
           </figure>
         </div>

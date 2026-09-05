@@ -1,45 +1,45 @@
 CREATE TABLE IF NOT EXISTS category (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(50) NOT NULL,
-  parent_id INT NOT NULL DEFAULT 0,
-  sort_order INT NOT NULL DEFAULT 0,
-  status TINYINT NOT NULL DEFAULT 1,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  parent_id INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  status INTEGER NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_category_parent_name (parent_id, name),
-  INDEX idx_category_sort (parent_id, sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (parent_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_category_sort ON category (parent_id, sort_order);
 
 CREATE TABLE IF NOT EXISTS product (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(200) NOT NULL,
-  category_id INT NOT NULL,
-  price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  original_price DECIMAL(10,2) NULL,
-  stock INT NOT NULL DEFAULT 0,
-  sales INT NOT NULL DEFAULT 0,
-  unit VARCHAR(20) NULL,
-  manufacturer VARCHAR(100) NULL,
-  brand VARCHAR(100) NULL,
-  description TEXT NULL,
-  detail LONGTEXT NULL,
-  main_image VARCHAR(255) NULL,
-  status TINYINT NOT NULL DEFAULT 1,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  category_id INTEGER NOT NULL,
+  price REAL NOT NULL DEFAULT 0.00,
+  original_price REAL,
+  stock INTEGER NOT NULL DEFAULT 0,
+  sales INTEGER NOT NULL DEFAULT 0,
+  unit TEXT,
+  manufacturer TEXT,
+  brand TEXT,
+  description TEXT,
+  detail TEXT,
+  main_image TEXT,
+  status INTEGER NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_product_category FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE RESTRICT,
-  INDEX idx_product_category (category_id),
-  INDEX idx_product_status_created (status, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_product_category ON product (category_id);
+CREATE INDEX IF NOT EXISTS idx_product_status_created ON product (status, created_at);
 
 CREATE TABLE IF NOT EXISTS product_image (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  product_id INT NOT NULL,
-  image_url VARCHAR(255) NOT NULL,
-  is_main TINYINT NOT NULL DEFAULT 0,
-  sort_order INT NOT NULL DEFAULT 0,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER NOT NULL,
+  image_url TEXT NOT NULL,
+  is_main INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_product_image_product FOREIGN KEY (product_id) REFERENCES product(id) ON DELETE CASCADE,
-  INDEX idx_product_image_order (product_id, sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (product_id) REFERENCES product(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_product_image_order ON product_image (product_id, sort_order);

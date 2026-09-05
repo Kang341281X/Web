@@ -35,7 +35,7 @@ router.post('/', async (req, res, next) => {
     const [rows] = await db.execute(`SELECT ${fields} FROM admin WHERE id = ?`, [result.insertId])
     await writeOperationLog(req.admin.id, 'create_admin', username, req)
     res.status(201).json({ success: true, message: '管理员已创建', data: publicAdmin(rows[0]) })
-  } catch (error) { if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ success: false, message: '账号已存在' }); next(error) }
+  } catch (error) { if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ success: false, message: '账号已存在' }); next(error) }
 })
 router.put('/:id', async (req, res, next) => {
   try {

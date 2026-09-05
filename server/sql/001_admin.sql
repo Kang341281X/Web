@@ -1,16 +1,18 @@
+-- 由于 data.db 中已有旧表 admin_users，先删除重建为统一名称
+DROP TABLE IF EXISTS admin_users;
 CREATE TABLE IF NOT EXISTS admin (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  username VARCHAR(50) NOT NULL UNIQUE,
-  password VARCHAR(255) NOT NULL,
-  role ENUM('super_admin', 'admin') NOT NULL DEFAULT 'admin',
-  real_name VARCHAR(50) NOT NULL,
-  avatar VARCHAR(255) NULL,
-  phone VARCHAR(20) NULL,
-  email VARCHAR(100) NULL,
-  status TINYINT NOT NULL DEFAULT 1,
-  must_change_password TINYINT NOT NULL DEFAULT 1,
-  last_login_time DATETIME NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  password TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('super_admin', 'admin')),
+  real_name TEXT NOT NULL,
+  avatar TEXT,
+  phone TEXT,
+  email TEXT,
+  status INTEGER NOT NULL DEFAULT 1,
+  must_change_password INTEGER NOT NULL DEFAULT 1,
+  last_login_time DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_admin_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_admin_status ON admin (status);

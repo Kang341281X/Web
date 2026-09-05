@@ -1,28 +1,23 @@
 import './config/env.js'
-import mysql from 'mysql2/promise'
+import Database from 'better-sqlite3'
 import { readdir, readFile } from 'node:fs/promises'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const connectionOptions = {
-  host: process.env.DB_HOST || '127.0.0.1',
-  port: Number(process.env.DB_PORT || 3306),
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  // 仅用于执行仓库内受控的迁移 SQL，运行时连接池不启用此选项。
-  multipleStatements: true
-}
-const database = process.env.DB_NAME || 'shopping_admin'
-const connection = await mysql.createConnection(connectionOptions)
+const dbPath = resolve(process.env.DB_PATH || './server/data.db')
+const db = new Database(dbPath)
+db.pragma('journal_mode = WAL')
+db.pragma('foreign_keys = ON')
 
 try {
-  await connection.query(`CREATE DATABASE IF NOT EXISTS \`${database.replace(/`/g, '``')}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
-  await connection.changeUser({ database })
   const sqlDirectory = new URL('./sql/', import.meta.url)
   const migrations = (await readdir(sqlDirectory)).filter(file => file.endsWith('.sql')).sort()
   for (const migration of migrations) {
-    await connection.query(await readFile(new URL(`./sql/${migration}`, import.meta.url), 'utf8'))
+    const sql = await readFile(new URL(`./sql/${migration}`, import.meta.url), 'utf8')
+    db.exec(sql)
     console.log(`Applied ${migration}`)
   }
-  console.log(`Migration completed: ${database}`)
+  console.log(`Migration completed: ${dbPath}`)
 } finally {
-  await connection.end()
+  db.close()
 }

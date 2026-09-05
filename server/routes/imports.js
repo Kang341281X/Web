@@ -144,7 +144,7 @@ const TEMPLATE_FILE_PATH = resolve(
   '..', '..', 'public', 'assets', 'Products.xlsx'
 )
 
-router.get('/import-template', async (req, res) => {
+router.get('/import-template', async (req, res, next) => {
   try {
     if (!existsSync(TEMPLATE_FILE_PATH)) {
       return res.status(404).json({ success: false, message: '模板文件不存在，请联系管理员' })
@@ -583,7 +583,7 @@ export function startImportCleanupTask() {
   cleanupTimer = setInterval(async () => {
     try {
       const [expired] = await db.execute(
-        "SELECT id, temp_dir FROM import_batch WHERE status = 'pending' AND expires_at < NOW()"
+        "SELECT id, temp_dir FROM import_batch WHERE status = 'pending' AND expires_at < datetime('now')"
       )
       for (const batch of expired) {
         await cleanupBatch(batch.id, batch.temp_dir)

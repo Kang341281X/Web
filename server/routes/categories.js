@@ -29,7 +29,7 @@ router.post('/', async (req, res, next) => {
     const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, created_at, updated_at FROM category WHERE id = ?', [result.insertId])
     await writeOperationLog(req.admin.id, 'create_category', category.name, req)
     res.status(201).json({ success: true, data: rows[0] })
-  } catch (error) { if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ success: false, message: '同一父级下已存在该分类名称' }); next(error) }
+  } catch (error) { if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ success: false, message: '同一父级下已存在该分类名称' }); next(error) }
 })
 router.put('/:id', async (req, res, next) => {
   try {
@@ -41,7 +41,7 @@ router.put('/:id', async (req, res, next) => {
     const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, created_at, updated_at FROM category WHERE id = ?', [id])
     await writeOperationLog(req.admin.id, 'update_category', category.name, req)
     res.json({ success: true, data: rows[0] })
-  } catch (error) { if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ success: false, message: '同一父级下已存在该分类名称' }); next(error) }
+  } catch (error) { if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ success: false, message: '同一父级下已存在该分类名称' }); next(error) }
 })
 router.delete('/:id', async (req, res, next) => {
   try {

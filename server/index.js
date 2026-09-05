@@ -26,6 +26,7 @@ if (!process.env.JWT_SECRET) {
 
 await mkdir(resolve(uploadDir, 'avatars'), { recursive: true })
 await mkdir(resolve(uploadDir, 'products'), { recursive: true })
+await mkdir(resolve(uploadDir, 'settings'), { recursive: true })
 await mkdir(resolve(uploadDir, 'import-temp'), { recursive: true })
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') || true }))
 app.use(express.json({ limit: '1mb' }))

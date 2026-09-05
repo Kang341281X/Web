@@ -53,4 +53,9 @@ export async function fetchSettings() {
   return data.data
 }
 
+export async function saveIntentOrder(payload) {
+  const { data } = await publicApi.post('/intent-orders', payload)
+  return data.data
+}
+
 export default publicApi

@@ -19,7 +19,7 @@ router.post('/login', async (req, res, next) => {
     const admin = rows[0]
     if (!admin || !await bcrypt.compare(password, admin.password)) return res.status(401).json({ success: false, message: '账号或密码错误' })
     if (!admin.status) return res.status(403).json({ success: false, message: '该账号已被禁用' })
-    await db.execute('UPDATE admin SET last_login_time = NOW() WHERE id = ?', [admin.id])
+    await db.execute("UPDATE admin SET last_login_time = datetime('now') WHERE id = ?", [admin.id])
     await writeOperationLog(admin.id, 'login', `管理员登录：${admin.username}`, req)
     const token = jwt.sign({ id: admin.id, role: admin.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '8h' })
     admin.last_login_time = new Date()

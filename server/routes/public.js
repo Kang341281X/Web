@@ -96,9 +96,52 @@ router.get('/settings', async (_req, res, next) => {
     const [rows] = await db.execute('SELECT setting_key, setting_value FROM site_setting ORDER BY id')
     const settings = {}
     for (const row of rows) {
-      settings[row.setting_key] = row.setting_value
+      if (row.setting_key.endsWith('_qr') && row.setting_value) {
+        settings[row.setting_key] = storageService.getUrl(row.setting_value)
+      } else {
+        settings[row.setting_key] = row.setting_value
+      }
     }
     res.json({ success: true, data: settings })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// 保存意向订单（无需登录）
+router.post('/intent-orders', async (req, res, next) => {
+  try {
+    const body = req.body || {}
+    const items = Array.isArray(body.items) ? body.items : null
+    const totalAmount = Number(body.totalAmount)
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ success: false, message: '商品列表不能为空' })
+    }
+    if (!Number.isFinite(totalAmount) || totalAmount < 0) {
+      return res.status(400).json({ success: false, message: '合计金额无效' })
+    }
+
+    // 校验每条商品快照
+    const snapshot = items.map(item => ({
+      product_id: Number(item.product_id) || null,
+      name: String(item.name || '').slice(0, 200),
+      price: Number(item.price) || 0,
+      quantity: Math.max(1, Number(item.quantity) || 1),
+      subtotal: Number(item.subtotal) || 0,
+    }))
+
+    // 生成订单编号：IO + 时间戳 + 4位随机数
+    const now = Date.now()
+    const random = Math.floor(1000 + Math.random() * 9000)
+    const orderNo = `IO${now}${random}`
+
+    await db.execute(
+      'INSERT INTO intent_order (order_no, items, total_amount) VALUES (?, ?, ?)',
+      [orderNo, JSON.stringify(snapshot), totalAmount.toFixed(2)]
+    )
+
+    res.json({ success: true, data: { order_no: orderNo } })
   } catch (error) {
     next(error)
   }

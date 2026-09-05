@@ -81,7 +81,7 @@ async function deleteProducts(ids, adminId, req) {
   if (!uniqueIds.length) throw Object.assign(new Error('请选择商品'), { status: 400 })
   const connection = await db.getConnection()
   try {
-    await connection.beginTransaction(); const [rows] = await connection.execute(`SELECT id, name FROM product WHERE id IN (${uniqueIds.map(() => '?').join(',')}) FOR UPDATE`, uniqueIds)
+    await connection.beginTransaction(); const [rows] = await connection.execute(`SELECT id, name FROM product WHERE id IN (${uniqueIds.map(() => '?').join(',')})`, uniqueIds)
     if (!rows.length) throw Object.assign(new Error('商品不存在'), { status: 404 })
     await connection.execute(`DELETE FROM product WHERE id IN (${rows.map(() => '?').join(',')})`, rows.map(row => row.id)); await connection.commit()
     await Promise.all(rows.map(row => storageService.deleteDirectory(`products/${row.id}`))); await writeOperationLog(adminId, 'delete_products', rows.map(row => row.id).join(','), req); return rows.length
@@ -99,7 +99,7 @@ router.post('/:id/images', upload.array('images', 10), async (req, res, next) =>
     try {
       await connection.beginTransaction(); const [[{ total }]] = await connection.execute('SELECT COUNT(*) AS total FROM product_image WHERE product_id = ?', [id])
       for (let index = 0; index < saved.length; index++) await connection.execute('INSERT INTO product_image (product_id, image_url, is_main, sort_order) VALUES (?, ?, ?, ?)', [id, saved[index], total === 0 && index === 0 ? 1 : 0, total + index])
-      if (total === 0) await connection.execute('UPDATE product SET main_image = ? WHERE id = ?', [saved[0], id]); else await connection.execute('UPDATE product SET updated_at = NOW() WHERE id = ?', [id])
+      if (total === 0) await connection.execute('UPDATE product SET main_image = ? WHERE id = ?', [saved[0], id]); else await connection.execute("UPDATE product SET updated_at = datetime('now') WHERE id = ?", [id])
       await connection.commit()
     } catch (error) { await connection.rollback(); throw error } finally { connection.release() }
     res.status(201).json({ success: true, data: await getProduct(id) })
@@ -109,10 +109,10 @@ router.delete('/images/:imageId', async (req, res, next) => {
   try {
     const connection = await db.getConnection(); let image
     try {
-      await connection.beginTransaction(); const [rows] = await connection.execute('SELECT id, product_id, image_url, is_main FROM product_image WHERE id = ? FOR UPDATE', [req.params.imageId]); image = rows[0]
+      await connection.beginTransaction(); const [rows] = await connection.execute('SELECT id, product_id, image_url, is_main FROM product_image WHERE id = ?', [req.params.imageId]); image = rows[0]
       if (!image) throw Object.assign(new Error('图片不存在'), { status: 404 })
       await connection.execute('DELETE FROM product_image WHERE id = ?', [image.id]); const [rest] = await connection.execute('SELECT id, image_url FROM product_image WHERE product_id = ? ORDER BY sort_order, id LIMIT 1', [image.product_id])
-      const nextImage = rest[0]; if (image.is_main && nextImage) await connection.execute('UPDATE product_image SET is_main = 1 WHERE id = ?', [nextImage.id]); await connection.execute('UPDATE product SET main_image = ?, updated_at = NOW() WHERE id = ?', [nextImage?.image_url || null, image.product_id]); await connection.commit()
+      const nextImage = rest[0]; if (image.is_main && nextImage) await connection.execute('UPDATE product_image SET is_main = 1 WHERE id = ?', [nextImage.id]); await connection.execute("UPDATE product SET main_image = ?, updated_at = datetime('now') WHERE id = ?", [nextImage?.image_url || null, image.product_id]); await connection.commit()
     } catch (error) { await connection.rollback(); throw error } finally { connection.release() }
     await storageService.delete(image.image_url); res.json({ success: true, message: '图片已删除' })
   } catch (error) { next(error) }
@@ -121,8 +121,8 @@ router.put('/images/:imageId/set-main', async (req, res, next) => {
   try {
     const connection = await db.getConnection()
     try {
-      await connection.beginTransaction(); const [rows] = await connection.execute('SELECT id, product_id, image_url FROM product_image WHERE id = ? FOR UPDATE', [req.params.imageId]); const image = rows[0]; if (!image) throw Object.assign(new Error('图片不存在'), { status: 404 })
-      await connection.execute('UPDATE product_image SET is_main = 0 WHERE product_id = ?', [image.product_id]); await connection.execute('UPDATE product_image SET is_main = 1 WHERE id = ?', [image.id]); await connection.execute('UPDATE product SET main_image = ?, updated_at = NOW() WHERE id = ?', [image.image_url, image.product_id]); await connection.commit(); res.json({ success: true, data: await getProduct(image.product_id) })
+      await connection.beginTransaction(); const [rows] = await connection.execute('SELECT id, product_id, image_url FROM product_image WHERE id = ?', [req.params.imageId]); const image = rows[0]; if (!image) throw Object.assign(new Error('图片不存在'), { status: 404 })
+      await connection.execute('UPDATE product_image SET is_main = 0 WHERE product_id = ?', [image.product_id]); await connection.execute('UPDATE product_image SET is_main = 1 WHERE id = ?', [image.id]); await connection.execute("UPDATE product SET main_image = ?, updated_at = datetime('now') WHERE id = ?", [image.image_url, image.product_id]); await connection.commit(); res.json({ success: true, data: await getProduct(image.product_id) })
     } catch (error) { await connection.rollback(); throw error } finally { connection.release() }
   } catch (error) { next(error) }
 })
@@ -134,7 +134,7 @@ router.put('/:id/images/sort', async (req, res, next) => {
       await connection.beginTransaction(); const [existing] = await connection.execute('SELECT id FROM product_image WHERE product_id = ?', [id]); const known = new Set(existing.map(image => image.id))
       if (!existing.length || images.length !== existing.length || images.some(image => !known.has(Number(image.id)))) throw Object.assign(new Error('图片排序数据不完整'), { status: 400 })
       for (let index = 0; index < images.length; index++) await connection.execute('UPDATE product_image SET sort_order = ? WHERE id = ? AND product_id = ?', [index, images[index].id, id])
-      await connection.execute('UPDATE product SET updated_at = NOW() WHERE id = ?', [id]); await connection.commit(); res.json({ success: true, data: await getProduct(id) })
+      await connection.execute("UPDATE product SET updated_at = datetime('now') WHERE id = ?", [id]); await connection.commit(); res.json({ success: true, data: await getProduct(id) })
     } catch (error) { await connection.rollback(); throw error } finally { connection.release() }
   } catch (error) { next(error) }
 })
