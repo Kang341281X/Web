@@ -1,9 +1,11 @@
 import { Router } from 'express'
 import { randomUUID } from 'node:crypto'
-import { mkdir, rm, readdir, rename, writeFile } from 'node:fs/promises'
+import { mkdir, rm, readdir, rename, writeFile, readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { resolve, join, relative } from 'node:path'
 import { inflate } from 'node:zlib'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
 import * as XLSX from 'xlsx'
 import multer from 'multer'
 import db from '../config/db.js'
@@ -136,19 +138,24 @@ async function extractZipEntry(buffer, entry) {
   }
 }
 
-// ── 模板下载 ──────────────────────────────────────────
-router.get('/import-template', (req, res) => {
-  const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS])
-  ws['!cols'] = [
-    { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
-    { wch: 10 }, { wch: 18 }, { wch: 16 }, { wch: 40 }, { wch: 20 },
-  ]
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, '商品导入')
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent('Products.xlsx')}`)
-  res.send(buf)
+// ── 模板下载（读取静态文件 public/assets/Products.xlsx） ─────────
+const TEMPLATE_FILE_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..', '..', 'public', 'assets', 'Products.xlsx'
+)
+
+router.get('/import-template', async (req, res) => {
+  try {
+    if (!existsSync(TEMPLATE_FILE_PATH)) {
+      return res.status(404).json({ success: false, message: '模板文件不存在，请联系管理员' })
+    }
+    const buf = await readFile(TEMPLATE_FILE_PATH)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent('Products.xlsx')}`)
+    res.send(buf)
+  } catch (error) {
+    next(error)
+  }
 })
 
 // ── 预览接口 ──────────────────────────────────────────
