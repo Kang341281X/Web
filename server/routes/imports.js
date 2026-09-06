@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, rm, readdir, rename, writeFile, readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { resolve, join, relative } from 'node:path'
-import { inflate } from 'node:zlib'
+import { inflateRaw } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
 import * as XLSX from 'xlsx'
@@ -230,9 +230,9 @@ async function extractZipEntry(buffer, entry) {
     // Stored (no compression)
     return Buffer.from(rawData)
   } else if (entry.compMethod === 8) {
-    // Deflate
+    // Deflate (raw deflate, no zlib header)
     return await new Promise((resolve, reject) => {
-      inflate(rawData, (err, result) => {
+      inflateRaw(rawData, (err, result) => {
         if (err) reject(err)
         else resolve(result)
       })
@@ -399,7 +399,7 @@ router.post('/import/preview', importUpload.fields([
       if (!categoryName) errors.push('分类名称为空')
       if (!priceStr) errors.push('价格为空')
       if (!stockStr) errors.push('库存为空')
-      if (!imageFolderName) errors.push('图片文件夹名称为空')
+      // 图片文件夹名称是可选的：不填则导入无图片的商品，前端使用默认占位图
 
       // 数值校验
       let price = null
@@ -460,9 +460,6 @@ router.post('/import/preview', importUpload.fields([
           // 在嵌套子目录中递归查找匹配的文件夹
           const foundPath = await findFolderByName(tempDir, normalizedFolder)
           if (foundPath) {
-            // 相对路径统一使用正斜杠（如 "images/product01"）
-            const relFound = relative(tempDir, foundPath).replace(/\\/g, '/')
-            const filesInDir = await readdir(foundPath)
             imageFiles = filesInDir
               .filter(f => {
                 const ext = '.' + f.split('.').pop().toLowerCase()
@@ -495,7 +492,7 @@ router.post('/import/preview', importUpload.fields([
         manufacturer: manufacturer || null,
         brand: brand || null,
         description: description || null,
-        image_folder_name: imageFolderName || '(未填写)',
+        image_folder_name: imageFolderName || '(无图片)',
         image_count: imageFiles.length,
         image_files: imageFiles,
         success: isSuccess,
