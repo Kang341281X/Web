@@ -28,8 +28,12 @@ function isSelectLike(sql) {
 const asyncDb = {
   /** 兼容 mysql2 的 db.execute(sql, params) => [rows] */
   async execute(sql, params = []) {
-    // 将 null/undefined 参数转为 null（SQLite 需要明确 null）
-    const safeParams = params.map(p => (p === undefined ? null : p))
+    const safeParams = params.map(p => {
+      if (p === undefined) return null
+      if (p instanceof Date) return p.toISOString()
+      if (typeof p === 'boolean') return p ? 1 : 0
+      return p
+    })
     const stmt = db.prepare(sql)
     if (isSelectLike(sql)) {
       const rows = stmt.all(...safeParams)
@@ -44,7 +48,12 @@ const asyncDb = {
   getConnection() {
     return Promise.resolve({
       async execute(sql, params = []) {
-        const safeParams = params.map(p => (p === undefined ? null : p))
+        const safeParams = params.map(p => {
+          if (p === undefined) return null
+          if (p instanceof Date) return p.toISOString()
+          if (typeof p === 'boolean') return p ? 1 : 0
+          return p
+        })
         const stmt = db.prepare(sql)
         if (isSelectLike(sql)) {
           return [stmt.all(...safeParams)]
