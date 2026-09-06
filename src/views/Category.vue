@@ -30,4 +30,4 @@ async function load() {
 onMounted(load)
 watch(() => route.params.category, load)
 </script>
-<template><section class="container page"><div class="page-intro"><span class="eyebrow">{{ language.t('category') }}</span><h1>{{ language.category(categoryName) }}</h1><p>{{ items.length }} {{ language.t('items') }} · {{ language.t('handmade') }}</p></div><ProductGrid v-if="items.length" :products="items" /><EmptyState v-else :title="language.t('noResults')" :action="language.t('continueShopping')" /></section></template>
+<template><section class="container page category-page"><div class="page-intro"><h1>{{ language.category(categoryName) }}</h1></div><ProductGrid v-if="items.length" :products="items" /><EmptyState v-else :title="language.t('noResults')" :action="language.t('continueShopping')" /></section></template>

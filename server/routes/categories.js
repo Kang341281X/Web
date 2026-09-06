@@ -25,6 +25,10 @@ router.post('/', async (req, res, next) => {
       const [parents] = await db.execute('SELECT id FROM category WHERE id = ?', [category.parentId])
       if (!parents[0]) return res.status(400).json({ success: false, message: '父级分类不存在' })
     }
+    if (!category.sortOrder) {
+      const [[{ maxSort }]] = await db.execute('SELECT COALESCE(MAX(sort_order), 0) AS maxSort FROM category')
+      category.sortOrder = maxSort + 1
+    }
     const [result] = await db.execute('INSERT INTO category (name, parent_id, sort_order, status) VALUES (?, ?, ?, ?)', [category.name, category.parentId, category.sortOrder, category.status])
     const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, created_at, updated_at FROM category WHERE id = ?', [result.insertId])
     await writeOperationLog(req.admin.id, 'create_category', category.name, req)

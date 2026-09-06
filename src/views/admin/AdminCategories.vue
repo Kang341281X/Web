@@ -9,7 +9,7 @@ const rules = { name: [{ required: true, message: '请输入分类名称', trigg
 const parentOptions = computed(() => categories.value.filter(item => item.id !== editingId.value))
 async function load() { loading.value = true; try { const { data } = await api.get('/categories'); categories.value = data.data } catch (error) { ElMessage.error(error.response?.data?.message || '分类加载失败') } finally { loading.value = false } }
 function reset() { Object.assign(form, { name: '', parent_id: 0, sort_order: 0, status: 1 }); editingId.value = null }
-function create() { reset(); dialogVisible.value = true }
+function create() { reset(); const maxSort = categories.value.reduce((max, item) => Math.max(max, item.sort_order || 0), 0); form.sort_order = maxSort + 1; dialogVisible.value = true }
 function edit(row) { Object.assign(form, { name: row.name, parent_id: row.parent_id, sort_order: row.sort_order, status: row.status }); editingId.value = row.id; dialogVisible.value = true }
 async function save() { await formRef.value.validate(); try { if (editingId.value) await api.put(`/categories/${editingId.value}`, form); else await api.post('/categories', form); ElMessage.success('分类已保存'); dialogVisible.value = false; load() } catch (error) { ElMessage.error(error.response?.data?.message || '保存失败') } }
 async function remove(row) { try { await ElMessageBox.confirm(`确认删除分类“${row.name}”吗？`, '删除确认', { type: 'warning' }); await api.delete(`/categories/${row.id}`); ElMessage.success('分类已删除'); load() } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error(error.response?.data?.message || '删除失败') } }

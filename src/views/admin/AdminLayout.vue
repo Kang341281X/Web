@@ -110,6 +110,10 @@ watch(() => route.fullPath, () => loadMenuCategories())
             <el-icon><DataLine /></el-icon>
             <span>仪表盘</span>
           </el-menu-item>
+          <el-menu-item v-if="isSuperAdmin" index="/admin/admins">
+            <el-icon><User /></el-icon>
+            <span>管理员信息</span>
+          </el-menu-item>
           <el-sub-menu index="/admin/products-group">
             <template #title>
               <el-icon><Goods /></el-icon>
@@ -123,10 +127,6 @@ watch(() => route.fullPath, () => loadMenuCategories())
           <el-menu-item v-if="isSuperAdmin" index="/admin/settings">
             <el-icon><Setting /></el-icon>
             <span>其他设置</span>
-          </el-menu-item>
-          <el-menu-item v-if="isSuperAdmin" index="/admin/admins">
-            <el-icon><User /></el-icon>
-            <span>管理员信息</span>
           </el-menu-item>
         </el-menu>
       </div>
@@ -150,6 +150,10 @@ watch(() => route.fullPath, () => loadMenuCategories())
           <el-icon><DataLine /></el-icon>
           <template #title>仪表盘</template>
         </el-menu-item>
+        <el-menu-item v-if="isSuperAdmin" index="/admin/admins">
+          <el-icon><User /></el-icon>
+          <template #title>管理员信息</template>
+        </el-menu-item>
         <el-sub-menu index="/admin/products-group">
           <template #title>
             <el-icon><Goods /></el-icon>
@@ -163,10 +167,6 @@ watch(() => route.fullPath, () => loadMenuCategories())
         <el-menu-item v-if="isSuperAdmin" index="/admin/settings">
           <el-icon><Setting /></el-icon>
           <template #title>其他设置</template>
-        </el-menu-item>
-        <el-menu-item v-if="isSuperAdmin" index="/admin/admins">
-          <el-icon><User /></el-icon>
-          <template #title>管理员信息</template>
         </el-menu-item>
       </el-menu>
     </aside>
