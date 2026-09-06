@@ -105,6 +105,22 @@ router.post('/:id/images', upload.array('images', 10), async (req, res, next) =>
     res.status(201).json({ success: true, data: await getProduct(id) })
   } catch (error) { await Promise.all(saved.map(path => storageService.delete(path))); next(error) }
 })
+// 替换图片文件（裁剪后）
+const replaceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } })
+router.post('/images/:imageId/replace', replaceUpload.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: '请选择图片' })
+    const [rows] = await db.execute('SELECT id, product_id, image_url, is_main FROM product_image WHERE id = ?', [req.params.imageId])
+    const image = rows[0]
+    if (!image) return res.status(404).json({ success: false, message: '图片不存在' })
+    const newPath = await storageService.save(req.file, `products/${image.product_id}`)
+    await db.execute('UPDATE product_image SET image_url = ?, updated_at = datetime(\'now\') WHERE id = ?', [newPath, image.id])
+    if (image.is_main) await db.execute("UPDATE product SET main_image = ?, updated_at = datetime('now') WHERE id = ?", [newPath, image.product_id])
+    // 删除旧文件
+    if (image.image_url && image.image_url !== newPath) await storageService.delete(image.image_url)
+    res.json({ success: true, data: await getProduct(image.product_id) })
+  } catch (error) { next(error) }
+})
 router.delete('/images/:imageId', async (req, res, next) => {
   try {
     const connection = await db.getConnection(); let image
@@ -121,8 +137,26 @@ router.put('/images/:imageId/set-main', async (req, res, next) => {
   try {
     const connection = await db.getConnection()
     try {
-      await connection.beginTransaction(); const [rows] = await connection.execute('SELECT id, product_id, image_url FROM product_image WHERE id = ?', [req.params.imageId]); const image = rows[0]; if (!image) throw Object.assign(new Error('图片不存在'), { status: 404 })
-      await connection.execute('UPDATE product_image SET is_main = 0 WHERE product_id = ?', [image.product_id]); await connection.execute('UPDATE product_image SET is_main = 1 WHERE id = ?', [image.id]); await connection.execute("UPDATE product SET main_image = ?, updated_at = datetime('now') WHERE id = ?", [image.image_url, image.product_id]); await connection.commit(); res.json({ success: true, data: await getProduct(image.product_id) })
+      await connection.beginTransaction()
+      const [rows] = await connection.execute('SELECT id, product_id, image_url FROM product_image WHERE id = ?', [req.params.imageId])
+      const image = rows[0]
+      if (!image) throw Object.assign(new Error('图片不存在'), { status: 404 })
+      await connection.execute('UPDATE product_image SET is_main = 0 WHERE product_id = ?', [image.product_id])
+      await connection.execute('UPDATE product_image SET is_main = 1 WHERE id = ?', [image.id])
+      await connection.execute("UPDATE product SET main_image = ?, updated_at = datetime('now') WHERE id = ?", [image.image_url, image.product_id])
+      // 将新主图 sort_order 设为 0，其余按原顺序递增
+      const [allImages] = await connection.execute('SELECT id, sort_order FROM product_image WHERE product_id = ? ORDER BY sort_order, id', [image.product_id])
+      let order = 0
+      // 新主图排第一位
+      await connection.execute('UPDATE product_image SET sort_order = 0 WHERE id = ?', [image.id])
+      order = 1
+      for (const img of allImages) {
+        if (img.id === image.id) continue
+        await connection.execute('UPDATE product_image SET sort_order = ? WHERE id = ?', [order, img.id])
+        order++
+      }
+      await connection.commit()
+      res.json({ success: true, data: await getProduct(image.product_id) })
     } catch (error) { await connection.rollback(); throw error } finally { connection.release() }
   } catch (error) { next(error) }
 })
