@@ -1,7 +1,6 @@
 <script setup>
 import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import Cropper from 'cropperjs'
-import 'cropperjs/dist/cropper.css'
 import { ElMessage } from 'element-plus'
 
 const props = defineProps({
