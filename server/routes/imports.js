@@ -223,6 +223,9 @@ router.post('/import/preview', importUpload.fields([
     const [categories] = await db.execute('SELECT id, name FROM category WHERE status = 1')
     const categoryMap = new Map(categories.map(c => [c.name, c.id]))
 
+    // 收集 Excel 中不存在的新分类名称，预览阶段先不创建，仅标记
+    const missingCategoryNames = []
+
     // 解析 zip 目录结构：收集所有顶层文件夹名称
     const zipFilesByFolder = new Map() // folderName -> [{ entry, baseName }]
     for (const entry of zipEntries) {
@@ -317,12 +320,16 @@ router.post('/import/preview', importUpload.fields([
         if (!Number.isFinite(stock) || stock < 0 || !Number.isInteger(stock)) errors.push('库存必须是非负整数')
       }
 
-      // 分类是否存在
+      // 分类是否存在（不存在则标记为新分类，预览阶段不创建）
       let categoryId = null
-      if (categoryName && !categoryMap.has(categoryName)) {
-        errors.push(`分类"${categoryName}"不存在`)
-      } else if (categoryName) {
-        categoryId = categoryMap.get(categoryName)
+      let isNewCategory = false
+      if (categoryName) {
+        if (categoryMap.has(categoryName)) {
+          categoryId = categoryMap.get(categoryName)
+        } else {
+          isNewCategory = true
+          if (!missingCategoryNames.includes(categoryName)) missingCategoryNames.push(categoryName)
+        }
       }
 
       // 图片文件夹匹配（只做去空格容错，不做大小写容错）
@@ -359,6 +366,7 @@ router.post('/import/preview', importUpload.fields([
         row: excelRowNum,
         name: name || '(未填写)',
         category_name: categoryName || '(未填写)',
+        is_new_category: isNewCategory,
         price: price !== null ? Number(price) : null,
         original_price: originalPrice !== null ? Number(originalPrice) : null,
         stock: stock !== null ? Number(stock) : null,
@@ -404,6 +412,7 @@ router.post('/import/preview', importUpload.fields([
           row: r.row,
           name: r.name,
           category_name: r.category_name,
+          is_new_category: r.is_new_category,
           price: r.price,
           stock: r.stock,
           image_count: r.image_count,
@@ -457,12 +466,16 @@ router.post('/import/confirm', async (req, res, next) => {
 
   // 再次验证分类（防止预览后分类被删除）
   const categoryNames = [...new Set(successRows.map(r => r.category_name))]
-  const [categories] = await db.execute(`SELECT id, name FROM category WHERE name IN (${categoryNames.map(() => '?').join(',')}) AND status = 1`, categoryNames)
-  const categoryMap = new Map(categories.map(c => [c.name, c.id]))
+  const [existingCats] = await db.execute(`SELECT id, name FROM category WHERE name IN (${categoryNames.map(() => '?').join(',')}) AND status = 1`, categoryNames)
+  let categoryMap = new Map(existingCats.map(c => [c.name, c.id]))
 
-  const missingCategory = categoryNames.find(name => !categoryMap.has(name))
-  if (missingCategory) {
-    return res.status(400).json({ success: false, message: `分类"${missingCategory}"已不存在，请重新上传或先创建该分类` })
+  // 自动创建不存在的新分类
+  const missingNames = categoryNames.filter(name => !categoryMap.has(name))
+  if (missingNames.length) {
+    for (const name of missingNames) {
+      const [result] = await db.execute('INSERT INTO category (name, status) VALUES (?, 1)', [name])
+      categoryMap.set(name, Number(result.insertId))
+    }
   }
 
   const connection = await db.getConnection()

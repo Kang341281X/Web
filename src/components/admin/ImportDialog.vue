@@ -335,7 +335,12 @@ onBeforeRouteLeave(() => {
       >
         <el-table-column prop="row" label="行号" width="70" />
         <el-table-column prop="name" label="商品名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="category_name" label="分类" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="category_name" label="分类" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.category_name }}
+            <el-tag v-if="row.is_new_category" type="warning" size="small" style="margin-left:4px">新</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="价格" width="90">
           <template #default="{ row }">{{ row.price != null ? '¥' + row.price.toFixed(2) : '-' }}</template>
         </el-table-column>
