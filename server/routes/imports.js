@@ -273,30 +273,32 @@ router.post('/import/preview', importUpload.fields([
     const excelFile = req.files?.excel?.[0]
     const zipFile = req.files?.zip?.[0]
     if (!excelFile) return res.status(400).json({ success: false, message: '请选择 Excel 文件' })
-    if (!zipFile) return res.status(400).json({ success: false, message: '请选择 images.zip 压缩包' })
 
     // 校验 Excel 文件大小
     if (excelFile.size > MAX_EXCEL_SIZE) {
       return res.status(400).json({ success: false, message: 'Excel 文件不能超过 10MB' })
     }
 
-    // 校验压缩包文件名
-    if (zipFile.originalname !== 'images.zip') {
-      return res.status(400).json({ success: false, message: '请将压缩包命名为 images.zip 后重新上传' })
-    }
+    // zip 是可选的：无 zip 时跳过图片处理，商品使用默认占位图
+    let zipEntries = []
+    if (zipFile) {
+      // 校验压缩包文件名
+      if (zipFile.originalname !== 'images.zip') {
+        return res.status(400).json({ success: false, message: '请将压缩包命名为 images.zip 后重新上传' })
+      }
 
-    // 校验 zip 文件完整性并获取条目列表
-    let zipEntries
-    try {
-      zipEntries = await parseZipEntries(zipFile.buffer)
-    } catch {
-      return res.status(400).json({ success: false, message: '无效的 ZIP 文件，请检查压缩包是否完整' })
-    }
+      // 校验 zip 文件完整性并获取条目列表
+      try {
+        zipEntries = await parseZipEntries(zipFile.buffer)
+      } catch {
+        return res.status(400).json({ success: false, message: '无效的 ZIP 文件，请检查压缩包是否完整' })
+      }
 
-    // 估算解压后总大小
-    const totalUncompressed = zipEntries.reduce((sum, e) => sum + e.uncompressedSize, 0)
-    if (totalUncompressed > MAX_UNCOMPRESSED_SIZE) {
-      return res.status(400).json({ success: false, message: '解压后总大小超过 1GB，请精简图片后重新打包上传' })
+      // 估算解压后总大小
+      const totalUncompressed = zipEntries.reduce((sum, e) => sum + e.uncompressedSize, 0)
+      if (totalUncompressed > MAX_UNCOMPRESSED_SIZE) {
+        return res.status(400).json({ success: false, message: '解压后总大小超过 1GB，请精简图片后重新打包上传' })
+      }
     }
 
     // 解析 Excel
@@ -361,16 +363,18 @@ router.post('/import/preview', importUpload.fields([
 
     // 解压图片到临时目录（保留原始目录结构）
     await mkdir(tempDir, { recursive: true })
-    for (const item of zipEntriesToExtract) {
-      const fileData = await extractZipEntry(zipFile.buffer, item.entry)
-      // 验证文件头（magic number）
-      const detected = detectImageType(fileData)
-      if (!detected) continue // magic number 不匹配，跳过
-      // 创建子目录结构（保留 ZIP 内的原始路径）
-      const destPath = join(tempDir, item.relPath)
-      const destDir = resolve(destPath, '..')
-      await mkdir(destDir, { recursive: true })
-      await writeFile(destPath, fileData)
+    if (zipFile) {
+      for (const item of zipEntriesToExtract) {
+        const fileData = await extractZipEntry(zipFile.buffer, item.entry)
+        // 验证文件头（magic number）
+        const detected = detectImageType(fileData)
+        if (!detected) continue // magic number 不匹配，跳过
+        // 创建子目录结构（保留 ZIP 内的原始路径）
+        const destPath = join(tempDir, item.relPath)
+        const destDir = resolve(destPath, '..')
+        await mkdir(destDir, { recursive: true })
+        await writeFile(destPath, fileData)
+      }
     }
 
     // 逐行解析商品并校验
@@ -437,7 +441,7 @@ router.post('/import/preview', importUpload.fields([
       // 支持 images/product01/1.jpg 这样的嵌套结构
       // Excel 中填写的文件夹名称（如 product01）会在所有层级中搜索匹配
       let imageFiles = []
-      if (imageFolderName) {
+      if (imageFolderName && zipFile) {
         const normalizedFolder = imageFolderName.trim()
         const folderPath = join(tempDir, normalizedFolder)
         const safePath = relative(tempDir, folderPath)
@@ -460,7 +464,9 @@ router.post('/import/preview', importUpload.fields([
           // 在嵌套子目录中递归查找匹配的文件夹
           const foundPath = await findFolderByName(tempDir, normalizedFolder)
           if (foundPath) {
-            imageFiles = filesInDir
+            const relFound = relative(tempDir, foundPath).replace(/\\/g, '/')
+            const foundFiles = await readdir(foundPath)
+            imageFiles = foundFiles
               .filter(f => {
                 const ext = '.' + f.split('.').pop().toLowerCase()
                 return VALID_IMAGE_EXTS.has(ext) && !SYSTEM_FILES.has(f.toLowerCase())
@@ -520,7 +526,7 @@ router.post('/import/preview', importUpload.fields([
     )
 
     // 收集临时目录中的文件夹结构（两层：顶层文件夹 → 子文件夹列表）
-    const tempFolders = await collectFolderStructure(tempDir, previewRows)
+    const tempFolders = zipFile ? await collectFolderStructure(tempDir, previewRows) : []
 
     res.json({
       success: true,
@@ -642,7 +648,10 @@ router.post('/import/confirm', async (req, res, next) => {
         if (imgIdx === 0) mainImageUrl = imageUrl
       }
 
-      // 更新 product.main_image
+      // 更新 product.main_image：无图片时使用默认占位图
+      if (!mainImageUrl) {
+        mainImageUrl = '/assets/images/products/product-placeholder.svg'
+      }
       await connection.execute('UPDATE product SET main_image = ? WHERE id = ?', [mainImageUrl, productId])
     }
 

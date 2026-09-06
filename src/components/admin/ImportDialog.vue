@@ -96,16 +96,17 @@ function handleRemoveZip() {
   zipFile.value = null
 }
 
-// ── 上传预览 ──────────────────────────────────────────
+// ── 上传 ──────────────────────────────────────────
 async function handlePreview() {
   if (!excelFile.value) return ElMessage.error('请选择 Excel 文件')
-  if (!zipFile.value) return ElMessage.error('请选择 images.zip 压缩包')
 
   uploading.value = true
   try {
     const formData = new FormData()
     formData.append('excel', excelFile.value.raw || excelFile.value)
-    formData.append('zip', zipFile.value.raw || zipFile.value)
+    if (zipFile.value) {
+      formData.append('zip', zipFile.value.raw || zipFile.value)
+    }
 
     const { data } = await api.post('/products/import/preview', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -344,7 +345,7 @@ onBeforeRouteLeave(() => {
               <li>点击「下载导入模板」，在模板中填写商品数据（请勿修改列名或增删列）</li>
               <li>按商品分别建立子文件夹，每个子文件夹内放该商品的所有图片（如 01.jpg, 02.jpg）</li>
               <li>将所有子文件夹统一压缩为 <code>images.zip</code>（文件名必须为 images.zip）</li>
-              <li>同时选择 Excel 和 images.zip，点击「上传预览」</li>
+              <li>选择 Excel 文件（必选）和 images.zip（可选），点击「上传」<br><span style="color:#909399">不上传图片压缩包时，Excel 中"图片文件夹名称"列无需填写，商品将使用默认占位图</span></li>
             </ol>
           </div>
         </template>
@@ -374,7 +375,7 @@ onBeforeRouteLeave(() => {
         </div>
 
         <div class="upload-item">
-          <div class="upload-label">图片压缩包</div>
+          <div class="upload-label">图片压缩包 <span class="optional-tag">（可选）</span></div>
           <el-upload
             :auto-upload="false"
             :limit="1"
@@ -543,8 +544,8 @@ onBeforeRouteLeave(() => {
       <div class="dialog-footer">
         <template v-if="step === 1">
           <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="uploading" :disabled="!excelFile || !zipFile" @click="handlePreview">
-            上传预览
+          <el-button type="primary" :loading="uploading" :disabled="!excelFile" @click="handlePreview">
+            上传
           </el-button>
         </template>
         <template v-if="step === 2">
@@ -604,6 +605,11 @@ onBeforeRouteLeave(() => {
   font-size: 12px;
   color: #909399;
   margin-top: 4px;
+}
+.optional-tag {
+  font-size: 12px;
+  color: #909399;
+  font-weight: normal;
 }
 .preview-summary {
   display: flex;
