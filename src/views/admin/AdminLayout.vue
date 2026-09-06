@@ -116,7 +116,7 @@ watch(() => route.fullPath, () => loadMenuCategories())
               <span>商品管理</span>
             </template>
             <el-menu-item index="/admin/products">全部商品</el-menu-item>
-            <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}商品信息</el-menu-item>
+            <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}</el-menu-item>
           </el-sub-menu>
           <el-menu-item index="/admin/categories"><el-icon><Document /></el-icon><span>商品分类</span></el-menu-item>
           <el-menu-item v-if="isSuperAdmin" index="/admin/logs"><el-icon><List /></el-icon><span>操作日志</span></el-menu-item>
@@ -156,7 +156,7 @@ watch(() => route.fullPath, () => loadMenuCategories())
             <span>商品管理</span>
           </template>
           <el-menu-item index="/admin/products">全部商品</el-menu-item>
-          <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}商品信息</el-menu-item>
+          <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}</el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/admin/categories"><el-icon><Document /></el-icon><template #title>商品分类</template></el-menu-item>
         <el-menu-item v-if="isSuperAdmin" index="/admin/logs"><el-icon><List /></el-icon><template #title>操作日志</template></el-menu-item>
