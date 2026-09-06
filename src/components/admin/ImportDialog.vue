@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, Download } from '@element-plus/icons-vue'
+import { Upload, Download, ArrowLeft, Folder, FolderOpened } from '@element-plus/icons-vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import api from '../../services/api'
 
@@ -17,6 +17,11 @@ const excelFile = ref(null)
 const zipFile = ref(null)
 const previewResult = ref(null)
 const batchId = ref(null)
+const renamingFolder = ref(null) // 正在重命名的子文件夹 full_path
+const renameNewName = ref('')
+const renaming = ref(false)
+const foldersData = ref([])
+const currentFolder = ref(null) // 当前进入的顶层文件夹对象（null = 显示顶层列表）
 
 watch(() => props.visible, val => { dialogVisible.value = val })
 watch(dialogVisible, val => { emit('update:visible', val) })
@@ -109,6 +114,8 @@ async function handlePreview() {
 
     previewResult.value = data.data
     batchId.value = data.data.batchId
+    foldersData.value = data.data.folders || []
+    currentFolder.value = null
     step.value = 2
 
     if (data.data.fail_count > 0) {
@@ -121,6 +128,78 @@ async function handlePreview() {
     ElMessage.error(message)
   } finally {
     uploading.value = false
+  }
+}
+
+// ── 文件夹浏览 ──────────────────────────────────────
+function enterFolder(folder) {
+  currentFolder.value = folder
+  cancelRename()
+}
+
+function exitFolder() {
+  currentFolder.value = null
+  cancelRename()
+}
+
+// ── 子文件夹重命名 ──────────────────────────────────────
+function startRename(subFolder) {
+  renamingFolder.value = subFolder.full_path
+  renameNewName.value = subFolder.folder_name
+}
+
+function cancelRename() {
+  renamingFolder.value = null
+  renameNewName.value = ''
+}
+
+async function handleRenameFolder() {
+  const newName = renameNewName.value.trim()
+  if (!newName) {
+    ElMessage.error('新文件夹名称不能为空')
+    return
+  }
+  if (newName === renamingFolder.value.split('/').pop()) {
+    ElMessage.warning('新名称与原名称相同')
+    return
+  }
+  if (newName.includes('/') || newName.includes('\\') || newName.includes('..')) {
+    ElMessage.error('文件夹名称不能包含特殊字符')
+    return
+  }
+
+  renaming.value = true
+  try {
+    const parentFolder = currentFolder.value ? currentFolder.value.folder_name : ''
+    const oldName = renamingFolder.value.split('/').pop()
+
+    const { data } = await api.post(`/products/import/${batchId.value}/rename-folder`, {
+      parent_folder: parentFolder,
+      old_name: oldName,
+      new_name: newName,
+    })
+
+    // 更新预览结果
+    previewResult.value = {
+      ...previewResult.value,
+      success_count: data.data.success_count,
+      fail_count: data.data.fail_count,
+      preview: data.data.preview,
+    }
+    foldersData.value = data.data.folders || []
+
+    // 保持当前在子文件夹视图中
+    if (currentFolder.value) {
+      const updated = foldersData.value.find(f => f.folder_name === currentFolder.value.folder_name)
+      currentFolder.value = updated || null
+    }
+
+    ElMessage.success(`文件夹已重命名为 "${newName}"，更新了 ${data.data.updated_rows} 行`)
+    cancelRename()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '重命名失败，请重试')
+  } finally {
+    renaming.value = false
   }
 }
 
@@ -160,6 +239,9 @@ function handleReUpload() {
   previewResult.value = null
   excelFile.value = null
   zipFile.value = null
+  foldersData.value = []
+  currentFolder.value = null
+  cancelRename()
   step.value = 1
 }
 
@@ -193,6 +275,9 @@ function resetForm() {
   zipFile.value = null
   previewResult.value = null
   batchId.value = null
+  foldersData.value = []
+  currentFolder.value = null
+  cancelRename()
 }
 
 function resetAndClose() {
@@ -315,6 +400,94 @@ onBeforeRouteLeave(() => {
         <el-statistic title="失败" :value="previewResult.fail_count" />
       </div>
 
+      <!-- 文件夹列表面板 -->
+      <div v-if="foldersData.length > 0" class="folders-panel">
+        <div class="folders-panel-header">
+          <span class="folders-panel-title">图片文件夹列表</span>
+          <span class="folders-panel-hint">
+            <template v-if="!currentFolder">点击文件夹进入查看子文件夹，可重命名子文件夹以匹配 Excel 中的"图片文件夹名称"</template>
+            <template v-else>可重命名子文件夹，使其与 Excel 中的"图片文件夹名称"对应</template>
+          </span>
+        </div>
+
+        <!-- 顶层文件夹列表 -->
+        <el-table v-if="!currentFolder" :data="foldersData" border size="small" style="width: 100%">
+          <el-table-column label="文件夹名称" min-width="200">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="enterFolder(row)" class="folder-link">
+                <el-icon style="margin-right: 4px"><Folder /></el-icon>
+                {{ row.folder_name }}
+              </el-button>
+            </template>
+          </el-table-column>
+          <el-table-column prop="image_count" label="直接图片数" width="100" align="center" />
+          <el-table-column label="子文件夹数" width="100" align="center">
+            <template #default="{ row }">{{ row.sub_folders ? row.sub_folders.length : 0 }}</template>
+          </el-table-column>
+          <el-table-column label="Excel匹配" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.matched ? 'success' : 'info'" size="small">
+                {{ row.matched ? '已匹配' : '-' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" align="center">
+            <template #default="{ row }">
+              <el-button v-if="row.has_subfolders" link type="primary" size="small" @click="enterFolder(row)">进入</el-button>
+              <span v-else style="color: #909399; font-size: 12px">无子文件夹</span>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <!-- 子文件夹列表 -->
+        <div v-else class="subfolders-view">
+          <div class="subfolders-breadcrumb">
+            <el-button link type="primary" :icon="ArrowLeft" @click="exitFolder">返回</el-button>
+            <span class="breadcrumb-sep">/</span>
+            <el-icon style="margin-right: 4px"><FolderOpened /></el-icon>
+            <span class="breadcrumb-folder">{{ currentFolder.folder_name }}</span>
+          </div>
+          <el-table :data="currentFolder.sub_folders || []" border size="small" style="width: 100%">
+            <el-table-column label="子文件夹名称" min-width="200">
+              <template #default="{ row }">
+                <template v-if="renamingFolder === row.full_path">
+                  <div class="rename-inline">
+                    <el-input
+                      v-model="renameNewName"
+                      size="small"
+                      placeholder="输入新名称"
+                      @keyup.enter="handleRenameFolder"
+                      style="width: 160px"
+                    />
+                    <el-button type="primary" size="small" :loading="renaming" @click="handleRenameFolder">确定</el-button>
+                    <el-button size="small" @click="cancelRename">取消</el-button>
+                  </div>
+                </template>
+                <template v-else>
+                  <el-icon style="margin-right: 4px"><Folder /></el-icon>
+                  <span>{{ row.folder_name }}</span>
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    style="margin-left: 8px"
+                    @click="startRename(row)"
+                  >重命名</el-button>
+                </template>
+              </template>
+            </el-table-column>
+            <el-table-column prop="image_count" label="图片数" width="80" align="center" />
+            <el-table-column label="Excel匹配" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.matched ? 'success' : 'warning'" size="small">
+                  {{ row.matched ? '已匹配' : '未匹配' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+
       <el-alert
         v-if="previewResult.fail_count > 0"
         type="warning"
@@ -323,7 +496,7 @@ onBeforeRouteLeave(() => {
         style="margin-bottom: 12px"
       >
         <template #title>
-          有 {{ previewResult.fail_count }} 行校验失败，请修正后重新上传整份文件（不支持部分导入）
+          有 {{ previewResult.fail_count }} 行校验失败，可尝试重命名文件夹使其与 Excel 中的"图片文件夹名称"对应，全部通过后即可导入
         </template>
       </el-alert>
 
@@ -454,5 +627,54 @@ onBeforeRouteLeave(() => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+.folders-panel {
+  margin-bottom: 16px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.folders-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f5f7fa;
+  border-bottom: 1px solid #ebeef5;
+}
+.folders-panel-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+.folders-panel-hint {
+  font-size: 12px;
+  color: #909399;
+}
+.rename-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.folder-link {
+  font-size: 14px;
+}
+.subfolders-view {
+  padding: 8px;
+}
+.subfolders-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 10px;
+}
+.breadcrumb-sep {
+  color: #c0c4cc;
+  font-size: 14px;
+}
+.breadcrumb-folder {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
 }
 </style>
