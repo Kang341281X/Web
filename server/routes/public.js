@@ -19,9 +19,9 @@ function publicProduct(product) {
 router.get('/categories', async (_req, res, next) => {
   try {
     const [rows] = await db.execute(
-      'SELECT id, name, parent_id, sort_order FROM category WHERE status = 1 ORDER BY parent_id, sort_order, id'
+      'SELECT id, name, parent_id, sort_order, image FROM category WHERE status = 1 ORDER BY parent_id, sort_order, id'
     )
-    res.json({ success: true, data: rows })
+    res.json({ success: true, data: rows.map(row => ({ ...row, image_url: row.image ? storageService.getUrl(row.image) : null })) })
   } catch (error) {
     next(error)
   }
