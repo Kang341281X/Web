@@ -3,3 +3,7 @@ node_modules
 .env.development
 .env.production
 uploads/
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
