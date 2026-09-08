@@ -1,12 +1,10 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../../services/api'
-import { useUserStore } from '../../stores/user'
-import { Goods, Files, Box, Warning, Document } from '@element-plus/icons-vue'
+import { Goods, Files, Box, Warning } from '@element-plus/icons-vue'
 
 const router = useRouter()
-const userStore = useUserStore()
 const loading = ref(false)
 const stats = ref({ totalProducts: 0, totalCategories: 0, todayNew: 0, monthNew: 0, lowStock: 0 })
 const recentLogs = ref([])
@@ -15,17 +13,13 @@ const trendChart = ref(null)
 const categoryData = ref([])
 const trendData = ref([])
 
-const isSuperAdmin = computed(() => userStore.adminUser?.role === 'super_admin')
-
 async function loadDashboard() {
   loading.value = true
   try {
-    const [productsRes, categoriesRes, ...rest] = await Promise.all([
+    const [productsRes, categoriesRes, logsRes] = await Promise.all([
       api.get('/products', { params: { page: 1, page_size: 1 } }),
       api.get('/categories'),
-      isSuperAdmin.value
-        ? api.get('/logs', { params: { page: 1, page_size: 8 } })
-        : Promise.resolve({ data: { data: [] } }),
+      api.get('/logs', { params: { page: 1, page_size: 8 } }),
     ])
 
     const totalProducts = productsRes.data.pagination.total
@@ -48,7 +42,7 @@ async function loadDashboard() {
       lowStock,
     }
 
-    recentLogs.value = rest[0].data.data
+    recentLogs.value = logsRes.data.data
 
     // 分类占比
     const catCount = {}
@@ -156,7 +150,7 @@ onMounted(loadDashboard)
       </el-col>
     </el-row>
 
-    <el-card v-if="isSuperAdmin" shadow="never" class="admin-page-card" style="margin-top: 20px">
+    <el-card shadow="never" class="admin-page-card" style="margin-top: 20px">
       <template #header>
         <div style="display:flex; justify-content:space-between; align-items:center">
           <span style="font-weight:600">最近操作日志</span>

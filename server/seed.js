@@ -11,11 +11,11 @@ const accounts = [
 for (const [username, role, realName] of accounts) {
   const [existing] = await db.execute('SELECT id FROM admin WHERE username = ?', [username])
   if (!existing.length) {
-    await db.execute('INSERT INTO admin (username, password, role, real_name, must_change_password) VALUES (?, ?, ?, ?, 0)', [username, await bcrypt.hash('123456', 12), role, realName])
+    await db.execute('INSERT INTO admin (username, password, role, real_name, must_change_password) VALUES (?, ?, ?, ?, 1)', [username, await bcrypt.hash('123456', 12), role, realName])
     console.log(`Created ${username}`)
   } else {
-    // 确保密码和 must_change_password 为已知值
-    await db.execute('UPDATE admin SET password = ?, must_change_password = 0 WHERE username = ?', [await bcrypt.hash('123456', 12), username])
+    // 确保密码与 must_change_password 为已知值：初始密码为 123456，首次登录必须修改
+    await db.execute('UPDATE admin SET password = ?, must_change_password = 1 WHERE username = ?', [await bcrypt.hash('123456', 12), username])
     console.log(`Reset ${username}`)
   }
 }

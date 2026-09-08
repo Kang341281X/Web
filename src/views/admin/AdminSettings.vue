@@ -211,7 +211,7 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
         </div>
         <div class="qr-actions">
           <template v-if="!row.removed">
-            <el-upload :show-file-list="false" :auto-upload="false" accept=".jpg,.jpeg,.png,.webp" :on-change="file => pickImage(row, file)">
+            <el-upload :show-file-list="false" :auto-upload="false" accept=".jpg,.jpeg,.png,.bmp,.webp" :on-change="file => pickImage(row, file)">
               <el-button size="small">
                 <template v-if="row.pendingImage">重新选择</template>
                 <template v-else>{{ row.image_url ? '更换二维码' : '上传二维码' }}</template>

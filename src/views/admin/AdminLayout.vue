@@ -1,19 +1,14 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useUserStore } from '../../stores/user'
-import api from '../../services/api'
-import {
-  Fold, Expand, Setting, Goods, DataLine,
-  ArrowDown, Back, Download, Document,
-  User, SwitchButton, UserFilled, List
-} from '@element-plus/icons-vue'
+import { Fold, Expand, Back, ArrowDown, User, SwitchButton, UserFilled } from '@element-plus/icons-vue'
+import AdminSidebar from '../../components/admin/AdminSidebar.vue'
 
 const userStore = useUserStore()
 const router = useRouter()
 const route = useRoute()
-const menuCategories = ref([])
 
 const isCollapsed = ref(false)
 const isMobile = ref(false)
@@ -25,6 +20,7 @@ function checkMobile() {
 }
 checkMobile()
 window.addEventListener('resize', checkMobile)
+onBeforeUnmount(() => window.removeEventListener('resize', checkMobile))
 
 function toggleSidebar() {
   if (isMobile.value) {
@@ -33,11 +29,6 @@ function toggleSidebar() {
     isCollapsed.value = !isCollapsed.value
   }
 }
-
-const isSuperAdmin = computed(() => userStore.adminUser?.role === 'super_admin')
-
-// 当前激活菜单
-const activeMenu = computed(() => route.fullPath)
 
 // 面包屑
 const breadcrumb = computed(() => {
@@ -51,7 +42,7 @@ const breadcrumb = computed(() => {
   return ['首页']
 })
 
-// 用户下拉菜单
+// 用户下拉菜单（个人中心 / 退出登录）
 function handleUserCommand(command) {
   if (command === 'logout') {
     ElMessageBox.confirm('确认退出登录吗？', '提示', {
@@ -71,22 +62,10 @@ function handleMenuSelect(index) {
   router.push(index)
   if (isMobile.value) mobileDrawerVisible.value = false
 }
-
-async function loadMenuCategories() {
-  try {
-    const { data } = await api.get('/categories')
-    menuCategories.value = data.data.filter(category => category.status)
-  } catch {
-    // 初始密码尚未修改或网络异常时，保留主菜单；页面本身会给出具体错误。
-  }
-}
-onMounted(loadMenuCategories)
-watch(() => userStore.adminUser?.must_change_password, value => { if (!value) loadMenuCategories() })
-watch(() => route.fullPath, () => loadMenuCategories())
 </script>
 <template>
   <div class="admin-layout">
-    <!-- 移动端遮罩 -->
+    <!-- 移动端遮罩抽屉 -->
     <el-drawer
       v-if="isMobile"
       v-model="mobileDrawerVisible"
@@ -94,82 +73,11 @@ watch(() => route.fullPath, () => loadMenuCategories())
       :with-header="false"
       :size="210"
     >
-      <div class="admin-aside" style="width: 210px;">
-        <div class="admin-aside-logo">
-          <el-icon class="logo-icon"><Goods /></el-icon>
-          <span>Craftora</span>
-        </div>
-        <el-menu
-          :default-active="activeMenu"
-          background-color="transparent"
-          text-color="rgba(255,255,255,0.78)"
-          active-text-color="#fff"
-          @select="handleMenuSelect"
-        >
-          <el-menu-item index="/admin">
-            <el-icon><DataLine /></el-icon>
-            <span>仪表盘</span>
-          </el-menu-item>
-          <el-menu-item v-if="isSuperAdmin" index="/admin/admins">
-            <el-icon><User /></el-icon>
-            <span>管理员信息</span>
-          </el-menu-item>
-          <el-sub-menu index="/admin/products-group">
-            <template #title>
-              <el-icon><Goods /></el-icon>
-              <span>商品管理</span>
-            </template>
-            <el-menu-item index="/admin/products">全部商品</el-menu-item>
-            <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}</el-menu-item>
-          </el-sub-menu>
-          <el-menu-item index="/admin/categories"><el-icon><Document /></el-icon><span>商品分类</span></el-menu-item>
-          <el-menu-item v-if="isSuperAdmin" index="/admin/logs"><el-icon><List /></el-icon><span>操作日志</span></el-menu-item>
-          <el-menu-item v-if="isSuperAdmin" index="/admin/settings">
-            <el-icon><Setting /></el-icon>
-            <span>其他设置</span>
-          </el-menu-item>
-        </el-menu>
-      </div>
+      <AdminSidebar title="Craftora" :collapsed="false" @select="handleMenuSelect" />
     </el-drawer>
 
     <!-- 桌面端侧边栏 -->
-    <aside v-if="!isMobile" class="admin-aside" :class="{ 'admin-aside--collapsed': isCollapsed }" :style="{ width: isCollapsed ? '64px' : '210px' }">
-      <div class="admin-aside-logo">
-        <el-icon class="logo-icon"><Goods /></el-icon>
-        <span>Craftora Admin</span>
-      </div>
-      <el-menu
-        :default-active="activeMenu"
-        background-color="transparent"
-        text-color="rgba(255,255,255,0.78)"
-        active-text-color="#fff"
-        :collapse="isCollapsed"
-        @select="handleMenuSelect"
-      >
-        <el-menu-item index="/admin">
-          <el-icon><DataLine /></el-icon>
-          <template #title>仪表盘</template>
-        </el-menu-item>
-        <el-menu-item v-if="isSuperAdmin" index="/admin/admins">
-          <el-icon><User /></el-icon>
-          <template #title>管理员信息</template>
-        </el-menu-item>
-        <el-sub-menu index="/admin/products-group">
-          <template #title>
-            <el-icon><Goods /></el-icon>
-            <span>商品管理</span>
-          </template>
-          <el-menu-item index="/admin/products">全部商品</el-menu-item>
-          <el-menu-item v-for="category in menuCategories" :key="category.id" :index="`/admin/products?category_id=${category.id}`">{{ category.name }}</el-menu-item>
-        </el-sub-menu>
-        <el-menu-item index="/admin/categories"><el-icon><Document /></el-icon><template #title>商品分类</template></el-menu-item>
-        <el-menu-item v-if="isSuperAdmin" index="/admin/logs"><el-icon><List /></el-icon><template #title>操作日志</template></el-menu-item>
-        <el-menu-item v-if="isSuperAdmin" index="/admin/settings">
-          <el-icon><Setting /></el-icon>
-          <template #title>其他设置</template>
-        </el-menu-item>
-      </el-menu>
-    </aside>
+    <AdminSidebar v-if="!isMobile" :collapsed="isCollapsed" @select="handleMenuSelect" />
 
     <!-- 右侧内容区 -->
     <el-container class="admin-container">
@@ -214,4 +122,3 @@ watch(() => route.fullPath, () => loadMenuCategories())
     </el-container>
   </div>
 </template>
-

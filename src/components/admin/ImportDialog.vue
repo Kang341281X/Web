@@ -343,9 +343,11 @@ onBeforeRouteLeave(() => {
             <p><strong>导入步骤：</strong></p>
             <ol>
               <li>点击「下载导入模板」，在模板中填写商品数据（请勿修改列名或增删列）</li>
-              <li>按商品分别建立子文件夹，每个子文件夹内放该商品的所有图片（如 01.jpg, 02.jpg）</li>
+              <li>Excel 中「分类名称」必须是后台「商品分类」中已存在的分类，否则该行判定失败</li>
+              <li>Excel 中「图片文件夹名称」为必填，需与压缩包内的子文件夹名称完全一致</li>
+              <li>按商品分别建立子文件夹，每个子文件夹内放该商品的所有图片（如 01.jpg，支持 JPG、PNG、BMP、WebP）</li>
               <li>将所有子文件夹统一压缩为 <code>images.zip</code>（文件名必须为 images.zip）</li>
-              <li>选择 Excel 文件（必选）和 images.zip（可选），点击「上传」<br><span style="color:#909399">不上传图片压缩包时，Excel 中"图片文件夹名称"列无需填写，商品将使用默认占位图</span></li>
+              <li>选择 Excel 文件（必选）和 images.zip（必选），点击「上传」<br><span style="color:#909399">压缩包中缺少对应文件夹、或分类不存在的行，会在预览结果中判定失败</span></li>
             </ol>
           </div>
         </template>
@@ -375,7 +377,7 @@ onBeforeRouteLeave(() => {
         </div>
 
         <div class="upload-item">
-          <div class="upload-label">图片压缩包 <span class="optional-tag">（可选）</span></div>
+          <div class="upload-label">图片压缩包 <span class="optional-tag">（必选）</span></div>
           <el-upload
             :auto-upload="false"
             :limit="1"
@@ -386,7 +388,7 @@ onBeforeRouteLeave(() => {
           >
             <el-button :icon="Upload">选择 images.zip</el-button>
             <template #tip>
-              <div class="upload-tip">文件名必须为 images.zip，不超过 500MB</div>
+              <div class="upload-tip">文件名必须为 images.zip，不超过 500MB；子文件夹名称需与 Excel「图片文件夹名称」一致</div>
             </template>
           </el-upload>
         </div>
@@ -497,7 +499,7 @@ onBeforeRouteLeave(() => {
         style="margin-bottom: 12px"
       >
         <template #title>
-          有 {{ previewResult.fail_count }} 行校验失败，可尝试重命名文件夹使其与 Excel 中的"图片文件夹名称"对应，全部通过后即可导入
+          有 {{ previewResult.fail_count }} 行校验失败。图片文件夹不匹配时可尝试在上方重命名文件夹；若为「分类不存在」，请先在「商品分类」中创建该分类后重新上传。全部通过后即可导入
         </template>
       </el-alert>
 
@@ -512,7 +514,6 @@ onBeforeRouteLeave(() => {
         <el-table-column prop="category_name" label="分类" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.category_name }}
-            <el-tag v-if="row.is_new_category" type="warning" size="small" style="margin-left:4px">新</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="价格" width="90">

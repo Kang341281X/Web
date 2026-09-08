@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, rm, readdir, rename, writeFile, readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { resolve, join, relative } from 'node:path'
-import { inflateRaw } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
+import AdmZip from 'adm-zip'
 import * as XLSX from 'xlsx'
 import multer from 'multer'
 import db from '../config/db.js'
@@ -17,7 +17,7 @@ router.use(requireAuth, requirePasswordChanged)
 
 // ── 常量 ──────────────────────────────────────────────
 const TEMPLATE_HEADERS = ['商品名称', '分类名称', '价格', '原价', '库存', '单位', '生产厂家', '品牌', '描述', '图片文件夹名称']
-const VALID_IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.bmp'])
+const VALID_IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.webp'])
 const SYSTEM_FILES = new Set(['.ds_store', 'thumbs.db', 'desktop.ini'])
 const MAX_UNCOMPRESSED_SIZE = 1024 * 1024 * 1024 // 1 GB
 const PREVIEW_TTL_MINUTES = 30
@@ -35,6 +35,7 @@ function detectImageType(buf) {
   if (buf.subarray(0, 8).equals(MAGIC.png)) return 'png'
   if (buf.subarray(0, 3).equals(MAGIC.jpeg)) return 'jpeg'
   if (buf.subarray(0, 2).equals(MAGIC.bmp)) return 'bmp'
+  if (buf.length >= 12 && buf.subarray(0, 4).toString() === 'RIFF' && buf.subarray(8, 12).toString() === 'WEBP') return 'webp'
   return null
 }
 
@@ -168,78 +169,27 @@ const importUpload = multer({
 
 // ── 工具函数 ──────────────────────────────────────────
 
-// Minimal ZIP central directory parser - returns entry metadata without extraction
-async function parseZipEntries(buffer) {
-  const entries = []
-  // Find End of Central Directory record
-  let eocdOffset = -1
-  const minScan = Math.max(0, buffer.length - 65557)
-  for (let i = buffer.length - 22; i >= minScan; i--) {
-    if (buffer.readUInt32LE(i) === 0x06054b50) {
-      eocdOffset = i
-      break
-    }
-  }
-  if (eocdOffset === -1) throw Object.assign(new Error('无效的 ZIP 文件'), { status: 400 })
-
-  const cdEntries = buffer.readUInt16LE(eocdOffset + 10)
-  const cdOffset = buffer.readUInt32LE(eocdOffset + 16)
-
-  let offset = cdOffset
-  for (let i = 0; i < cdEntries; i++) {
-    if (buffer.readUInt32LE(offset) !== 0x02014b50) break
-
-    const compMethod = buffer.readUInt16LE(offset + 10)
-    const compSize = buffer.readUInt32LE(offset + 20)
-    const uncompSize = buffer.readUInt32LE(offset + 24)
-    const nameLen = buffer.readUInt16LE(offset + 28)
-    const extraLen = buffer.readUInt16LE(offset + 30)
-    const commentLen = buffer.readUInt16LE(offset + 32)
-    const localHeaderOffset = buffer.readUInt32LE(offset + 42)
-
-    const rawName = buffer.toString('utf8', offset + 46, offset + 46 + nameLen)
-    // 统一路径分隔符为正斜杠（ZIP 规范要求 /，但某些 Windows 工具可能用 \）
-    const name = rawName.replace(/\\/g, '/')
-    entries.push({
+// ZIP 解析：使用成熟的 adm-zip 库（支持 stored / deflate 及常见压缩工具生成的压缩包）
+// 返回条目元数据数组；getData() 按需解压单个条目，避免一次性解压全部内容
+function parseZipEntries(buffer) {
+  const archive = new AdmZip(buffer) // ZIP 非法或损坏时抛出异常
+  return archive.getEntries().map(entry => {
+    const name = entry.entryName.replace(/\\/g, '/') // 统一路径分隔符为正斜杠
+    return {
       name,
-      compMethod: compMethod,
-      compressedSize: compSize,
-      uncompressedSize: uncompSize,
-      localHeaderOffset,
-      isDirectory: name.endsWith('/'),
-    })
-
-    offset += 46 + nameLen + extraLen + commentLen
-  }
-  return entries
+      isDirectory: entry.isDirectory,
+      compressedSize: entry.header.compressedSize,
+      uncompressedSize: entry.header.size,
+      getData: () => entry.getData(),
+    }
+  })
 }
 
-// Extract a single file from the zip by entry (only stored or deflate)
-async function extractZipEntry(buffer, entry) {
-  const offset = entry.localHeaderOffset
-  if (buffer.readUInt32LE(offset) !== 0x04034b50) throw new Error('无效的本地文件头')
-
-  const nameLen = buffer.readUInt16LE(offset + 26)
-  const extraLen = buffer.readUInt16LE(offset + 28)
-  const dataOffset = offset + 30 + nameLen + extraLen
-  const compSize = entry.compressedSize
-
-  const rawData = buffer.subarray(dataOffset, dataOffset + compSize)
-
-  if (entry.compMethod === 0) {
-    // Stored (no compression)
-    return Buffer.from(rawData)
-  } else if (entry.compMethod === 8) {
-    // Deflate (raw deflate, no zlib header)
-    return await new Promise((resolve, reject) => {
-      inflateRaw(rawData, (err, result) => {
-        if (err) reject(err)
-        else resolve(result)
-      })
-    })
-  } else {
-    throw new Error(`不支持的压缩方法: ${entry.compMethod}`)
-  }
+// 解压单个条目（返回 Buffer）；buffer 参数仅为兼容旧调用保留
+function extractZipEntry(_buffer, entry) {
+  const data = entry.getData()
+  if (!Buffer.isBuffer(data)) return Buffer.from(data)
+  return data
 }
 
 // ── 模板下载（读取静态文件 public/assets/Products.xlsx） ─────────
@@ -279,7 +229,7 @@ router.post('/import/preview', importUpload.fields([
       return res.status(400).json({ success: false, message: 'Excel 文件不能超过 10MB' })
     }
 
-    // zip 是可选的：无 zip 时跳过图片处理，商品使用默认占位图
+    // zip 用于匹配商品的图片文件夹（Excel 的“图片文件夹名称”为必填）
     let zipEntries = []
     if (zipFile) {
       // 校验压缩包文件名
@@ -329,8 +279,7 @@ router.post('/import/preview', importUpload.fields([
     const [categories] = await db.execute('SELECT id, name FROM category WHERE status = 1')
     const categoryMap = new Map(categories.map(c => [c.name, c.id]))
 
-    // 收集 Excel 中不存在的新分类名称，预览阶段先不创建，仅标记
-    const missingCategoryNames = []
+    // 收集 Excel 中引用但系统中不存在的分类名称（严格模式下预览即判定失败，不会自动创建）
 
     // 解析 zip 目录结构：保留原始目录结构解压
     // 支持任意嵌套层级的 ZIP，如：
@@ -403,7 +352,8 @@ router.post('/import/preview', importUpload.fields([
       if (!categoryName) errors.push('分类名称为空')
       if (!priceStr) errors.push('价格为空')
       if (!stockStr) errors.push('库存为空')
-      // 图片文件夹名称是可选的：不填则导入无图片的商品，前端使用默认占位图
+      // 图片文件夹名称必填：留空则该行判定失败
+      if (!imageFolderName) errors.push('图片文件夹名称不能为空')
 
       // 数值校验
       let price = null
@@ -425,15 +375,13 @@ router.post('/import/preview', importUpload.fields([
         if (!Number.isFinite(stock) || stock < 0 || !Number.isInteger(stock)) errors.push('库存必须是非负整数')
       }
 
-      // 分类是否存在（不存在则标记为新分类，预览阶段不创建）
+      // 分类必须已存在（status=1），不存在则该行判定失败，不会自动创建
       let categoryId = null
-      let isNewCategory = false
       if (categoryName) {
         if (categoryMap.has(categoryName)) {
           categoryId = categoryMap.get(categoryName)
         } else {
-          isNewCategory = true
-          if (!missingCategoryNames.includes(categoryName)) missingCategoryNames.push(categoryName)
+          errors.push(`分类不存在：${categoryName}`)
         }
       }
 
@@ -441,43 +389,48 @@ router.post('/import/preview', importUpload.fields([
       // 支持 images/product01/1.jpg 这样的嵌套结构
       // Excel 中填写的文件夹名称（如 product01）会在所有层级中搜索匹配
       let imageFiles = []
-      if (imageFolderName && zipFile) {
-        const normalizedFolder = imageFolderName.trim()
-        const folderPath = join(tempDir, normalizedFolder)
-        const safePath = relative(tempDir, folderPath)
-        if (safePath.startsWith('..') || safePath === '') {
-          errors.push(`图片文件夹路径非法：${imageFolderName}`)
-        } else if (existsSync(folderPath)) {
-          // 直接匹配成功（product01/ 直接在 tempDir 下）
-          const filesInDir = await readdir(folderPath)
-          imageFiles = filesInDir
-            .filter(f => {
-              const ext = '.' + f.split('.').pop().toLowerCase()
-              return VALID_IMAGE_EXTS.has(ext) && !SYSTEM_FILES.has(f.toLowerCase())
-            })
-            .sort((a, b) => naturalCompare(a, b))
-            .map(f => `${normalizedFolder}/${f}`)
-          if (!imageFiles.length) {
-            errors.push(`图片文件夹"${imageFolderName}"中没有有效的图片文件`)
-          }
+      if (imageFolderName) {
+        if (!zipFile) {
+          // 未上传 zip，无法找到对应文件夹，判定为失败
+          errors.push(`未找到图片文件夹：${imageFolderName}`)
         } else {
-          // 在嵌套子目录中递归查找匹配的文件夹
-          const foundPath = await findFolderByName(tempDir, normalizedFolder)
-          if (foundPath) {
-            const relFound = relative(tempDir, foundPath).replace(/\\/g, '/')
-            const foundFiles = await readdir(foundPath)
-            imageFiles = foundFiles
+          const normalizedFolder = imageFolderName.trim()
+          const folderPath = join(tempDir, normalizedFolder)
+          const safePath = relative(tempDir, folderPath)
+          if (safePath.startsWith('..') || safePath === '') {
+            errors.push(`图片文件夹路径非法：${imageFolderName}`)
+          } else if (existsSync(folderPath)) {
+            // 直接匹配成功（product01/ 直接在 tempDir 下）
+            const filesInDir = await readdir(folderPath)
+            imageFiles = filesInDir
               .filter(f => {
                 const ext = '.' + f.split('.').pop().toLowerCase()
                 return VALID_IMAGE_EXTS.has(ext) && !SYSTEM_FILES.has(f.toLowerCase())
               })
               .sort((a, b) => naturalCompare(a, b))
-              .map(f => `${relFound}/${f}`)
+              .map(f => `${normalizedFolder}/${f}`)
             if (!imageFiles.length) {
               errors.push(`图片文件夹"${imageFolderName}"中没有有效的图片文件`)
             }
           } else {
-            errors.push(`未找到图片文件夹：${imageFolderName}`)
+            // 在嵌套子目录中递归查找匹配的文件夹
+            const foundPath = await findFolderByName(tempDir, normalizedFolder)
+            if (foundPath) {
+              const relFound = relative(tempDir, foundPath).replace(/\\/g, '/')
+              const foundFiles = await readdir(foundPath)
+              imageFiles = foundFiles
+                .filter(f => {
+                  const ext = '.' + f.split('.').pop().toLowerCase()
+                  return VALID_IMAGE_EXTS.has(ext) && !SYSTEM_FILES.has(f.toLowerCase())
+                })
+                .sort((a, b) => naturalCompare(a, b))
+                .map(f => `${relFound}/${f}`)
+              if (!imageFiles.length) {
+                errors.push(`图片文件夹"${imageFolderName}"中没有有效的图片文件`)
+              }
+            } else {
+              errors.push(`未找到图片文件夹：${imageFolderName}`)
+            }
           }
         }
       }
@@ -490,7 +443,7 @@ router.post('/import/preview', importUpload.fields([
         row: excelRowNum,
         name: name || '(未填写)',
         category_name: categoryName || '(未填写)',
-        is_new_category: isNewCategory,
+        is_new_category: false,
         price: price !== null ? Number(price) : null,
         original_price: originalPrice !== null ? Number(originalPrice) : null,
         stock: stock !== null ? Number(stock) : null,
@@ -592,18 +545,13 @@ router.post('/import/confirm', async (req, res, next) => {
     return res.status(400).json({ success: false, message: '没有可导入的成功记录' })
   }
 
-  // 再次验证分类（防止预览后分类被删除）
+  // 再次验证分类（防止预览后分类被删除）；严格模式下不自动创建分类
   const categoryNames = [...new Set(successRows.map(r => r.category_name))]
   const [existingCats] = await db.execute(`SELECT id, name FROM category WHERE name IN (${categoryNames.map(() => '?').join(',')}) AND status = 1`, categoryNames)
-  let categoryMap = new Map(existingCats.map(c => [c.name, c.id]))
-
-  // 自动创建不存在的新分类
+  const categoryMap = new Map(existingCats.map(c => [c.name, c.id]))
   const missingNames = categoryNames.filter(name => !categoryMap.has(name))
   if (missingNames.length) {
-    for (const name of missingNames) {
-      const [result] = await db.execute('INSERT INTO category (name, status) VALUES (?, 1)', [name])
-      categoryMap.set(name, Number(result.insertId))
-    }
+    return res.status(400).json({ success: false, message: `分类不存在：${missingNames[0]}，请先在后台创建该分类后重新导入` })
   }
 
   const connection = await db.getConnection()

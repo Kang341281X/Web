@@ -128,7 +128,7 @@ onMounted(load)
             <div v-else class="dialog-thumb-placeholder">无图片</div>
           </div>
           <div class="dialog-image-actions">
-            <el-upload :show-file-list="false" :auto-upload="false" accept=".jpg,.jpeg,.png,.webp" :on-change="uploadImage" :disabled="imageUploading">
+            <el-upload :show-file-list="false" :auto-upload="false" accept=".jpg,.jpeg,.png,.bmp,.webp" :on-change="uploadImage" :disabled="imageUploading">
               <el-button size="small" type="primary" :loading="imageUploading">{{ editingImageUrl ? '更换图片' : '上传图片' }}</el-button>
             </el-upload>
             <el-button v-if="editingImageUrl" size="small" type="danger" @click="deleteImage">删除图片</el-button>

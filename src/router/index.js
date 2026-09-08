@@ -8,16 +8,9 @@ import Search from '../views/Search.vue'
 import Favorites from '../views/Favorites.vue'
 import Cart from '../views/Cart.vue'
 import NotFound from '../views/NotFound.vue'
-import AdminLayout from '../views/admin/AdminLayout.vue'
-import AdminDashboard from '../views/admin/AdminDashboard.vue'
-import AdminProducts from '../views/admin/AdminProducts.vue'
-import AdminSettings from '../views/admin/AdminSettings.vue'
-import AdminLogin from '../views/admin/AdminLogin.vue'
-import AdminUsers from '../views/admin/AdminUsers.vue'
-import AdminProfile from '../views/admin/AdminProfile.vue'
-import AdminCategories from '../views/admin/AdminCategories.vue'
-import AdminLogs from '../views/admin/AdminLogs.vue'
 
+// /admin 下的后台管理页面全部动态 import（路由级代码分割），
+// echarts 在 AdminDashboard 中同样动态引入，减小前台首屏包体。
 const router = createRouter({
   history: createWebHistory(),
   scrollBehavior: () => ({ top: 0 }),
@@ -29,23 +22,50 @@ const router = createRouter({
     { path: '/search', component: Search },
     { path: '/favorites', component: Favorites },
     { path: '/cart', component: Cart },
-    { path: '/admin/login', component: AdminLogin, meta: { guestOnly: true } },
+    {
+      path: '/admin/login',
+      component: () => import('../views/admin/AdminLogin.vue'),
+      meta: { guestOnly: true },
+    },
     {
       path: '/admin',
-      component: AdminLayout,
+      component: () => import('../views/admin/AdminLayout.vue'),
       meta: { requiresAuth: true },
       children: [
-        { path: '', component: AdminDashboard },
-        { path: 'products', component: AdminProducts },
-        { path: 'categories', component: AdminCategories },
-        { path: 'settings', component: AdminSettings, meta: { requiresSuperAdmin: true } },
-        { path: 'logs', component: AdminLogs, meta: { requiresSuperAdmin: true } },
-        { path: 'profile', component: AdminProfile },
-        { path: 'admins', component: AdminUsers, meta: { requiresSuperAdmin: true } }
-      ]
+        {
+          path: '',
+          component: () => import('../views/admin/AdminDashboard.vue'),
+        },
+        {
+          path: 'products',
+          component: () => import('../views/admin/AdminProducts.vue'),
+        },
+        {
+          path: 'categories',
+          component: () => import('../views/admin/AdminCategories.vue'),
+        },
+        // settings/logs 对普通管理员可见，仅 admins 仍限 super_admin
+        {
+          path: 'settings',
+          component: () => import('../views/admin/AdminSettings.vue'),
+        },
+        {
+          path: 'logs',
+          component: () => import('../views/admin/AdminLogs.vue'),
+        },
+        {
+          path: 'profile',
+          component: () => import('../views/admin/AdminProfile.vue'),
+        },
+        {
+          path: 'admins',
+          component: () => import('../views/admin/AdminUsers.vue'),
+          meta: { requiresSuperAdmin: true },
+        },
+      ],
     },
-    { path: '/:pathMatch(.*)*', component: NotFound }
-  ]
+    { path: '/:pathMatch(.*)*', component: NotFound },
+  ],
 })
 
 // 路由守卫：后台管理需要登录
