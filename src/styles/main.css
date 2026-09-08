@@ -63,3 +63,5 @@
 /* Floating search popover teleported to body; header must not clip overlays. */
 .site-header{overflow:visible}.search-popover-floating{position:fixed;z-index:60;max-height:min(420px,60vh)}.search-bar .search-clear svg,.search-bar .search-submit svg{width:16px;height:16px;display:block}.remove-history svg{width:14px;height:14px;display:block}.remove-history{flex:none;border:0;background:#f5f0ea;color:#a59b91;width:32px;min-width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;margin-right:4px;transition:color .16s,background .16s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 @media(max-width:760px){.search-popover-floating{max-height:calc(100vh - 155px)}.remove-history{width:36px;min-width:36px;height:36px;margin-right:2px}.remove-history svg{width:15px;height:15px}}
+
+.eyebrow--customizable{font-size:1rem;font-weight:800;color:#b45309;letter-spacing:.03em;text-transform:none;background:rgba(180,83,9,.10);padding:.18em .7em;border-radius:999px;display:inline-block}

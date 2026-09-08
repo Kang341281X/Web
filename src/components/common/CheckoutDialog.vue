@@ -2,11 +2,10 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
 import { useCartStore } from '../../stores/cart'
 import { useLanguageStore } from '../../stores/language'
 import { productTitle } from '../../data/translations'
-import { fetchSettings, saveIntentOrder } from '../../services/publicApi'
+import { fetchSettings, saveIntentOrder, exportCheckoutList } from '../../services/publicApi'
 import AppImage from '../common/AppImage.vue'
 
 const props = defineProps({ visible: Boolean })
@@ -64,27 +63,22 @@ async function handleDownload() {
   downloading.value = true
 
   try {
-    // 1. 前端生成 Excel 文件（不含图片，仅商品数据）
-    const rows = tableRows.value.map(row => ({
-      '商品名称': row.name,
-      '数量': row.quantity,
-      '单价': row.price.toFixed(2),
-      '小计': row.subtotal.toFixed(2),
-    }))
-    // 追加合计行
-    rows.push({ '商品名称': '合计', '数量': '', '单价': '', '小计': totalAmount.value.toFixed(2) })
-
-    const ws = XLSX.utils.json_to_sheet(rows, { skipHeader: false })
-    ws['!cols'] = [{ wch: 30 }, { wch: 8 }, { wch: 12 }, { wch: 12 }]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '购物清单')
-
-    const date = new Date()
-    const stamp =
-      `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}` +
-      `${String(date.getDate()).padStart(2, '0')}` +
-      `${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}`
-    XLSX.writeFile(wb, `购物清单_${stamp}.xlsx`)
+    // 1. 调用后端接口，基于 public/assets/结算清单.xlsx 模板生成文件并返回
+    const { blob, filename } = await exportCheckoutList(tableRows.value.map(row => ({
+      sku: row.product.sku || '',
+      name: row.name,
+      quantity: row.quantity,
+      price: row.price,
+    })))
+    // 触发浏览器下载，文件名固定为 结算清单.xlsx（优先取后端 Content-Disposition）
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename || '结算清单.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
 
     downloaded.value = true
     ElMessage.success('购物清单已下载')

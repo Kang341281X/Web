@@ -344,6 +344,7 @@ onBeforeRouteLeave(() => {
             <ol>
               <li>点击「下载导入模板」，在模板中填写商品数据（请勿修改列名或增删列）</li>
               <li>Excel 中「分类名称」必须是后台「商品分类」中已存在的分类，否则该行判定失败</li>
+              <li>「商品编号(SKU)」选填，留空系统自动生成，重复（含已存在）则判定失败；「是否支持定制」可用下拉选"是/否"；「商品评分」留空默认为 5</li>
               <li>Excel 中「图片文件夹名称」为必填，需与压缩包内的子文件夹名称完全一致</li>
               <li>按商品分别建立子文件夹，每个子文件夹内放该商品的所有图片（如 01.jpg，支持 JPG、PNG、BMP、WebP）</li>
               <li>将所有子文件夹统一压缩为 <code>images.zip</code>（文件名必须为 images.zip）</li>
@@ -515,6 +516,19 @@ onBeforeRouteLeave(() => {
           <template #default="{ row }">
             {{ row.category_name }}
           </template>
+        </el-table-column>
+        <el-table-column label="编号" width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.sku || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="定制" width="70" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.is_customizable ? 'warning' : 'info'" size="small">
+              {{ row.is_customizable ? '支持' : '不支持' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="评分" width="80" align="center">
+          <template #default="{ row }">{{ row.rating != null ? '★ ' + row.rating : '-' }}</template>
         </el-table-column>
         <el-table-column label="价格" width="90">
           <template #default="{ row }">{{ row.price != null ? '¥' + row.price.toFixed(2) : '-' }}</template>

@@ -9,7 +9,7 @@ import { requiredText } from '../utils/admin.js'
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 10 } })
 router.use(requireAuth, requirePasswordChanged)
-const selectFields = `p.id, p.name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.manufacturer, p.brand, p.description, p.detail, p.main_image, p.status, p.created_at, p.updated_at`
+const selectFields = `p.id, p.name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.manufacturer, p.brand, p.description, p.detail, p.main_image, p.sku, p.is_customizable, p.rating, p.status, p.created_at, p.updated_at`
 
 function numberValue(value, label, { min = 0, integer = false, nullable = false } = {}) {
   if ((value === '' || value === null || value === undefined) && nullable) return null
@@ -18,14 +18,39 @@ function numberValue(value, label, { min = 0, integer = false, nullable = false 
   return numeric
 }
 function optionalText(value, max) { const text = String(value || '').trim(); if (text.length > max) throw Object.assign(new Error(`内容不能超过 ${max} 个字符`), { status: 400 }); return text || null }
-async function validateProduct(body) {
+// 自动生成唯一商品编号：SKU + 时间戳 + 6 位自增序号（同毫秒内也可保证不同）
+let skuSeq = 0
+async function generateUniqueSku() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const candidate = `SKU${Date.now()}${String(skuSeq = (skuSeq + 1) % 1000000).padStart(6, '0')}`
+    const [rows] = await db.execute('SELECT id FROM product WHERE sku = ?', [candidate])
+    if (!rows.length) return candidate
+  }
+  throw Object.assign(new Error('自动生成商品编号失败，请稍后重试'), { status: 500 })
+}
+async function validateProduct(body, excludeId = null) {
+  // sku：选填，最长 64 字符；已占用时校验唯一性（编辑时排除自身 id）
+  let sku = optionalText(body.sku, 64)
+  if (sku) {
+    const [duplicates] = await db.execute('SELECT id FROM product WHERE sku = ? AND id != ?', [sku, excludeId === null ? -1 : excludeId])
+    if (duplicates.length) throw Object.assign(new Error('商品编号已存在'), { status: 400 })
+  } else {
+    sku = await generateUniqueSku()
+  }
+  // is_customizable：0/1
+  const isCustomizable = [1, '1', true, 'true'].includes(body.is_customizable) ? 1 : 0
+  // rating：0~5，允许一位小数
+  const rawRating = body.rating === '' || body.rating === null || body.rating === undefined ? 5 : Number(body.rating)
+  const rating = Number.isFinite(rawRating) ? Math.round(rawRating * 10) / 10 : NaN
+  if (!Number.isFinite(rating) || rating < 0 || rating > 5 || Math.abs(rawRating - rating) > 1e-9) throw Object.assign(new Error('商品评分格式不正确，应为0-5之间的数字'), { status: 400 })
   const values = {
     name: requiredText(body.name, '商品名称', { min: 1, max: 200 }),
     categoryId: numberValue(body.category_id, '商品分类', { min: 1, integer: true }),
     price: numberValue(body.price, '售价'), originalPrice: numberValue(body.original_price, '原价', { nullable: true }),
     stock: numberValue(body.stock, '库存', { integer: true }), sales: numberValue(body.sales ?? 0, '销量', { integer: true }),
     unit: optionalText(body.unit, 20), manufacturer: optionalText(body.manufacturer, 100), brand: optionalText(body.brand, 100),
-    description: optionalText(body.description, 5000), detail: optionalText(body.detail, 1000000), status: Number(body.status) === 0 ? 0 : 1
+    description: optionalText(body.description, 5000), detail: optionalText(body.detail, 1000000), status: Number(body.status) === 0 ? 0 : 1,
+    sku, isCustomizable, rating
   }
   if (values.originalPrice !== null && values.originalPrice < values.price) throw Object.assign(new Error('原价不能低于售价'), { status: 400 })
   const [categories] = await db.execute('SELECT id FROM category WHERE id = ?', [values.categoryId])
@@ -63,15 +88,15 @@ router.get('/:id', async (req, res, next) => { try { const product = await getPr
 router.post('/', async (req, res, next) => {
   try {
     const item = await validateProduct(req.body)
-    const [result] = await db.execute('INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [item.name, item.categoryId, item.price, item.originalPrice, item.stock, item.sales, item.unit, item.manufacturer, item.brand, item.description, item.detail, item.status])
+    const [result] = await db.execute('INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status, sku, is_customizable, rating) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [item.name, item.categoryId, item.price, item.originalPrice, item.stock, item.sales, item.unit, item.manufacturer, item.brand, item.description, item.detail, item.status, item.sku, item.isCustomizable, item.rating])
     await writeOperationLog(req.admin.id, 'create_product', item.name, req)
     res.status(201).json({ success: true, data: await getProduct(result.insertId) })
   } catch (error) { next(error) }
 })
 router.put('/:id', async (req, res, next) => {
   try {
-    const id = Number(req.params.id); const item = await validateProduct(req.body)
-    const [result] = await db.execute('UPDATE product SET name = ?, category_id = ?, price = ?, original_price = ?, stock = ?, sales = ?, unit = ?, manufacturer = ?, brand = ?, description = ?, detail = ?, status = ? WHERE id = ?', [item.name, item.categoryId, item.price, item.originalPrice, item.stock, item.sales, item.unit, item.manufacturer, item.brand, item.description, item.detail, item.status, id])
+    const id = Number(req.params.id); const item = await validateProduct(req.body, id)
+    const [result] = await db.execute('UPDATE product SET name = ?, category_id = ?, price = ?, original_price = ?, stock = ?, sales = ?, unit = ?, manufacturer = ?, brand = ?, description = ?, detail = ?, status = ?, sku = ?, is_customizable = ?, rating = ? WHERE id = ?', [item.name, item.categoryId, item.price, item.originalPrice, item.stock, item.sales, item.unit, item.manufacturer, item.brand, item.description, item.detail, item.status, item.sku, item.isCustomizable, item.rating, id])
     if (!result.affectedRows) return res.status(404).json({ success: false, message: '商品不存在' })
     await writeOperationLog(req.admin.id, 'update_product', String(id), req); res.json({ success: true, data: await getProduct(id) })
   } catch (error) { next(error) }
@@ -179,7 +204,7 @@ router.post('/export', async (req, res, next) => {
     if (!['filter', 'selected'].includes(mode)) return res.status(400).json({ success: false, message: '导出模式不正确' })
     const keyword = String(req.body.keyword || '').trim(); const categoryId = req.body.category_id ? numberValue(req.body.category_id, '分类', { min: 1, integer: true }) : null; const where = whereClause({ keyword, categoryId, ids })
     const [rows] = await db.execute(`SELECT ${selectFields} FROM product p JOIN category c ON c.id = p.category_id ${where.sql} ORDER BY p.id`, where.params)
-    const sheet = XLSX.utils.json_to_sheet(rows.map((row, index) => ({ '序号': index + 1, '商品名称': row.name, '分类': row.category_name, '售价': Number(row.price), '原价': row.original_price === null ? '' : Number(row.original_price), '库存': row.stock, '销量': row.sales, '单位': row.unit || '', '生产厂家': row.manufacturer || '', '品牌': row.brand || '', '状态': row.status ? '上架' : '下架', '描述': row.description || '' })))
+    const sheet = XLSX.utils.json_to_sheet(rows.map((row, index) => ({ '序号': index + 1, '商品名称': row.name, '商品编号(SKU)': row.sku || '', '是否支持定制': row.is_customizable ? '是' : '否', '商品评分': row.rating, '分类': row.category_name, '售价': Number(row.price), '原价': row.original_price === null ? '' : Number(row.original_price), '库存': row.stock, '销量': row.sales, '单位': row.unit || '', '生产厂家': row.manufacturer || '', '品牌': row.brand || '', '状态': row.status ? '上架' : '下架', '描述': row.description || '' })))
     const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, sheet, '商品数据'); const buffer = XLSX.write(book, { type: 'buffer', bookType: 'xlsx' })
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent('商品数据.xlsx')}`); res.send(buffer)
     await writeOperationLog(req.admin.id, 'export_products', `导出商品：${mode === 'selected' ? `${ids.length}条` : '筛选结果'}`, req)

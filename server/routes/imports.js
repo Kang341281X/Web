@@ -16,7 +16,10 @@ const router = Router()
 router.use(requireAuth, requirePasswordChanged)
 
 // ── 常量 ──────────────────────────────────────────────
-const TEMPLATE_HEADERS = ['商品名称', '分类名称', '价格', '原价', '库存', '单位', '生产厂家', '品牌', '描述', '图片文件夹名称']
+const TEMPLATE_HEADERS = [
+  '商品编号(SKU)', '商品名称', '分类名称', '价格', '原价', '库存',
+  '单位（件/盒）', '生产厂家', '品牌', '是否支持定制', '商品评分', '描述', '图片文件夹名称'
+]
 const VALID_IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.webp'])
 const SYSTEM_FILES = new Set(['.ds_store', 'thumbs.db', 'desktop.ini'])
 const MAX_UNCOMPRESSED_SIZE = 1024 * 1024 * 1024 // 1 GB
@@ -37,6 +40,18 @@ function detectImageType(buf) {
   if (buf.subarray(0, 2).equals(MAGIC.bmp)) return 'bmp'
   if (buf.length >= 12 && buf.subarray(0, 4).toString() === 'RIFF' && buf.subarray(8, 12).toString() === 'WEBP') return 'webp'
   return null
+}
+
+// 自动生成唯一商品编号：SKU + 时间戳 + 6 位自增序号
+// executor 默认走全局 db，事务内可传入 connection.execute 以兼容事务
+let autoSkuSeq = 0
+async function generateUniqueSku(executor = db.execute.bind(db)) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const candidate = `SKU${Date.now()}${String(autoSkuSeq = (autoSkuSeq + 1) % 1000000).padStart(6, '0')}`
+    const [rows] = await executor('SELECT id FROM product WHERE sku = ?', [candidate])
+    if (!rows.length) return candidate
+  }
+  throw Object.assign(new Error('自动生成商品编号失败，请稍后重试'), { status: 500 })
 }
 
 // 自然排序比较器
@@ -279,7 +294,18 @@ router.post('/import/preview', importUpload.fields([
     const [categories] = await db.execute('SELECT id, name FROM category WHERE status = 1')
     const categoryMap = new Map(categories.map(c => [c.name, c.id]))
 
-    // 收集 Excel 中引用但系统中不存在的分类名称（严格模式下预览即判定失败，不会自动创建）
+    // 商品编号唯一性预查：数据库中已占用的 SKU + 本批次内部重复次数
+    const batchSkuCount = new Map()
+    for (const dataRow of dataRows) {
+      const skuCell = String(dataRow[0] || '').trim()
+      if (skuCell) batchSkuCount.set(skuCell, (batchSkuCount.get(skuCell) || 0) + 1)
+    }
+    const allSkuValues = [...batchSkuCount.keys()]
+    const existingSkuSet = new Set()
+    if (allSkuValues.length) {
+      const [existingSkus] = await db.execute(`SELECT sku FROM product WHERE sku IN (${allSkuValues.map(() => '?').join(',')}) AND sku IS NOT NULL`, allSkuValues)
+      for (const product of existingSkus) existingSkuSet.add(product.sku)
+    }
 
     // 解析 zip 目录结构：保留原始目录结构解压
     // 支持任意嵌套层级的 ZIP，如：
@@ -334,16 +360,20 @@ router.post('/import/preview', importUpload.fields([
     for (let rowIdx = 0; rowIdx < dataRows.length; rowIdx++) {
       const row = dataRows[rowIdx]
       const excelRowNum = rowIdx + 2 // +2: 1-based + header row
-      const name = String(row[0] || '').trim()
-      const categoryName = String(row[1] || '').trim()
-      const priceStr = String(row[2] || '').trim()
-      const originalPriceStr = String(row[3] || '').trim()
-      const stockStr = String(row[4] || '').trim()
-      const unit = String(row[5] || '').trim()
-      const manufacturer = String(row[6] || '').trim()
-      const brand = String(row[7] || '').trim()
-      const description = String(row[8] || '').trim()
-      const imageFolderName = String(row[9] || '').trim()
+      // 按新模板列序取值：0=商品编号 1=名称 2=分类 3=价格 4=原价 5=库存 6=单位 7=生产厂家 8=品牌 9=是否支持定制 10=商品评分 11=描述 12=图片文件夹
+      const skuStr = String(row[0] || '').trim()
+      const name = String(row[1] || '').trim()
+      const categoryName = String(row[2] || '').trim()
+      const priceStr = String(row[3] || '').trim()
+      const originalPriceStr = String(row[4] || '').trim()
+      const stockStr = String(row[5] || '').trim()
+      const unit = String(row[6] || '').trim()
+      const manufacturer = String(row[7] || '').trim()
+      const brand = String(row[8] || '').trim()
+      const isCustomizableStr = String(row[9] || '').trim()
+      const ratingStr = String(row[10] || '').trim()
+      const description = String(row[11] || '').trim()
+      const imageFolderName = String(row[12] || '').trim()
 
       const errors = []
 
@@ -373,6 +403,40 @@ router.post('/import/preview', importUpload.fields([
       if (stockStr) {
         stock = Number(stockStr)
         if (!Number.isFinite(stock) || stock < 0 || !Number.isInteger(stock)) errors.push('库存必须是非负整数')
+      }
+
+      // 商品编号(SKU)：选填，最长 64 字符；须唯一（已被占用或本批次内部重复均判失败）
+      let sku = null
+      if (skuStr) {
+        if (skuStr.length > 64) {
+          errors.push('商品编号不能超过 64 个字符')
+        } else if (existingSkuSet.has(skuStr)) {
+          errors.push(`商品编号已存在：${skuStr}`)
+        } else if ((batchSkuCount.get(skuStr) || 0) > 1) {
+          errors.push(`商品编号已存在：${skuStr}`)
+        } else {
+          sku = skuStr
+        }
+      }
+
+      // 是否支持定制：值只能为'是'/'否'（留空视为'否'）
+      let isCustomizable = 0
+      if (isCustomizableStr) {
+        if (isCustomizableStr === '是') isCustomizable = 1
+        else if (isCustomizableStr === '否') isCustomizable = 0
+        else errors.push(`是否支持定制填写不正确，请填写'是'或'否'`)
+      }
+
+      // 商品评分：留空默认为 5；填写时需为 0~5 之间的数字（允许一位小数）
+      let rating = 5
+      if (ratingStr) {
+        const numericRating = Number(ratingStr)
+        const roundedRating = Number.isFinite(numericRating) ? Math.round(numericRating * 10) / 10 : NaN
+        if (!Number.isFinite(numericRating) || numericRating < 0 || numericRating > 5 || Math.abs(numericRating - roundedRating) > 1e-9) {
+          errors.push('商品评分格式不正确，应为0-5之间的数字')
+        } else {
+          rating = roundedRating
+        }
       }
 
       // 分类必须已存在（status=1），不存在则该行判定失败，不会自动创建
@@ -450,6 +514,9 @@ router.post('/import/preview', importUpload.fields([
         unit: unit || null,
         manufacturer: manufacturer || null,
         brand: brand || null,
+        sku,
+        is_customizable: isCustomizable,
+        rating,
         description: description || null,
         image_folder_name: imageFolderName || '(无图片)',
         image_count: imageFiles.length,
@@ -494,6 +561,9 @@ router.post('/import/preview', importUpload.fields([
           name: r.name,
           category_name: r.category_name,
           is_new_category: r.is_new_category,
+          sku: r.sku,
+          is_customizable: r.is_customizable,
+          rating: r.rating,
           price: r.price,
           stock: r.stock,
           image_count: r.image_count,
@@ -561,11 +631,15 @@ router.post('/import/confirm', async (req, res, next) => {
 
     for (const row of successRows) {
       const categoryId = categoryMap.get(row.category_name)
+      // SKU 留空的行在确认阶段自动生成唯一编号
+      const sku = row.sku || await generateUniqueSku(connection.execute.bind(connection))
+      const isCustomizable = row.is_customizable === 1 || row.is_customizable === true ? 1 : 0
+      const rating = Number.isFinite(Number(row.rating)) ? Number(row.rating) : 5
 
       // 插入 product
       const [productResult] = await connection.execute(
-        'INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, NULL, 1)',
-        [row.name, categoryId, row.price, row.original_price, row.stock, row.unit || null, row.manufacturer || null, row.brand || null, row.description || null]
+        'INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status, sku, is_customizable, rating) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, NULL, 1, ?, ?, ?)',
+        [row.name, categoryId, row.price, row.original_price, row.stock, row.unit || null, row.manufacturer || null, row.brand || null, row.description || null, sku, isCustomizable, rating]
       )
       const productId = productResult.insertId
       createdProductIds.push(productId)
@@ -790,6 +864,9 @@ router.post('/import/:batchId/rename-folder', async (req, res, next) => {
           name: r.name,
           category_name: r.category_name,
           is_new_category: r.is_new_category,
+          sku: r.sku,
+          is_customizable: r.is_customizable,
+          rating: r.rating,
           price: r.price,
           stock: r.stock,
           image_count: r.image_count,

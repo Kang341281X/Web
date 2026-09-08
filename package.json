@@ -23,6 +23,7 @@
     "dotenv": "^17.4.2",
     "echarts": "^6.1.0",
     "element-plus": "^2.14.5",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.3.0",

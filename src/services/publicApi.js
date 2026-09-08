@@ -11,8 +11,8 @@ function adaptProduct(raw) {
     categoryId: raw.category_id,
     price: Number(raw.price) || 0,
     originalPrice: raw.original_price !== null ? Number(raw.original_price) : Number(raw.price) || 0,
-    rating: 5.0,
-    reviewCount: 0,
+    rating: raw.rating !== undefined && raw.rating !== null ? Number(raw.rating) : 5.0,
+    reviewCount: raw.review_count || 0,
     seller: raw.brand || raw.manufacturer || '未知卖家',
     sellerAvatar: '/assets/images/avatars/avatar-placeholder.svg',
     image: raw.main_image_url || '/assets/images/products/product-placeholder.svg',
@@ -27,6 +27,8 @@ function adaptProduct(raw) {
     unit: raw.unit || '',
     manufacturer: raw.manufacturer || '',
     brand: raw.brand || '',
+    sku: raw.sku || '',
+    isCustomizable: raw.is_customizable === 1 || raw.is_customizable === true,
     createdAt: raw.created_at ? new Date(raw.created_at).getTime() / 1000 : 0,
     sales: raw.sales || 0,
     isMainImage: (index) => raw.images ? raw.images[index]?.is_main === 1 : index === 0,
@@ -56,6 +58,22 @@ export async function fetchSettings() {
 export async function saveIntentOrder(payload) {
   const { data } = await publicApi.post('/intent-orders', payload)
   return data.data
+}
+
+// 从 Content-Disposition 中解析文件名（优先 filename*=UTF-8''，兜底返回默认名）
+function resolveFilename(contentDisposition, fallback = '结算清单.xlsx') {
+  const utf8 = String(contentDisposition || '').match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8) {
+    try { const decoded = decodeURIComponent(utf8[1]); if (decoded) return decoded } catch { /* 解码失败走兜底 */ }
+  }
+  const plain = String(contentDisposition || '').match(/filename="?([^";]+)"?/i)
+  return (plain && plain[1]) ? plain[1] : fallback
+}
+
+// 导出购物车结算清单：由后端基于 public/assets/结算清单.xlsx 模板生成
+export async function exportCheckoutList(items) {
+  const { data, headers } = await publicApi.post('/checkout/export', { items }, { responseType: 'blob' })
+  return { blob: data, filename: resolveFilename(headers['content-disposition']) }
 }
 
 export default publicApi

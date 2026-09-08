@@ -11,6 +11,7 @@ import importsRouter, { startImportCleanupTask } from './routes/imports.js'
 import logsRouter from './routes/logs.js'
 import settingsRouter from './routes/settings.js'
 import publicRouter from './routes/public.js'
+import checkoutRouter from './routes/checkout.js'
 
 const app = express()
 const port = Number(process.env.PORT || 3001)
@@ -40,6 +41,7 @@ app.use('/api/products', importsRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/settings', settingsRouter)
 app.use('/api/public', publicRouter)
+app.use('/api/public', checkoutRouter)
 app.use((err, _req, res, _next) => {
   console.error(err)
   if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ success: false, message: '图片大小不能超过 5MB' })
