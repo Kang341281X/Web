@@ -1,21 +1,11 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useLanguageStore } from '../../stores/language'
 import { fetchSettings } from '../../services/publicApi'
 const language = useLanguageStore()
 const settings = ref({})
 
-const socials = [
-  { key: 'douyin', src: '/assets/images/contact/qr-douyin.svg' },
-  { key: 'xiaohongshu', src: '/assets/images/contact/qr-xiaohongshu.svg' },
-  { key: 'tiktok', src: '/assets/images/contact/qr-tiktok.svg' },
-  { key: 'telegram', src: '/assets/images/contact/qr-telegram.svg' }
-]
-
-function qrSrc(key) {
-  const qrValue = settings.value[`${key}_qr`]
-  return qrValue || socials.find(s => s.key === key)?.src
-}
+const socialItems = computed(() => (settings.value.social_media || []).filter(item => item.image_url))
 
 onMounted(async () => {
   try {
@@ -43,19 +33,20 @@ onMounted(async () => {
         <p class="footer-phone">
           <span>{{ language.t('contactPhone') }}</span>
           <a v-if="settings.contact_phone" :href="`tel:${settings.contact_phone}`">{{ settings.contact_phone }}</a>
+          <a v-if="settings.contact_phone2" :href="`tel:${settings.contact_phone2}`">{{ settings.contact_phone2 }}</a>
         </p>
-        <p class="footer-email-label">{{ language.t('contactEmail') }}</p>
-        <a v-if="settings.contact_email" :href="`mailto:${settings.contact_email}`">{{ settings.contact_email }}</a>
-        <div class="footer-social-links">
-          <a v-if="settings.xiaohongshu" :href="`https://www.xiaohongshu.com/user/profile/${settings.xiaohongshu}`" target="_blank" rel="noopener">{{ language.t('xiaohongshu') }}</a>
-          <a v-if="settings.douyin" :href="`https://www.douyin.com/user/${settings.douyin}`" target="_blank" rel="noopener">{{ language.t('douyin') }}</a>
-          <a v-if="settings.tiktok" :href="`https://www.tiktok.com/${settings.tiktok}`" target="_blank" rel="noopener">{{ language.t('tiktok') }}</a>
-          <a v-if="settings.telegram" :href="settings.telegram" target="_blank" rel="noopener">{{ language.t('telegram') }}</a>
-        </div>
-        <div class="footer-qr-grid">
-          <figure v-for="item in socials" :key="item.key">
-            <img :src="qrSrc(item.key)" :alt="language.t(item.key)" width="88" height="88" />
-            <figcaption>{{ language.t(item.key) }}</figcaption>
+        <p class="footer-phone">
+          <span>{{ language.t('contactEmail') }}</span>
+          <a v-if="settings.contact_email" :href="`mailto:${settings.contact_email}`">{{ settings.contact_email }}</a>
+          <a v-if="settings.contact_email2" :href="`mailto:${settings.contact_email2}`">{{ settings.contact_email2 }}</a>
+        </p>
+        <p v-if="socialItems.length" class="footer-phone">
+          <span>{{ language.t('streaming') }}</span>
+        </p>
+        <div v-if="socialItems.length" class="footer-qr-grid">
+          <figure v-for="item in socialItems" :key="item.id">
+            <img :src="item.image_url" :alt="item.name" width="88" height="88" />
+            <figcaption>{{ item.name }}</figcaption>
           </figure>
         </div>
       </div>

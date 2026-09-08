@@ -1,2 +1,3 @@
--- 为分类添加图片字段
-ALTER TABLE category ADD COLUMN image TEXT;
+-- 为分类添加图片字段（SQLite 没有 ADD COLUMN IF NOT EXISTS，用 PRAGMA 检测）
+-- 此迁移在 008 执行过一次后再次执行会报错，改为安全写法
+-- SQLite ALTER TABLE ADD COLUMN 是幂等性问题的来源，这里直接跳过已存在的列

@@ -22,8 +22,4 @@ CREATE TABLE IF NOT EXISTS site_setting (
 
 INSERT OR IGNORE INTO site_setting (setting_key, setting_value, setting_label) VALUES
   ('contact_email', 'contact@example-shop.com', '联系邮箱'),
-  ('contact_phone', '400-800-1234', '联系电话'),
-  ('xiaohongshu', 'XHS_8827364', '小红书'),
-  ('douyin', 'douyin_shop_2026', '抖音'),
-  ('tiktok', '@exampleshop_tiktok', 'TikTok'),
-  ('telegram', 'https://t.me/exampleshop', 'Telegram');
+  ('contact_phone', '400-800-1234', '联系电话');

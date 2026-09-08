@@ -15,13 +15,13 @@ function publicProduct(product) {
   }
 }
 
-// 分类列表（只返回启用的）
+// 分类列表（只返回启用且有封面图的，用于首页轮播展示）
 router.get('/categories', async (_req, res, next) => {
   try {
     const [rows] = await db.execute(
-      'SELECT id, name, parent_id, sort_order, image FROM category WHERE status = 1 ORDER BY parent_id, sort_order, id'
+      "SELECT id, name, parent_id, sort_order, image FROM category WHERE status = 1 AND image IS NOT NULL AND image != '' ORDER BY sort_order, id"
     )
-    res.json({ success: true, data: rows.map(row => ({ ...row, image_url: row.image ? storageService.getUrl(row.image) : null })) })
+    res.json({ success: true, data: rows.map(row => ({ ...row, image_url: storageService.getUrl(row.image) })) })
   } catch (error) {
     next(error)
   }
@@ -116,12 +116,13 @@ router.get('/settings', async (_req, res, next) => {
     const [rows] = await db.execute('SELECT setting_key, setting_value FROM site_setting ORDER BY id')
     const settings = {}
     for (const row of rows) {
-      if (row.setting_key.endsWith('_qr') && row.setting_value) {
-        settings[row.setting_key] = storageService.getUrl(row.setting_value)
-      } else {
-        settings[row.setting_key] = row.setting_value
-      }
+      settings[row.setting_key] = row.setting_value
     }
+    // 社交媒体：名称可配置、可新增，仅返回已上传二维码的平台
+    const [socials] = await db.execute(
+      "SELECT id, name, image FROM social_media WHERE image IS NOT NULL AND image != '' ORDER BY sort_order, id"
+    )
+    settings.social_media = socials.map(social => ({ id: social.id, name: social.name, image_url: storageService.getUrl(social.image) }))
     res.json({ success: true, data: settings })
   } catch (error) {
     next(error)
