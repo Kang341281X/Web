@@ -59,7 +59,7 @@ async function validateProduct(body, excludeId = null) {
 }
 function whereClause({ keyword, categoryId, ids }) {
   const clauses = []; const params = []
-  if (keyword) { const like = `%${keyword}%`; clauses.push('(p.name LIKE ? OR p.manufacturer LIKE ? OR p.brand LIKE ?)'); params.push(like, like, like) }
+  if (keyword) { const like = `%${keyword}%`; clauses.push('(p.name LIKE ? OR p.sku LIKE ? OR p.manufacturer LIKE ? OR p.brand LIKE ?)'); params.push(like, like, like, like) }
   if (categoryId) { clauses.push('p.category_id = ?'); params.push(categoryId) }
   if (ids?.length) { clauses.push(`p.id IN (${ids.map(() => '?').join(',')})`); params.push(...ids) }
   return { sql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params }
