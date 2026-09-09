@@ -145,7 +145,7 @@ onMounted(load)
   <el-card shadow="never" class="admin-page-card">
     <template #header><div class="page-header"><span>商品分类</span><el-button type="primary" @click="create">新增分类</el-button></div></template>
     <el-table v-loading="loading" :data="categories" row-key="id" stripe>
-      <el-table-column type="index" label="序号" min-width="110" />
+      <el-table-column type="index" label="序号" width="60" align="center" />
       <el-table-column prop="name" label="分类名称" min-width="110" show-overflow-tooltip />
       <el-table-column label="父级分类" min-width="110" show-overflow-tooltip><template #default="{ row }">{{ parentName(row.parent_id) }}</template></el-table-column>
       <el-table-column prop="sort_order" label="排序" min-width="110" />

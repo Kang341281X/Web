@@ -370,3 +370,58 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== 表格操作列按钮：矩形背景 + 圆角 ===== */
+.admin-layout .el-table .el-button.is-link {
+  padding: 4px 10px;
+  height: auto;
+  min-height: 24px;
+  line-height: 1;
+  font-size: 12px;
+  border-radius: 4px;
+  border: none;
+  font-weight: 500;
+}
+.admin-layout .el-table .el-button.is-link + .el-button.is-link {
+  margin-left: 6px;
+}
+.admin-layout .el-table .el-button.is-link.el-button--primary {
+  background: #ecf5ff;
+  color: #409eff;
+}
+.admin-layout .el-table .el-button.is-link.el-button--primary:hover {
+  background: #409eff;
+  color: #fff;
+}
+.admin-layout .el-table .el-button.is-link.el-button--danger {
+  background: #fef0f0;
+  color: #f56c6c;
+}
+.admin-layout .el-table .el-button.is-link.el-button--danger:hover {
+  background: #f56c6c;
+  color: #fff;
+}
+.admin-layout .el-table .el-button.is-link.el-button--warning {
+  background: #fdf6ec;
+  color: #e6a23c;
+}
+.admin-layout .el-table .el-button.is-link.el-button--warning:hover {
+  background: #e6a23c;
+  color: #fff;
+}
+.admin-layout .el-table .el-button.is-link.el-button--info {
+  background: #f4f4f5;
+  color: #909399;
+}
+.admin-layout .el-table .el-button.is-link.el-button--info:hover {
+  background: #909399;
+  color: #fff;
+}
+.admin-layout .el-table .el-button.is-link:not(.el-button--primary):not(.el-button--danger):not(.el-button--warning):not(.el-button--info) {
+  background: #f4f4f5;
+  color: #606266;
+}
+.admin-layout .el-table .el-button.is-link:not(.el-button--primary):not(.el-button--danger):not(.el-button--warning):not(.el-button--info):hover {
+  background: #c0c4cc;
+  color: #fff;
+}

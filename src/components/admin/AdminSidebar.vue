@@ -51,6 +51,11 @@ watch(() => route.fullPath, () => loadMenuCategories())
         <template #title>仪表盘</template>
       </el-menu-item>
 
+      <el-menu-item v-if="isSuperAdmin" index="/admin/admins">
+        <el-icon><User /></el-icon>
+        <template #title>管理员信息</template>
+      </el-menu-item>
+
       <!-- 商品管理：二级菜单，子项为“全部商品”+ 各分类的“{分类名}商品信息” -->
       <el-sub-menu index="products-group">
         <template #title>
@@ -75,11 +80,6 @@ watch(() => route.fullPath, () => loadMenuCategories())
       <el-menu-item index="/admin/logs">
         <el-icon><List /></el-icon>
         <template #title>操作日志</template>
-      </el-menu-item>
-
-      <el-menu-item v-if="isSuperAdmin" index="/admin/admins">
-        <el-icon><User /></el-icon>
-        <template #title>管理员信息</template>
       </el-menu-item>
 
       <el-menu-item index="/admin/settings">

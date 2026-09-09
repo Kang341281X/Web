@@ -29,13 +29,25 @@ async function generateUniqueSku() {
   throw Object.assign(new Error('自动生成商品编号失败，请稍后重试'), { status: 500 })
 }
 async function validateProduct(body, excludeId = null) {
-  // sku：选填，最长 64 字符；已占用时校验唯一性（编辑时排除自身 id）
-  let sku = optionalText(body.sku, 64)
-  if (sku) {
-    const [duplicates] = await db.execute('SELECT id FROM product WHERE sku = ? AND id != ?', [sku, excludeId === null ? -1 : excludeId])
-    if (duplicates.length) throw Object.assign(new Error('商品编号已存在'), { status: 400 })
+  // SKU 规则：
+  //  - 创建（excludeId === null）：可显式指定唯一编号；留空则自动生成。
+  //  - 编辑（excludeId !== null）：SKU 一经生成即与商品永久绑定，完全忽略请求体携带的 sku，
+  //    强制沿用数据库原值，确保任何更新入口都无法篡改商品编号。
+  let sku
+  if (excludeId === null) {
+    const customSku = optionalText(body.sku, 64)
+    if (customSku) {
+      const [duplicates] = await db.execute('SELECT id FROM product WHERE sku = ?', [customSku])
+      if (duplicates.length) throw Object.assign(new Error('商品编号已存在'), { status: 400 })
+      sku = customSku
+    } else {
+      sku = await generateUniqueSku()
+    }
   } else {
-    sku = await generateUniqueSku()
+    const [rows] = await db.execute('SELECT sku FROM product WHERE id = ?', [excludeId])
+    if (!rows[0]) throw Object.assign(new Error('商品不存在'), { status: 404 })
+    // 兜底：极少数历史数据 sku 仍为空时，编辑时顺带补齐唯一编号；补齐后同样不可再被修改
+    sku = rows[0].sku || await generateUniqueSku()
   }
   // is_customizable：0/1
   const isCustomizable = [1, '1', true, 'true'].includes(body.is_customizable) ? 1 : 0
