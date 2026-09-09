@@ -2,10 +2,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { useLanguageStore } from '../../stores/language'
 import { fetchSettings } from '../../services/publicApi'
+import AppImage from '../common/AppImage.vue'
 const language = useLanguageStore()
 const settings = ref({})
 
-const socialItems = computed(() => (settings.value.social_media || []).filter(item => item.image_url))
+// 社交平台未上传二维码时默认显示统一占位图，不再隐藏
+const socialItems = computed(() => settings.value.social_media || [])
 
 onMounted(async () => {
   try {
@@ -45,7 +47,7 @@ onMounted(async () => {
         </p>
         <div v-if="socialItems.length" class="footer-qr-grid">
           <figure v-for="item in socialItems" :key="item.id">
-            <img :src="item.image_url" :alt="item.name" width="88" height="88" />
+            <AppImage :src="item.image_url" :alt="item.name" width="88" height="88" />
             <figcaption>{{ item.name }}</figcaption>
           </figure>
         </div>

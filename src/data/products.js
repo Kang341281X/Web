@@ -1,4 +1,4 @@
-const image = '/assets/images/products/product-placeholder.svg'
+const image = '/assets/images/placeholders/product-placeholder.svg'
 export const products = [
   ['手工陶瓷花瓶','ceramics',328,398,4.9,126,'陶语工作室','新品','米白釉面陶瓷花瓶，为日常花束留出安静的呼吸感。'],
   ['手工银饰戒指','jewelry',269,319,4.8,89,'月光银饰','热卖','手工锤纹纯银戒指，保留金属自然的温度和光泽。'],
@@ -21,6 +21,6 @@ export const products = [
   ['手工木质相框','woodwork',149,189,4.7,67,'山木作','特惠','实木相框保留自然边缘，装进值得回看的片段。'],
   ['手工香皂礼盒','gifts',198,248,4.8,109,'雾野香氛','热卖','植物精油手工皂礼盒，适合送给认真生活的人。']
 ].map(([title, category, price, originalPrice, rating, reviewCount, seller, badge, description], i) => ({
-  id: i + 1, title, category, price, originalPrice, rating, reviewCount, seller, sellerAvatar: '/assets/images/avatars/avatar-placeholder.svg', image, images: [image], badge, description,
+  id: i + 1, title, category, price, originalPrice, rating, reviewCount, seller, sellerAvatar: image, image, images: [image], badge, description,
   tags: [category, '手工', '原创设计'], stock: 3 + (i * 7) % 18, createdAt: 20 - i, sales: 25 + (i * 13) % 180
 }))

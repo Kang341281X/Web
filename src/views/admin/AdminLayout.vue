@@ -5,6 +5,7 @@ import { ElMessageBox, ElMessage } from 'element-plus'
 import { useUserStore } from '../../stores/user'
 import { Fold, Expand, Back, ArrowDown, User, SwitchButton, UserFilled } from '@element-plus/icons-vue'
 import AdminSidebar from '../../components/admin/AdminSidebar.vue'
+import { resolve } from '../../utils/image'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -101,7 +102,7 @@ function handleMenuSelect(index) {
           </el-tooltip>
           <el-dropdown @command="handleUserCommand">
             <span class="admin-user-trigger">
-              <el-avatar :size="32" :src="userStore.adminUser?.avatar_url || '/assets/images/avatars/avatar-placeholder.svg'" :icon="UserFilled" />
+              <el-avatar :size="32" :src="resolve(userStore.adminUser?.avatar_url)" :icon="UserFilled" />
               <span class="admin-user-name">{{ userStore.adminUser?.username || '管理员' }}</span>
               <el-icon><ArrowDown /></el-icon>
             </span>

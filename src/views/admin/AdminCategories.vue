@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
+import { IMG_FALLBACK, resolve } from '../../utils/image'
 
 const categories = ref([])
 const loading = ref(false)
@@ -111,7 +112,7 @@ onMounted(load)
       <el-table-column label="父级分类" min-width="130"><template #default="{ row }">{{ parentName(row.parent_id) }}</template></el-table-column>
       <el-table-column prop="sort_order" label="排序" width="100" />
       <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
-      <el-table-column label="图片" width="80"><template #default="{ row }"><el-image v-if="row.image_url" :src="row.image_url" fit="cover" class="cat-thumb" :preview-src-list="[row.image_url]" preview-teleported /><span v-else class="text-muted">无</span></template></el-table-column>
+      <el-table-column label="图片" width="80"><template #default="{ row }"><el-image :src="resolve(row.image_url)" fit="cover" class="cat-thumb" :preview-src-list="[resolve(row.image_url)]" preview-teleported><template #error><img class="image-fallback" :src="IMG_FALLBACK" alt="" /></template></el-image></template></el-table-column>
       <el-table-column label="操作" width="140"><template #default="{ row }"><el-button link type="primary" @click="edit(row)">编辑</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template></el-table-column>
     </el-table>
   </el-card>
@@ -124,8 +125,7 @@ onMounted(load)
       <el-form-item v-if="editingId" label="分类图片">
         <div class="dialog-image-area">
           <div class="dialog-image-preview">
-            <el-image v-if="editingImageUrl" :src="editingImageUrl" fit="cover" class="dialog-thumb" :preview-src-list="[editingImageUrl]" preview-teleported />
-            <div v-else class="dialog-thumb-placeholder">无图片</div>
+            <el-image :src="resolve(editingImageUrl)" fit="cover" class="dialog-thumb" :preview-src-list="[resolve(editingImageUrl)]" preview-teleported><template #error><img class="image-fallback" :src="IMG_FALLBACK" alt="" /></template></el-image>
           </div>
           <div class="dialog-image-actions">
             <el-upload :show-file-list="false" :auto-upload="false" accept=".jpg,.jpeg,.png,.bmp,.webp" :on-change="uploadImage" :disabled="imageUploading">
@@ -142,6 +142,7 @@ onMounted(load)
 
 <style scoped>
 .page-header { display:flex; align-items:center; justify-content:space-between; font-size:18px; font-weight:600 }
+.image-fallback { width:100%; height:100%; object-fit:cover; display:block }
 .cat-thumb { width:40px; height:40px; border-radius:4px }
 .text-muted { color:#c0c4cc; font-size:13px }
 .dialog-image-area { display:flex; align-items:flex-start; gap:12px }

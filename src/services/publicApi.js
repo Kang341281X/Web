@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { IMG_FALLBACK } from '../utils/image'
 
 const publicApi = axios.create({ baseURL: '/api/public', timeout: 15000 })
 
@@ -14,11 +15,11 @@ function adaptProduct(raw) {
     rating: raw.rating !== undefined && raw.rating !== null ? Number(raw.rating) : 5.0,
     reviewCount: raw.review_count || 0,
     seller: raw.brand || raw.manufacturer || '未知卖家',
-    sellerAvatar: '/assets/images/avatars/avatar-placeholder.svg',
-    image: raw.main_image_url || '/assets/images/products/product-placeholder.svg',
+    sellerAvatar: IMG_FALLBACK,
+    image: raw.main_image_url || IMG_FALLBACK,
     images: raw.images
-      ? raw.images.map(img => img.image_url)
-      : [raw.main_image_url || '/assets/images/products/product-placeholder.svg'],
+      ? raw.images.map(img => img.image_url).filter(Boolean)
+      : [raw.main_image_url || IMG_FALLBACK],
     badge: raw.original_price !== null && raw.original_price > raw.price ? '特惠' : '',
     description: raw.description || '',
     detail: raw.detail || '',

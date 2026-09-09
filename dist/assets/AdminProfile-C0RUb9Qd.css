@@ -1,0 +1,1 @@
+.profile-grid[data-v-7aed5896]{grid-template-columns:minmax(260px,.8fr) minmax(360px,1.2fr);gap:20px;display:grid}.avatar-panel[data-v-7aed5896]{flex-direction:column;align-items:center;gap:12px;margin-bottom:24px;display:flex}.avatar-panel small[data-v-7aed5896]{color:#909399;text-align:center}@media (width<=768px){.profile-grid[data-v-7aed5896]{grid-template-columns:1fr}}

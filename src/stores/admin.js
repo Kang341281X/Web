@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { IMG_FALLBACK } from '../utils/image'
 import { products as seedProducts } from '../data/products'
 
 function nextId(list) {
@@ -15,7 +16,7 @@ function createProduct(raw, id) {
     rating: Number(raw.rating) || 5.0,
     reviewCount: Number(raw.reviewCount) || 0,
     seller: raw.seller || '未知卖家',
-    image: raw.image || '/assets/images/products/product-placeholder.svg',
+    image: raw.image || IMG_FALLBACK,
     images: parseImages(raw.images, raw.image),
     badge: raw.badge || '',
     description: raw.description || '',
@@ -27,12 +28,11 @@ function createProduct(raw, id) {
 }
 
 function parseImages(raw, fallback) {
-  const ph = '/assets/images/products/product-placeholder.svg'
   if (Array.isArray(raw) && raw.length) return raw
   if (typeof raw === 'string' && raw.trim()) {
     return raw.split(',').map(s => s.trim()).filter(Boolean)
   }
-  return [fallback || ph]
+  return [fallback || IMG_FALLBACK]
 }
 
 export const useAdminStore = defineStore('admin', {
@@ -143,7 +143,7 @@ export const useAdminStore = defineStore('admin', {
       for (let i = 1; i <= Math.min(count, 6); i++) {
         paths.push(`${dir}${i}.jpg`)
       }
-      return paths.length ? paths : ['/assets/images/products/product-placeholder.svg']
+      return paths.length ? paths : [IMG_FALLBACK]
     }
   }
 })

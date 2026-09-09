@@ -1,14 +1,15 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import AppImage from '../common/AppImage.vue'
 
 const props = defineProps({
   categories: { type: Array, default: () => [] },
 })
 
-// 参与轮播的分类：顶级分类（parent_id=0），有 image_url，按 sort_order 升序
+// 参与轮播的分类：顶级分类（parent_id=0），按 sort_order 升序；未上传图片的分类自动显示统一占位图
 const carouselList = computed(() =>
   props.categories
-    .filter(c => !c.parent_id && c.image_url)
+    .filter(c => !c.parent_id)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
 )
 
@@ -109,7 +110,7 @@ onUnmounted(() => { stopTimer() })
             class="category-carousel-card"
           >
             <div class="category-carousel-image">
-              <img :src="cat.image_url" :alt="cat.name" loading="lazy" />
+              <AppImage :src="cat.image_url" :alt="cat.name" />
             </div>
             <div class="category-carousel-label">
               <strong>{{ cat.name }}</strong>

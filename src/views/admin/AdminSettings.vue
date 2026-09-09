@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
+import { IMG_FALLBACK, resolve } from '../../utils/image'
 
 const formRef = ref(null); const loading = ref(false); const saving = ref(false)
 const form = reactive({ contact_email: '', contact_email2: '', contact_phone: '', contact_phone2: '' })
@@ -206,8 +207,7 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
           <div class="social-hint">显示在二维码图片下方的名称</div>
         </div>
         <div class="qr-preview">
-          <el-image v-if="displayImage(row)" :src="displayImage(row)" fit="cover" class="qr-image" />
-          <div v-else class="qr-placeholder">暂无二维码</div>
+          <el-image :src="resolve(displayImage(row))" fit="cover" class="qr-image"><template #error><img class="image-fallback" :src="IMG_FALLBACK" alt="" /></template></el-image>
         </div>
         <div class="qr-actions">
           <template v-if="!row.removed">
@@ -250,6 +250,7 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
 .social-empty { color: #909399; font-size: 13px }
 .qr-preview { width: 88px; height: 88px; border: 1px dashed #dcdfe6; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0 }
 .qr-image { width: 100%; height: 100% }
+.image-fallback { width: 100%; height: 100%; object-fit: cover; display: block }
 .qr-placeholder { font-size: 12px; color: #909399 }
 .qr-actions { display: flex; gap: 8px; flex-shrink: 0 }
 .social-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px }

@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useLanguageStore } from '../../stores/language'
 import { products } from '../../data/products'
 import { productTitle } from '../../data/translations'
+import AppImage from '../common/AppImage.vue'
 
 const router = useRouter(), route = useRoute(), language = useLanguageStore()
 const query = ref('')
@@ -191,7 +192,7 @@ onBeforeUnmount(() => {
             :aria-selected="activeIndex === index"
             @click="useSuggestion(product)"
           >
-            <img :src="product.image" :alt="productTitle(product, language.locale)" />
+            <AppImage :src="product.image" :alt="productTitle(product, language.locale)" />
             <span><b>{{ productTitle(product, language.locale) }}</b><small>{{ product.seller }}</small></span>
             <i>→</i>
           </button>
