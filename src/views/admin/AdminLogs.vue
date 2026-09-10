@@ -38,7 +38,7 @@ onMounted(load)
 </script>
 
 <template>
-  <el-card shadow="never" class="admin-page-card">
+  <el-card shadow="never" class="admin-page-card admin-table-page">
     <template #header><div class="page-header"><span>操作日志</span></div></template>
     <div class="toolbar">
       <div class="toolbar-search">
@@ -51,7 +51,7 @@ onMounted(load)
         <el-button @click="resetFilter">重置</el-button>
       </div>
     </div>
-    <el-table v-loading="loading" :data="logs" stripe style="width:100%">
+    <el-table v-loading="loading" :data="logs" height="100%" stripe style="width:100%">
       <el-table-column label="序号" width="70"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
       <el-table-column prop="admin_username" label="操作人" width="120" show-overflow-tooltip />
       <el-table-column prop="operation_module" label="模块" width="110" />

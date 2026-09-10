@@ -5,12 +5,16 @@ import draggable from 'vuedraggable'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
 import ImportDialog from '../../components/admin/ImportDialog.vue'
+import OnlineCreateDialog from '../../components/admin/OnlineCreateDialog.vue'
 import ImageCropDialog from '../../components/admin/ImageCropDialog.vue'
 import { IMG_FALLBACK, resolve } from '../../utils/image'
+import { generateSkuCode, normalizeRatingToHalf } from '../../utils/sku'
+import { useUserStore } from '../../stores/user'
 
+const userStore = useUserStore()
 const route = useRoute(); const loading = ref(false); const products = ref([]); const categories = ref([]); const total = ref(0); const selected = ref([])
 const query = reactive({ keyword: '', category_id: route.query.category_id ? Number(route.query.category_id) : '', page: 1, page_size: 20 })
-const dialogVisible = ref(false); const saving = ref(false); const formRef = ref(); const form = reactive(defaultForm()); const images = ref([]); const editing = computed(() => Boolean(form.id)); const importDialogVisible = ref(false)
+const dialogVisible = ref(false); const saving = ref(false); const formRef = ref(); const form = reactive(defaultForm()); const images = ref([]); const editing = computed(() => Boolean(form.id)); const importDialogVisible = ref(false); const onlineDialogVisible = ref(false)
 const rules = { name: [{ required: true, message: '请输入商品名称', trigger: 'blur' }], category_id: [{ required: true, message: '请选择分类', trigger: 'change' }], price: [{ required: true, message: '请输入售价', trigger: 'blur' }] }
 // 裁剪对话框状态
 const cropVisible = ref(false); const cropSrc = ref(''); const cropImageId = ref(null); const cropNewUid = ref(null)
@@ -36,7 +40,9 @@ function clearFilter() { query.category_id = ''; search() }
 function handleSelection(rows) { selected.value = rows }
 function pageIndex(index) { return (query.page - 1) * query.page_size + index + 1 }
 function resetForm() { Object.assign(form, defaultForm()); images.value = [] }
-function openCreate() { resetForm(); dialogVisible.value = true }
+function openCreate() { resetForm(); form.sku = generateSkuCode(userStore.adminUser?.username); dialogVisible.value = true }
+// SKU 一律由系统按规则生成，管理员只能「生成/重新生成」，不能手动输入
+function regenerateSku() { form.sku = generateSkuCode(userStore.adminUser?.username) }
 async function openEdit(row) { try { const { data } = await api.get(`/products/${row.id}`); const product = data.data; Object.assign(form, product, { sku: product.sku || '', is_customizable: product.is_customizable ? '1' : '0', rating: Number(product.rating) || 5, detail: htmlToPlainText(product.detail || '') }); images.value = data.data.images; dialogVisible.value = true } catch (error) { ElMessage.error(error.response?.data?.message || '商品详情加载失败') } }
 async function uploadNewFiles(productId) {
   const newImgs = images.value.filter(img => img.is_new)
@@ -56,15 +62,18 @@ async function uploadNewFiles(productId) {
 async function save() {
   try {
     await formRef.value.validate()
+    // 评分取整：与后端 normalizeRating 保持一致，就近取整到 0.5 的倍数后再提交
+    form.rating = normalizeRatingToHalf(form.rating)
     saving.value = true
     let productId = form.id
+    let savedSku = ''
     if (editing.value) await api.put(`/products/${productId}`, form)
-    else { const { data } = await api.post('/products', form); productId = data.data.id; form.id = productId }
+    else { const { data } = await api.post('/products', form); productId = data.data.id; form.id = productId; savedSku = data.data.sku }
     await uploadNewFiles(productId)
     // 只对已保存的图片排序（新图已在上传时处理）
     const savedImages = images.value.filter(img => !img.is_new)
     if (savedImages.length) await api.put(`/products/${productId}/images/sort`, { images: savedImages.map((image, index) => ({ id: image.id, sort_order: index })) })
-    ElMessage.success('商品已保存'); dialogVisible.value = false; load()
+    ElMessage.success(savedSku ? `商品已保存，商品编号：${savedSku}` : '商品已保存'); dialogVisible.value = false; load()
   } catch (error) { ElMessage.error(error.response?.data?.message || '保存失败') } finally { saving.value = false }
 }
 async function removeImage(image) {
@@ -162,6 +171,14 @@ async function removeProduct(row) { try { await ElMessageBox.confirm(`确认删�
 async function batchRemove() { if (!selected.value.length) return; try { await ElMessageBox.confirm(`确认删除已选的 ${selected.value.length} 个商品吗？`, '批量删除确认', { type: 'warning' }); await api.post('/products/batch-delete', { ids: selected.value.map(item => item.id) }); ElMessage.success('商品已删除'); load() } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error(error.response?.data?.message || '删除失败') } }
 async function exportProducts(mode) { try { const { data } = await api.post('/products/export', { mode, keyword: query.keyword, category_id: query.category_id || null, ids: selected.value.map(item => item.id) }, { responseType: 'blob' }); const url = URL.createObjectURL(data); const link = document.createElement('a'); link.href = url; link.download = '商品数据.xlsx'; link.click(); URL.revokeObjectURL(url) } catch (error) { ElMessage.error(error.response?.data?.message || '导出失败') } }
 function openProduct(row) { window.open(row.frontend_detail_url || `/product/${row.id}`, '_blank', 'noopener') }
+function onImportSuccess() { loadCategories(); load() }
+function onCategoryCreated() { loadCategories() }
+function onOnlineSuccess() { loadCategories(); load() }
+// 「批量导入」下拉：在线表格导入 / Excel 表格导入
+function handleImportCommand(command) {
+  if (command === 'online') onlineDialogVisible.value = true
+  else importDialogVisible.value = true
+}
 // 点击图片 → 打开裁剪对话框（已有图片和新图片统一处理）
 function openImageCrop(image) {
   cropSrc.value = image.image_url_full
@@ -194,9 +211,9 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
 </script>
 
 <template>
-  <el-card shadow="never" class="admin-page-card">
-    <div class="toolbar"><div class="toolbar-search"><el-input v-model="query.keyword" clearable placeholder="商品名称、SKU、生产厂家或品牌" @keyup.enter="search" @clear="search" /><el-select v-model="query.category_id" clearable placeholder="全部分类" @change="search"><el-option v-for="item in activeCategories" :key="item.id" :label="item.name" :value="item.id" /></el-select><el-button type="primary" @click="search">搜索</el-button><el-button v-if="query.category_id" @click="clearFilter">清空分类</el-button></div><div class="toolbar-actions"><el-button type="danger" :disabled="!selected.length" @click="batchRemove">批量删除</el-button><el-dropdown @command="exportProducts"><el-button>导出<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="filter">导出全部数据</el-dropdown-item><el-dropdown-item command="selected" :disabled="!selected.length">导出勾选项</el-dropdown-item></el-dropdown-menu></template></el-dropdown><el-button type="success" @click="importDialogVisible = true">批量导入</el-button><el-button type="primary" @click="openCreate">新增商品</el-button></div></div>
-    <el-table v-loading="loading" :data="products" @selection-change="handleSelection" style="width:100%"><el-table-column type="selection" width="48" /><el-table-column label="序号" width="70"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column><el-table-column label="商品" min-width="250"><template #default="{ row }"><div class="product-cell"><el-image :src="resolve(row.main_image_url)" fit="cover"><template #error><img class="image-fallback" :src="IMG_FALLBACK" alt="" /></template></el-image><div><div>{{ row.name }}</div><small>{{ row.brand || '未设置品牌' }} · {{ row.manufacturer || '未设置厂家' }}</small><small style="display:block;margin-top:2px">SKU: {{ row.sku || '未设置' }}</small></div></div></template></el-table-column><el-table-column prop="category_name" label="分类" min-width="110" /><el-table-column label="售价" width="100"><template #default="{ row }">¥{{ row.price.toFixed(2) }}</template></el-table-column><el-table-column label="原价" width="100"><template #default="{ row }"><span v-if="row.original_price != null">¥{{ row.original_price.toFixed(2) }}</span><span v-else>-</span></template></el-table-column><el-table-column prop="stock" label="库存" width="90" /><el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '上架' : '下架' }}</el-tag></template></el-table-column><el-table-column label="评分" width="90" align="center"><template #default="{ row }">★ {{ row.rating ?? 5 }}</template></el-table-column><el-table-column label="定制" width="80" align="center"><template #default="{ row }"><el-tag :type="row.is_customizable ? 'warning' : 'info'" size="small">{{ row.is_customizable ? '支持' : '不支持' }}</el-tag></template></el-table-column><el-table-column label="操作" width="180" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openEdit(row)">编辑</el-button><el-button link @click="openProduct(row)">跳转</el-button><el-button link type="danger" @click="removeProduct(row)">删除</el-button></template></el-table-column></el-table>
+  <el-card shadow="never" class="admin-page-card admin-table-page">
+    <div class="toolbar"><div class="toolbar-search"><el-input v-model="query.keyword" clearable placeholder="商品名称、SKU、生产厂家或品牌" @keyup.enter="search" @clear="search" /><el-select v-model="query.category_id" clearable placeholder="全部分类" @change="search"><el-option v-for="item in activeCategories" :key="item.id" :label="item.name" :value="item.id" /></el-select><el-button type="primary" @click="search">搜索</el-button><el-button v-if="query.category_id" @click="clearFilter">清空分类</el-button></div><div class="toolbar-actions"><el-button type="danger" :disabled="!selected.length" @click="batchRemove">批量删除</el-button><el-dropdown @command="exportProducts"><el-button>导出<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="filter">导出全部数据</el-dropdown-item><el-dropdown-item command="selected" :disabled="!selected.length">导出勾选项</el-dropdown-item></el-dropdown-menu></template></el-dropdown><el-dropdown @command="handleImportCommand"><el-button type="success">批量导入<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="online"><el-icon><Grid /></el-icon>在线表格导入</el-dropdown-item><el-dropdown-item command="excel"><el-icon><Document /></el-icon>Excel 表格导入</el-dropdown-item></el-dropdown-menu></template></el-dropdown><el-button type="primary" @click="openCreate">新增商品</el-button></div></div>
+    <el-table v-loading="loading" :data="products" height="100%" @selection-change="handleSelection" style="width:100%"><el-table-column type="selection" width="48" /><el-table-column label="序号" width="70"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column><el-table-column label="商品" min-width="250"><template #default="{ row }"><div class="product-cell"><el-image :src="resolve(row.main_image_url)" fit="cover"><template #error><img class="image-fallback" :src="IMG_FALLBACK" alt="" /></template></el-image><div><div>{{ row.name }}</div><small>{{ row.brand || '未设置品牌' }} · {{ row.manufacturer || '未设置厂家' }}</small><small style="display:block;margin-top:2px">SKU: {{ row.sku || '未设置' }}</small></div></div></template></el-table-column><el-table-column prop="category_name" label="分类" min-width="110" /><el-table-column label="售价" width="100"><template #default="{ row }">¥{{ row.price.toFixed(2) }}</template></el-table-column><el-table-column label="原价" width="100"><template #default="{ row }"><span v-if="row.original_price != null">¥{{ row.original_price.toFixed(2) }}</span><span v-else>-</span></template></el-table-column><el-table-column prop="stock" label="库存" width="90" /><el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '上架' : '下架' }}</el-tag></template></el-table-column><el-table-column label="评分" width="90" align="center"><template #default="{ row }">★ {{ row.rating ?? 5 }}</template></el-table-column><el-table-column label="定制" width="80" align="center"><template #default="{ row }"><el-tag :type="row.is_customizable ? 'warning' : 'info'" size="small">{{ row.is_customizable ? '支持' : '不支持' }}</el-tag></template></el-table-column><el-table-column label="添加人" width="110" align="center"><template #default="{ row }">{{ row.created_by_name || '未知' }}</template></el-table-column><el-table-column label="操作" width="180" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openEdit(row)">编辑</el-button><el-button link @click="openProduct(row)">跳转</el-button><el-button link type="danger" @click="removeProduct(row)">删除</el-button></template></el-table-column></el-table>
     <div class="pagination"><el-pagination v-model:current-page="query.page" v-model:page-size="query.page_size" :total="total" :page-sizes="[20, 50, 100]" layout="total, sizes, prev, pager, next, jumper" @current-change="load" @size-change="query.page = 1; load()" /></div>
   </el-card>
   <el-dialog v-model="dialogVisible" class="product-dialog" :title="editing ? '编辑商品' : '新增商品'" width="min(960px, calc(100% - 24px))" top="4vh" destroy-on-close @closed="resetForm">
@@ -210,13 +227,11 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
           </el-col>
           <el-col :xs="24" :md="12" :lg="8">
             <el-form-item label="商品编号（SKU）">
-              <el-input
-                v-model="form.sku"
-                :disabled="editing"
-                :placeholder="editing ? '' : '留空自动生成'"
-                clearable
-              />
-              <div v-if="editing" class="sku-immutable-tip">商品编号在创建后不可修改，如需更换请删除该商品后重新新增</div>
+              <div class="sku-row">
+                <el-input v-model="form.sku" readonly class="sku-input" :class="{ 'is-locked': editing }" placeholder="系统自动生成" />
+                <el-button v-if="!editing" type="primary" plain @click="regenerateSku"><el-icon><Refresh /></el-icon>重新生成</el-button>
+              </div>
+              <div class="sku-immutable-tip">{{ editing ? '商品编号在创建后不可修改，如需更换请删除该商品后重新新增' : '商品编号由系统按规则自动生成：前 3 位取当前管理员用户名、后 7 位取生成时间，共 10 位，不支持手动输入；预览即落库，保存后与此处展示的编号完全一致' }}</div>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12" :lg="8">
@@ -248,7 +263,7 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
             <el-form-item label="库存"><el-input-number v-model="form.stock" :min="0" style="width:100%" /></el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="6">
-            <el-form-item label="商品评分"><el-input-number v-model="form.rating" :min="0" :max="5" :step="0.5" :precision="1" style="width:100%" /></el-form-item>
+            <el-form-item label="商品评分"><el-input-number v-model="form.rating" :min="0" :max="5" :step="0.5" :precision="2" step-strictly style="width:100%" /></el-form-item>
           </el-col>
         </el-row>
       </div>
@@ -313,7 +328,8 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
       <el-button type="primary" :loading="saving" @click="save">保存商品</el-button>
     </template>
   </el-dialog>
-<ImportDialog v-model:visible="importDialogVisible" @success="load" />
+<ImportDialog v-model:visible="importDialogVisible" @success="onImportSuccess" @category-created="onCategoryCreated" />
+<OnlineCreateDialog v-model:visible="onlineDialogVisible" @success="onOnlineSuccess" />
 <ImageCropDialog v-model:visible="cropVisible" :src="cropSrc" :image-id="cropImageId" :product-id="form.id" @cropped="onCropped" />
 </template>
 
@@ -353,7 +369,11 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
 .image-upload-tile :deep(.el-upload) { width:100%; height:100%; display:flex; align-items:center; justify-content:center }
 .image-upload-tip { margin-top:12px; font-size:12px; color:#909399; line-height:1.6 }
 .dragging { opacity:.4 }
+.sku-row { display:flex; align-items:center; gap:8px; width:100% }
 .sku-immutable-tip { margin-top:4px; font-size:12px; color:#909399; line-height:1.5 }
+/* 编辑态：商品编号只读，输入框置灰且文字不可选中，提示该字段不可修改 */
+.sku-input.is-locked :deep(.el-input__wrapper) { background:#f5f7fa; box-shadow:0 0 0 1px #e4e7ed inset }
+.sku-input.is-locked :deep(.el-input__inner) { color:#a8abb2; cursor:not-allowed; user-select:none }
 @media (max-width:768px) {
   .toolbar { align-items:stretch; flex-direction:column }
   .toolbar-actions { justify-content:flex-start }

@@ -7,7 +7,7 @@ export async function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ success: false, message: '请先登录' })
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET)
-    const [rows] = await db.execute('SELECT id, username, role, status, must_change_password FROM admin WHERE id = ?', [payload.id])
+    const [rows] = await db.execute('SELECT id, username, role, real_name, status, must_change_password FROM admin WHERE id = ?', [payload.id])
     const admin = rows[0]
     if (!admin || !admin.status) return res.status(401).json({ success: false, message: '账号不存在或已被禁用' })
     req.admin = admin
@@ -37,6 +37,7 @@ const LOG_MAP = {
   update_product: { module: '商品管理', type: '编辑商品' },
   delete_products: { module: '商品管理', type: '删除商品' },
   import_products: { module: '商品管理', type: '导入确认' },
+  import_products_online: { module: '商品管理', type: '在线表格批量新增' },
   export_products: { module: '商品管理', type: '导出' },
   create_category: { module: '分类管理', type: '新增分类' },
   update_category: { module: '分类管理', type: '编辑分类' },

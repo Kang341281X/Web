@@ -1,4 +1,6 @@
 import './config/env.js'
+// 启动时自动执行数据库迁移，确保新环境/首次启动时 server/sql 下的迁移都会被应用
+import './migrate.js'
 import express from 'express'
 import cors from 'cors'
 import { mkdir } from 'node:fs/promises'

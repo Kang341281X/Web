@@ -18,7 +18,7 @@ function categoryBody(body) {
 }
 router.get('/', async (_req, res, next) => {
   try {
-    const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, image, created_at, updated_at FROM category ORDER BY parent_id, sort_order, id')
+    const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, image, created_by, created_by_name, created_at, updated_at FROM category ORDER BY parent_id, sort_order, id')
     res.json({ success: true, data: rows.map(row => ({ ...row, image_url: row.image ? storageService.getUrl(row.image) : null })) })
   } catch (error) { next(error) }
 })
@@ -33,8 +33,8 @@ router.post('/', async (req, res, next) => {
       const [[{ maxSort }]] = await db.execute('SELECT COALESCE(MAX(sort_order), 0) AS maxSort FROM category')
       category.sortOrder = maxSort + 1
     }
-    const [result] = await db.execute('INSERT INTO category (name, parent_id, sort_order, status) VALUES (?, ?, ?, ?)', [category.name, category.parentId, category.sortOrder, category.status])
-    const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, image, created_at, updated_at FROM category WHERE id = ?', [result.insertId])
+    const [result] = await db.execute('INSERT INTO category (name, parent_id, sort_order, status, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, ?)', [category.name, category.parentId, category.sortOrder, category.status, req.admin.id, req.admin.real_name || req.admin.username])
+    const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, image, created_by, created_by_name, created_at, updated_at FROM category WHERE id = ?', [result.insertId])
     await writeOperationLog(req.admin.id, 'create_category', category.name, req)
     res.status(201).json({ success: true, data: { ...rows[0], image_url: rows[0].image ? storageService.getUrl(rows[0].image) : null } })
   } catch (error) { if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ success: false, message: '同一父级下已存在该分类名称' }); next(error) }
@@ -46,7 +46,7 @@ router.put('/:id', async (req, res, next) => {
     if (category.parentId) { const [parents] = await db.execute('SELECT id FROM category WHERE id = ?', [category.parentId]); if (!parents[0]) return res.status(400).json({ success: false, message: '父级分类不存在' }) }
     const [result] = await db.execute('UPDATE category SET name = ?, parent_id = ?, sort_order = ?, status = ? WHERE id = ?', [category.name, category.parentId, category.sortOrder, category.status, id])
     if (!result.affectedRows) return res.status(404).json({ success: false, message: '分类不存在' })
-    const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, image, created_at, updated_at FROM category WHERE id = ?', [id])
+    const [rows] = await db.execute('SELECT id, name, parent_id, sort_order, status, image, created_by, created_by_name, created_at, updated_at FROM category WHERE id = ?', [id])
     await writeOperationLog(req.admin.id, 'update_category', category.name, req)
     res.json({ success: true, data: { ...rows[0], image_url: rows[0].image ? storageService.getUrl(rows[0].image) : null } })
   } catch (error) { if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ success: false, message: '同一父级下已存在该分类名称' }); next(error) }

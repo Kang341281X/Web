@@ -11,14 +11,16 @@ import multer from 'multer'
 import db from '../config/db.js'
 import { requireAuth, requirePasswordChanged, writeOperationLog } from '../middleware/auth.js'
 import storageService from '../services/storageService.js'
+import { requiredText } from '../utils/admin.js'
+import { generateSkuCode, normalizeRating } from '../utils/productRules.js'
 
 const router = Router()
 router.use(requireAuth, requirePasswordChanged)
 
 // ── 常量 ──────────────────────────────────────────────
 const TEMPLATE_HEADERS = [
-  '商品编号(SKU)', '商品名称', '分类名称', '价格', '原价', '库存',
-  '单位（件/盒）', '生产厂家', '品牌', '是否支持定制', '商品评分', '描述', '图片文件夹名称'
+  '商品名称', '分类名称', '是否支持定制', '商品评分', '售价', '原价',
+  '库存', '单位（件/盒）', '生产厂家', '品牌', '描述', '图片文件夹名称'
 ]
 const VALID_IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.webp'])
 const SYSTEM_FILES = new Set(['.ds_store', 'thumbs.db', 'desktop.ini'])
@@ -42,19 +44,7 @@ function detectImageType(buf) {
   return null
 }
 
-// 自动生成唯一商品编号：SKU + 时间戳 + 6 位自增序号
-// executor 默认走全局 db，事务内可传入 connection.execute 以兼容事务
-// reserved：本次操作内部已占用的编号集合（如本批次 Excel 显式填写/预览已生成的编号），命中则跳过
-let autoSkuSeq = 0
-async function generateUniqueSku(executor = db.execute.bind(db), reserved = null) {
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const candidate = `SKU${Date.now()}${String(autoSkuSeq = (autoSkuSeq + 1) % 1000000).padStart(6, '0')}`
-    if (reserved && reserved.has(candidate)) continue
-    const [rows] = await executor('SELECT id FROM product WHERE sku = ?', [candidate])
-    if (!rows.length) return candidate
-  }
-  throw Object.assign(new Error('自动生成商品编号失败，请稍后重试'), { status: 500 })
-}
+// 商品编号生成算法在 ../utils/productRules.js（全系统统一：3 位用户名映射字母 + 7 位时间戳映射数字）
 
 // 自然排序比较器
 function naturalCompare(a, b) {
@@ -184,6 +174,9 @@ const importUpload = multer({
   },
 })
 
+// 在线表格批量新增：任意字段名（rows + images_0、images_1…），每张图片不超过 5MB
+const onlineUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 200 } })
+
 // ── 工具函数 ──────────────────────────────────────────
 
 // ZIP 解析：使用成熟的 adm-zip 库（支持 stored / deflate 及常见压缩工具生成的压缩包）
@@ -296,22 +289,6 @@ router.post('/import/preview', importUpload.fields([
     const [categories] = await db.execute('SELECT id, name FROM category WHERE status = 1')
     const categoryMap = new Map(categories.map(c => [c.name, c.id]))
 
-    // 商品编号唯一性预查：数据库中已占用的 SKU + 本批次内部重复次数
-    const batchSkuCount = new Map()
-    for (const dataRow of dataRows) {
-      const skuCell = String(dataRow[0] || '').trim()
-      if (skuCell) batchSkuCount.set(skuCell, (batchSkuCount.get(skuCell) || 0) + 1)
-    }
-    const allSkuValues = [...batchSkuCount.keys()]
-    const existingSkuSet = new Set()
-    if (allSkuValues.length) {
-      const [existingSkus] = await db.execute(`SELECT sku FROM product WHERE sku IN (${allSkuValues.map(() => '?').join(',')}) AND sku IS NOT NULL`, allSkuValues)
-      for (const product of existingSkus) existingSkuSet.add(product.sku)
-    }
-    // 本次预览已占用编号集合：初始 = 数据库中已存在 ∪ Excel 中显式填写且校验通过的编号，
-    // 后续给"留空行"生成编号时逐行加入，保证预览结果在数据库与批次内部都唯一
-    const usedSkuSet = new Set(existingSkuSet)
-
     // 解析 zip 目录结构：保留原始目录结构解压
     // 支持任意嵌套层级的 ZIP，如：
     //   images/product01/1.jpg  → 解压到 tempDir/images/product01/1.jpg
@@ -365,27 +342,27 @@ router.post('/import/preview', importUpload.fields([
     for (let rowIdx = 0; rowIdx < dataRows.length; rowIdx++) {
       const row = dataRows[rowIdx]
       const excelRowNum = rowIdx + 2 // +2: 1-based + header row
-      // 按新模板列序取值：0=商品编号 1=名称 2=分类 3=价格 4=原价 5=库存 6=单位 7=生产厂家 8=品牌 9=是否支持定制 10=商品评分 11=描述 12=图片文件夹
-      const skuStr = String(row[0] || '').trim()
-      const name = String(row[1] || '').trim()
-      const categoryName = String(row[2] || '').trim()
-      const priceStr = String(row[3] || '').trim()
-      const originalPriceStr = String(row[4] || '').trim()
-      const stockStr = String(row[5] || '').trim()
-      const unit = String(row[6] || '').trim()
-      const manufacturer = String(row[7] || '').trim()
-      const brand = String(row[8] || '').trim()
-      const isCustomizableStr = String(row[9] || '').trim()
-      const ratingStr = String(row[10] || '').trim()
-      const description = String(row[11] || '').trim()
-      const imageFolderName = String(row[12] || '').trim()
+      // 按新模板列序取值（已去掉「商品编号(SKU)」列，由预览页生成）：
+      // 0=商品名称 1=分类名称 2=是否支持定制 3=商品评分 4=售价 5=原价 6=库存 7=单位（件/盒） 8=生产厂家 9=品牌 10=描述 11=图片文件夹名称
+      const name = String(row[0] || '').trim()
+      const categoryName = String(row[1] || '').trim()
+      const isCustomizableStr = String(row[2] || '').trim()
+      const ratingStr = String(row[3] || '').trim()
+      const priceStr = String(row[4] || '').trim()
+      const originalPriceStr = String(row[5] || '').trim()
+      const stockStr = String(row[6] || '').trim()
+      const unit = String(row[7] || '').trim()
+      const manufacturer = String(row[8] || '').trim()
+      const brand = String(row[9] || '').trim()
+      const description = String(row[10] || '').trim()
+      const imageFolderName = String(row[11] || '').trim()
 
       const errors = []
 
       // 必填校验
       if (!name) errors.push('商品名称为空')
       if (!categoryName) errors.push('分类名称为空')
-      if (!priceStr) errors.push('价格为空')
+      if (!priceStr) errors.push('售价为空')
       if (!stockStr) errors.push('库存为空')
       // 图片文件夹名称必填：留空则该行判定失败
       if (!imageFolderName) errors.push('图片文件夹名称不能为空')
@@ -394,7 +371,7 @@ router.post('/import/preview', importUpload.fields([
       let price = null
       if (priceStr) {
         price = Number(priceStr)
-        if (!Number.isFinite(price) || price < 0) errors.push('价格格式不正确')
+        if (!Number.isFinite(price) || price < 0) errors.push('售价格式不正确')
       }
       let originalPrice = null
       if (originalPriceStr) {
@@ -410,26 +387,9 @@ router.post('/import/preview', importUpload.fields([
         if (!Number.isFinite(stock) || stock < 0 || !Number.isInteger(stock)) errors.push('库存必须是非负整数')
       }
 
-      // 商品编号(SKU)：选填，最长 64 字符；须唯一（已被占用或本批次内部重复均判失败）
-      // 留空：立即在预览阶段生成最终会写入数据库的唯一编号，供管理员审查，而非等到确认导入时才生成
+      // 商品编号(SKU)：模板中不再包含该列，统一由管理员在预览页点击「生成」按钮写入；
+      // 此处初始为空，若确认导入时仍未生成，会由后端按新算法兜底生成
       let sku = null
-      let skuAutoGenerated = false
-      if (skuStr) {
-        if (skuStr.length > 64) {
-          errors.push('商品编号不能超过 64 个字符')
-        } else if (existingSkuSet.has(skuStr)) {
-          errors.push(`商品编号已存在：${skuStr}`)
-        } else if ((batchSkuCount.get(skuStr) || 0) > 1) {
-          errors.push(`商品编号已存在：${skuStr}`)
-        } else {
-          sku = skuStr
-          usedSkuSet.add(sku)
-        }
-      } else {
-        sku = await generateUniqueSku(db.execute.bind(db), usedSkuSet)
-        usedSkuSet.add(sku)
-        skuAutoGenerated = true
-      }
 
       // 是否支持定制：值只能为'是'/'否'（留空视为'否'）
       let isCustomizable = 0
@@ -439,16 +399,13 @@ router.post('/import/preview', importUpload.fields([
         else errors.push(`是否支持定制填写不正确，请填写'是'或'否'`)
       }
 
-      // 商品评分：留空默认为 5；填写时需为 0~5 之间的数字（允许一位小数）
+      // 商品评分：留空默认 5；非数字或超出 0~5 才判失败，其余一律就近取整到 0.5 的倍数
+      const ratingResult = normalizeRating(ratingStr)
       let rating = 5
-      if (ratingStr) {
-        const numericRating = Number(ratingStr)
-        const roundedRating = Number.isFinite(numericRating) ? Math.round(numericRating * 10) / 10 : NaN
-        if (!Number.isFinite(numericRating) || numericRating < 0 || numericRating > 5 || Math.abs(numericRating - roundedRating) > 1e-9) {
-          errors.push('商品评分格式不正确，应为0-5之间的数字')
-        } else {
-          rating = roundedRating
-        }
+      if (!ratingResult.valid) {
+        errors.push('商品评分格式不正确，应为0-5之间的数字')
+      } else {
+        rating = ratingResult.rating
       }
 
       // 分类必须已存在（status=1），不存在则该行判定失败，不会自动创建
@@ -527,7 +484,7 @@ router.post('/import/preview', importUpload.fields([
         manufacturer: manufacturer || null,
         brand: brand || null,
         sku,
-        sku_auto_generated: skuAutoGenerated,
+        sku_auto_generated: false,
         is_customizable: isCustomizable,
         rating,
         description: description || null,
@@ -569,22 +526,7 @@ router.post('/import/preview', importUpload.fields([
         success_count: successCount,
         fail_count: failCount,
         folders: tempFolders,
-        preview: previewRows.map(r => ({
-          row: r.row,
-          name: r.name,
-          category_name: r.category_name,
-          is_new_category: r.is_new_category,
-          sku: r.sku,
-          sku_auto_generated: r.sku_auto_generated,
-          is_customizable: r.is_customizable,
-          rating: r.rating,
-          price: r.price,
-          stock: r.stock,
-          image_count: r.image_count,
-          image_folder_name: r.image_folder_name,
-          success: r.success,
-          errors: r.errors,
-        })),
+        preview: publicPreviewRows(previewRows),
       },
     })
   } catch (error) {
@@ -640,30 +582,23 @@ router.post('/import/confirm', async (req, res, next) => {
 
   const connection = await db.getConnection()
   const createdProductIds = []
-  const skuReplacements = [] // 预览后被占用、确认阶段不得不更换编号的行记录
   try {
     await connection.beginTransaction()
 
     for (const row of successRows) {
       const categoryId = categoryMap.get(row.category_name)
-      // 预览阶段已为每行生成并展示最终编号，确认时原则上原样落库（不重新生成）
-      // 兜底：1) 升级前遗留的 pending 批次行 sku 可能为空 → 现场生成；
-      //       2) 预览与确认间隙编号被其它操作占用 → 重新生成，避免整批导入失败
-      const requestedSku = row.sku || await generateUniqueSku(connection.execute.bind(connection))
-      const [[occupied]] = await connection.execute('SELECT id FROM product WHERE sku = ?', [requestedSku])
-      let sku = requestedSku
-      if (occupied) {
-        sku = await generateUniqueSku(connection.execute.bind(connection))
-        skuReplacements.push({ row: row.row, name: row.name, from: requestedSku, to: sku })
-        row.sku = sku // 让后续插入使用更换后的编号
-      }
+      // 所见即所存：预览阶段已为每行生成并展示最终编号，确认时原样落库（不查重、不更换）
+      // 兜底：升级前遗留的 pending 批次行 sku 可能为空 → 按同一算法现场补一个
+      const sku = row.sku || generateSkuCode(req.admin.username)
+      row.sku = sku
       const isCustomizable = row.is_customizable === 1 || row.is_customizable === true ? 1 : 0
-      const rating = Number.isFinite(Number(row.rating)) ? Number(row.rating) : 5
+      const ratingResult = normalizeRating(row.rating)
+      const rating = ratingResult.valid ? ratingResult.rating : 5
 
       // 插入 product
       const [productResult] = await connection.execute(
-        'INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status, sku, is_customizable, rating) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, NULL, 1, ?, ?, ?)',
-        [row.name, categoryId, row.price, row.original_price, row.stock, row.unit || null, row.manufacturer || null, row.brand || null, row.description || null, sku, isCustomizable, rating]
+        'INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status, sku, is_customizable, rating, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)',
+        [row.name, categoryId, row.price, row.original_price, row.stock, row.unit || null, row.manufacturer || null, row.brand || null, row.description || null, sku, isCustomizable, rating, req.admin.id, req.admin.real_name || req.admin.username]
       )
       const productId = productResult.insertId
       createdProductIds.push(productId)
@@ -709,17 +644,14 @@ router.post('/import/confirm', async (req, res, next) => {
     // 清理临时目录
     await cleanupTempDir(batch.temp_dir)
 
-    const replacementDetail = skuReplacements
-      .map(item => `${item.name}(行${item.row})：编号 ${item.from} 已被占用，已自动更换为 ${item.to}`)
-      .join('；')
-    await writeOperationLog(req.admin.id, 'import_products', `批量导入商品：成功${successRows.length}条${skuReplacements.length ? `（${replacementDetail}）` : ''}`, req)
+    await writeOperationLog(req.admin.id, 'import_products', `批量导入商品：成功${successRows.length}条`, req)
 
     res.json({
       success: true,
       data: {
         imported_count: successRows.length,
         product_ids: createdProductIds,
-        sku_replacements: skuReplacements,
+        sku_replacements: [],
       },
     })
   } catch (error) {
@@ -727,6 +659,10 @@ router.post('/import/confirm', async (req, res, next) => {
     // 回滚已创建的商品目录
     for (const pid of createdProductIds) {
       try { await storageService.deleteDirectory(`products/${pid}`) } catch {}
+    }
+    // 唯一约束兜底：作为最后一道防线，遇到商品编号冲突时给出清晰提示而不是 500
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE constraint failed/i.test(error.message || '')) {
+      return res.status(409).json({ success: false, message: '商品编号已存在，请重试' })
     }
     next(error)
   } finally {
@@ -893,24 +829,411 @@ router.post('/import/:batchId/rename-folder', async (req, res, next) => {
         success_count: newSuccessCount,
         fail_count: newFailCount,
         folders,
-        preview: previewData.map(r => ({
-          row: r.row,
-          name: r.name,
-          category_name: r.category_name,
-          is_new_category: r.is_new_category,
-          sku: r.sku,
-          sku_auto_generated: r.sku_auto_generated,
-          is_customizable: r.is_customizable,
-          rating: r.rating,
-          price: r.price,
-          stock: r.stock,
-          image_count: r.image_count,
-          image_folder_name: r.image_folder_name,
-          success: r.success,
-          errors: r.errors,
-        })),
+        preview: publicPreviewRows(previewData),
       },
     })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// ── 导入批次公共工具 ────────────────────────────────────
+// 读取 pending 状态的批次及其预览数据；不存在/已处理/已过期/数据损坏时抛出带 status 的错误
+async function getPendingBatchPreview(batchId) {
+  const [batches] = await db.execute('SELECT id, temp_dir, status, preview_data, expires_at FROM import_batch WHERE id = ?', [batchId])
+  const batch = batches[0]
+  if (!batch) throw Object.assign(new Error('导入批次不存在'), { status: 404 })
+  if (batch.status !== 'pending') throw Object.assign(new Error('该批次已处理，请重新上传'), { status: 400 })
+  if (new Date(batch.expires_at) < new Date()) {
+    await cleanupBatch(batch.id, batch.temp_dir)
+    throw Object.assign(new Error('导入批次已过期，请重新上传'), { status: 410 })
+  }
+  let previewData
+  try {
+    previewData = typeof batch.preview_data === 'string' ? JSON.parse(batch.preview_data) : batch.preview_data
+  } catch {
+    throw Object.assign(new Error('预览数据损坏，请重新上传'), { status: 400 })
+  }
+  return { batch, previewData }
+}
+
+// 统一输出预览行字段，供前端复用"合并预览结果"逻辑
+function publicPreviewRows(previewData) {
+  return previewData.map(r => ({
+    row: r.row,
+    name: r.name,
+    category_name: r.category_name,
+    is_new_category: r.is_new_category,
+    sku: r.sku,
+    sku_auto_generated: r.sku_auto_generated,
+    is_customizable: r.is_customizable,
+    rating: r.rating,
+    price: r.price,
+    original_price: r.original_price,
+    stock: r.stock,
+    unit: r.unit,
+    manufacturer: r.manufacturer,
+    brand: r.brand,
+    description: r.description,
+    image_count: r.image_count,
+    image_folder_name: r.image_folder_name,
+    success: r.success,
+    errors: r.errors,
+  }))
+}
+
+// 写回预览数据并重新计算成功/失败数
+async function saveBatchPreview(batchId, previewData) {
+  const successCount = previewData.filter(r => r.success).length
+  const failCount = previewData.filter(r => !r.success).length
+  await db.execute(
+    'UPDATE import_batch SET preview_data = ?, success_count = ?, fail_count = ? WHERE id = ?',
+    [JSON.stringify(previewData), successCount, failCount, batchId]
+  )
+  return { success_count: successCount, fail_count: failCount, preview: publicPreviewRows(previewData) }
+}
+
+// ── 一键创建缺失分类接口 ────────────────────────────────
+// 在预览阶段，若某行失败原因为「分类不存在：xxx」，管理员可点击「添加分类」直接创建该分类；
+// 创建后自动移除本批次所有相关行的该错误，并重新计算成功/失败数。
+router.post('/import/:batchId/create-category', async (req, res, next) => {
+  try {
+    const { batchId } = req.params
+    const categoryName = String(req.body.category_name || '').trim()
+
+    if (!categoryName) {
+      return res.status(400).json({ success: false, message: '分类名称不能为空' })
+    }
+
+    const [batches] = await db.execute('SELECT id, temp_dir, status, preview_data, expires_at FROM import_batch WHERE id = ?', [batchId])
+    const batch = batches[0]
+    if (!batch) return res.status(404).json({ success: false, message: '导入批次不存在' })
+    if (batch.status !== 'pending') return res.status(400).json({ success: false, message: '该批次已处理，无法创建分类' })
+    if (new Date(batch.expires_at) < new Date()) {
+      await cleanupBatch(batch.id, batch.temp_dir)
+      return res.status(410).json({ success: false, message: '导入批次已过期，请重新上传' })
+    }
+
+    // 统一校验规则（与 categories.js 的 categoryBody 一致：trim + 1~50 字符）
+    let name
+    try {
+      name = requiredText(categoryName, '分类名称', { min: 1, max: 50 })
+    } catch (error) {
+      return res.status(error.status || 400).json({ success: false, message: error.message })
+    }
+
+    // 同名分类处理（category 表 UNIQUE(parent_id, name) 不区分 status）：
+    //  - 已启用 → 直接复用，视为创建成功
+    //  - 已禁用 → 重新启用并复用（管理员的诉求是"让这个分类名可用"），避免插入时报唯一约束错误
+    const [[existing]] = await db.execute('SELECT id, status FROM category WHERE name = ? AND parent_id = 0', [name])
+    if (existing) {
+      if (!existing.status) {
+        await db.execute("UPDATE category SET status = 1, updated_at = datetime('now') WHERE id = ?", [existing.id])
+        await writeOperationLog(req.admin.id, 'update_category', `${name}（批量导入时重新启用）`, req)
+      }
+    } else {
+      try {
+        const [[{ maxSort }]] = await db.execute('SELECT COALESCE(MAX(sort_order), 0) AS maxSort FROM category')
+        await db.execute(
+          'INSERT INTO category (name, parent_id, sort_order, status, created_by, created_by_name) VALUES (?, 0, ?, 1, ?, ?)',
+          [name, maxSort + 1, req.admin.id, req.admin.real_name || req.admin.username]
+        )
+        await writeOperationLog(req.admin.id, 'create_category', name, req)
+      } catch (error) {
+        if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE constraint failed/i.test(error.message || '')) {
+          return res.status(409).json({ success: false, message: '同一父级下已存在该分类名称' })
+        }
+        throw error
+      }
+    }
+
+    // 更新预览数据：移除所有相关行的「分类不存在」错误
+    let previewData
+    try {
+      previewData = typeof batch.preview_data === 'string' ? JSON.parse(batch.preview_data) : batch.preview_data
+    } catch {
+      return res.status(400).json({ success: false, message: '预览数据损坏，请重新上传' })
+    }
+
+    const targetError = `分类不存在：${name}`
+    let updatedCount = 0
+    for (const row of previewData) {
+      if (row.category_name === name && row.errors && row.errors.length) {
+        const idx = row.errors.indexOf(targetError)
+        if (idx !== -1) {
+          row.errors.splice(idx, 1)
+          updatedCount++
+          if (row.errors.length === 0) {
+            row.success = true
+            delete row.errors
+          }
+        }
+      }
+    }
+
+    const newSuccessCount = previewData.filter(r => r.success).length
+    const newFailCount = previewData.filter(r => !r.success).length
+
+    await db.execute(
+      'UPDATE import_batch SET preview_data = ?, success_count = ?, fail_count = ? WHERE id = ?',
+      [JSON.stringify(previewData), newSuccessCount, newFailCount, batchId]
+    )
+
+    res.json({
+      success: true,
+      data: {
+        created_name: name,
+        updated_rows: updatedCount,
+        success_count: newSuccessCount,
+        fail_count: newFailCount,
+        preview: publicPreviewRows(previewData),
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// ── 为单行生成商品编号 ──────────────────────────────────
+// 参数 row 为 Excel 行号（preview_data 里的 row 字段，不是数组下标）
+router.put('/import/:batchId/rows/:row/sku', async (req, res, next) => {
+  try {
+    const { batchId } = req.params
+    const { previewData } = await getPendingBatchPreview(batchId)
+    const rowNum = Number(req.params.row)
+    const row = previewData.find(r => r.row === rowNum)
+    if (!row) return res.status(404).json({ success: false, message: '未找到对应的商品行' })
+
+    // 所见即所存：重新生成即按同一算法生成新编号并回写预览，确认导入时原样落库
+    row.sku = generateSkuCode(req.admin.username)
+
+    const result = await saveBatchPreview(batchId, previewData)
+    res.json({ success: true, data: { row: rowNum, sku: row.sku, ...result } })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// ── 一键为全部缺失编号的行生成商品编号 ──────────────────
+router.post('/import/:batchId/generate-skus', async (req, res, next) => {
+  try {
+    const { batchId } = req.params
+    const { previewData } = await getPendingBatchPreview(batchId)
+
+    let generated = 0
+    for (const row of previewData) {
+      if (row.sku) continue
+      row.sku = generateSkuCode(req.admin.username)
+      generated++
+    }
+
+    const result = await saveBatchPreview(batchId, previewData)
+    res.json({ success: true, data: { generated, ...result } })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// 确保分类存在：不存在则新建；同名但已禁用则重新启用复用（与 /import/:batchId/create-category 规则保持一致）
+// 返回 { id, created }；executor 为 db.execute.bind(db) 或事务内 connection.execute.bind(connection)
+async function ensureCategory(executor, name, adminId, adminName) {
+  const [rows] = await executor('SELECT id, status FROM category WHERE name = ? AND parent_id = 0', [name])
+  if (rows[0]) {
+    if (!rows[0].status) {
+      await executor("UPDATE category SET status = 1, updated_at = datetime('now') WHERE id = ?", [rows[0].id])
+    }
+    return { id: rows[0].id, created: false }
+  }
+  const [[{ maxSort }]] = await executor('SELECT COALESCE(MAX(sort_order), 0) AS maxSort FROM category')
+  try {
+    const [result] = await executor(
+      'INSERT INTO category (name, parent_id, sort_order, status, created_by, created_by_name) VALUES (?, 0, ?, 1, ?, ?)',
+      [name, maxSort + 1, adminId, adminName]
+    )
+    return { id: result.insertId, created: true }
+  } catch (error) {
+    // 并发下可能已被其它请求创建，回查复用
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE constraint failed/i.test(error.message || '')) {
+      const [again] = await executor('SELECT id FROM category WHERE name = ? AND parent_id = 0', [name])
+      if (again[0]) return { id: again[0].id, created: false }
+    }
+    throw error
+  }
+}
+
+// ── 在线表格批量新增（事务型，全部校验通过才写库） ──────
+// 请求：multipart/form-data
+//   rows：JSON 字符串数组，每行文本字段（不接受 status，统一按上架创建）
+//   images_<下标>：该行对应的图片文件（同一字段名可重复携带多张）
+router.post('/import/online', onlineUpload.any(), async (req, res, next) => {
+  try {
+    let rows
+    try {
+      rows = JSON.parse(req.body.rows || '[]')
+    } catch {
+      return res.status(400).json({ success: false, message: '提交数据格式不正确' })
+    }
+    if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ success: false, message: '请至少添加一行商品' })
+    if (rows.length > 200) return res.status(400).json({ success: false, message: '单次最多新增 200 个商品' })
+
+    // 图片按字段名分组：images_0 → 第 0 行（数组下标）
+    const filesByIndex = new Map()
+    for (const file of req.files || []) {
+      const match = /^images_(\d+)$/.exec(file.fieldname)
+      if (!match) continue
+      const idx = Number(match[1])
+      if (!filesByIndex.has(idx)) filesByIndex.set(idx, [])
+      filesByIndex.get(idx).push(file)
+    }
+
+    // ── 校验阶段：全部校验通过才进入写库，不边校验边插入 ──
+    const [categories] = await db.execute('SELECT id, name FROM category WHERE status = 1')
+    const categoryMap = new Map(categories.map(c => [c.name, c.id]))
+    const prepared = []
+
+    for (let i = 0; i < rows.length; i++) {
+      const raw = rows[i] || {}
+      const errors = []
+
+      const name = String(raw.name || '').trim()
+      if (!name) errors.push('商品名称为空')
+      else if (name.length > 200) errors.push('商品名称不能超过 200 个字符')
+
+      const categoryName = String(raw.category_name || '').trim()
+      let categoryId = null
+      if (!categoryName) errors.push('分类不能为空')
+      else if (categoryName.length > 50) errors.push('分类名称不能超过 50 个字符')
+      else if (categoryMap.has(categoryName)) categoryId = categoryMap.get(categoryName)
+      // 系统不存在的分类：允许在线表格先行录入（前端需经「添加」确认），提交写库时再真正创建
+
+      let price = null
+      if (raw.price === '' || raw.price === null || raw.price === undefined) errors.push('售价不能为空')
+      else {
+        price = Number(raw.price)
+        if (!Number.isFinite(price) || price < 0) errors.push('售价格式不正确')
+      }
+
+      let originalPrice = null
+      if (raw.original_price !== '' && raw.original_price !== null && raw.original_price !== undefined) {
+        originalPrice = Number(raw.original_price)
+        if (!Number.isFinite(originalPrice) || originalPrice < 0) errors.push('原价格式不正确')
+      }
+      if (originalPrice !== null && price !== null && originalPrice < price) errors.push('原价不能低于售价')
+
+      let stock = null
+      if (raw.stock === '' || raw.stock === null || raw.stock === undefined) errors.push('库存不能为空')
+      else {
+        stock = Number(raw.stock)
+        if (!Number.isFinite(stock) || stock < 0 || !Number.isInteger(stock)) errors.push('库存必须是非负整数')
+      }
+
+      const ratingResult = normalizeRating(raw.rating)
+      if (!ratingResult.valid) errors.push('商品评分格式不正确，应为0-5之间的数字')
+
+      const files = []
+      for (const file of filesByIndex.get(i) || []) {
+        try {
+          storageService.validateImage(file)
+          files.push(file)
+        } catch (error) {
+          errors.push(error.message)
+        }
+      }
+
+      // SKU：所见即所存，直接采用前端提交值（在线表格已按同一算法生成并展示）；为空时按算法兜底
+      const sku = String(raw.sku || '').trim().slice(0, 64) || generateSkuCode(req.admin.username)
+
+      prepared.push({
+        index: i,
+        name: name || `第 ${i + 1} 行`,
+        categoryId,
+        categoryName,
+        price,
+        original_price: originalPrice,
+        stock,
+        unit: String(raw.unit || '').trim().slice(0, 20) || null,
+        manufacturer: String(raw.manufacturer || '').trim().slice(0, 100) || null,
+        brand: String(raw.brand || '').trim().slice(0, 100) || null,
+        description: String(raw.description || '').trim().slice(0, 5000) || null,
+        is_customizable: [1, '1', true, 'true'].includes(raw.is_customizable) ? 1 : 0,
+        rating: ratingResult.valid ? ratingResult.rating : 5,
+        sku,
+        files,
+        errors,
+      })
+    }
+
+    const failCount = prepared.filter(r => r.errors.length).length
+    if (failCount) {
+      return res.status(400).json({
+        success: false,
+        message: `有 ${failCount} 行未通过校验，请修正后重试`,
+        data: {
+          fail_count: failCount,
+          rows: prepared.map(r => ({ index: r.index, sku: r.sku, errors: r.errors.length ? r.errors : undefined })),
+        },
+      })
+    }
+
+    // ── 写入阶段：事务提交，任一步异常都回滚并清理已落盘图片 ──
+    const connection = await db.getConnection()
+    const createdProductIds = []
+    const savedPaths = []
+    const createdCategoryNames = []
+    const txCategoryIds = new Map() // 本事务内已解析/创建的「分类名 → id」，避免同名重复创建
+    try {
+      await connection.beginTransaction()
+      for (const row of prepared) {
+        // 分类不存在时在现场创建（仅在此刻才真正写库，前端在线表格只是标记「待创建」）
+        let categoryId = row.categoryId
+        if (!categoryId) {
+          if (txCategoryIds.has(row.categoryName)) categoryId = txCategoryIds.get(row.categoryName)
+          else {
+            const ensured = await ensureCategory(connection.execute.bind(connection), row.categoryName, req.admin.id, req.admin.real_name || req.admin.username)
+            categoryId = ensured.id
+            txCategoryIds.set(row.categoryName, categoryId)
+            if (ensured.created) createdCategoryNames.push(row.categoryName)
+          }
+        }
+        const [productResult] = await connection.execute(
+          'INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status, sku, is_customizable, rating, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)',
+          [row.name, categoryId, row.price, row.original_price, row.stock, row.unit, row.manufacturer, row.brand, row.description, row.sku, row.is_customizable, row.rating, req.admin.id, req.admin.real_name || req.admin.username]
+        )
+        const productId = productResult.insertId
+        createdProductIds.push(productId)
+
+        let mainImage = null
+        for (let imgIdx = 0; imgIdx < row.files.length; imgIdx++) {
+          const imagePath = await storageService.save(row.files[imgIdx], `products/${productId}`)
+          savedPaths.push(imagePath)
+          await connection.execute(
+            'INSERT INTO product_image (product_id, image_url, is_main, sort_order) VALUES (?, ?, ?, ?)',
+            [productId, imagePath, imgIdx === 0 ? 1 : 0, imgIdx]
+          )
+          if (imgIdx === 0) mainImage = imagePath
+        }
+        await connection.execute('UPDATE product SET main_image = ? WHERE id = ?', [mainImage || '/assets/images/products/product-placeholder.svg', productId])
+      }
+      await connection.commit()
+    } catch (error) {
+      await connection.rollback()
+      await Promise.all(savedPaths.map(path => storageService.delete(path).catch(() => {})))
+      for (const pid of createdProductIds) {
+        try { await storageService.deleteDirectory(`products/${pid}`) } catch {}
+      }
+      if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE constraint failed/i.test(error.message || '')) {
+        return res.status(409).json({ success: false, message: '商品编号已存在，请重试' })
+      }
+      throw error
+    } finally {
+      connection.release()
+    }
+
+    await writeOperationLog(req.admin.id, 'import_products_online', `在线表格批量新增商品：成功${prepared.length}条${createdCategoryNames.length ? `（新建分类：${createdCategoryNames.join('、')}）` : ''}`, req)
+    if (createdCategoryNames.length) {
+      await writeOperationLog(req.admin.id, 'create_category', `${createdCategoryNames.join('、')}（在线表格批量新增时创建）`, req)
+    }
+    res.status(201).json({ success: true, data: { created_count: prepared.length, product_ids: createdProductIds, created_categories: createdCategoryNames } })
   } catch (error) {
     next(error)
   }

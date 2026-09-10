@@ -39,10 +39,10 @@ onMounted(load)
 </script>
 
 <template>
-  <el-card shadow="never" class="admin-page-card">
+  <el-card shadow="never" class="admin-page-card admin-table-page">
     <template #header><div class="page-header"><span>管理员信息</span><el-button type="primary" @click="openCreate">新增管理员</el-button></div></template>
     <div class="list-toolbar"><el-input v-model="keyword" clearable placeholder="搜索账号、姓名、电话或邮箱" style="max-width: 320px" @keyup.enter="page = 1; load()" @clear="page = 1; load()" /><el-button @click="page = 1; load()">搜索</el-button></div>
-    <el-table v-loading="loading" :data="list" stripe style="width: 100%">
+    <el-table v-loading="loading" :data="list" height="100%" stripe style="width: 100%">
       <el-table-column label="管理员" min-width="170"><template #default="{ row }"><div class="user-cell"><el-avatar :src="resolve(row.avatar_url)"><template #default>{{ (row.real_name || row.username || '?').slice(0, 1) }}</template></el-avatar><span>{{ row.username }}</span></div></template></el-table-column>
       <el-table-column prop="real_name" label="姓名" min-width="110" />
       <el-table-column prop="phone" label="电话" min-width="130" />

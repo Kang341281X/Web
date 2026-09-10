@@ -142,14 +142,15 @@ onMounted(load)
 </script>
 
 <template>
-  <el-card shadow="never" class="admin-page-card">
+  <el-card shadow="never" class="admin-page-card admin-table-page">
     <template #header><div class="page-header"><span>商品分类</span><el-button type="primary" @click="create">新增分类</el-button></div></template>
-    <el-table v-loading="loading" :data="categories" row-key="id" stripe>
+    <el-table v-loading="loading" :data="categories" row-key="id" height="100%" stripe>
       <el-table-column type="index" label="序号" width="60" align="center" />
       <el-table-column prop="name" label="分类名称" min-width="110" show-overflow-tooltip />
       <el-table-column label="父级分类" min-width="110" show-overflow-tooltip><template #default="{ row }">{{ parentName(row.parent_id) }}</template></el-table-column>
       <el-table-column prop="sort_order" label="排序" min-width="110" />
       <el-table-column label="状态" min-width="110"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
+      <el-table-column label="添加人" min-width="110"><template #default="{ row }">{{ row.created_by_name || '未知' }}</template></el-table-column>
       <el-table-column label="图片" min-width="110"><template #default="{ row }"><el-image :src="resolve(row.image_url)" fit="cover" class="cat-thumb" :preview-src-list="[resolve(row.image_url)]" preview-teleported><template #error><img class="image-fallback" :src="IMG_FALLBACK" alt="" /></template></el-image></template></el-table-column>
       <el-table-column label="操作" min-width="110"><template #default="{ row }"><el-button link type="primary" @click="edit(row)">编辑</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template></el-table-column>
     </el-table>
