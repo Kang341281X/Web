@@ -12,7 +12,7 @@ const language = useLanguageStore()
 // 未登录时复用前台登录弹窗（与 Header 上的入口一致），不再另做一套登录页
 const user = useUserStore()
 
-const form = reactive({ nickname: '', email: '' })
+const form = reactive({ username: '', nickname: '', email: '' })
 const password = reactive({ current: '', next: '', confirm: '' })
 const notes = reactive({ profile: null, password: null })
 const saving = reactive({ profile: false, password: false, avatar: false })
@@ -20,10 +20,12 @@ const saving = reactive({ profile: false, password: false, avatar: false })
 const avatarPreview = computed(() => resolve(customer.avatarUrl))
 
 // 与后端 server/utils/customer.js 的规则保持一致
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{4,20}$/
 const EMAIL_PATTERN = /^\S+@\S+\.\S+$/
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024
 
 const syncForm = () => {
+  form.username = customer.profile?.username || ''
   form.nickname = customer.profile?.nickname || ''
   form.email = customer.profile?.email || ''
 }
@@ -50,13 +52,15 @@ onMounted(async () => {
 })
 
 const saveProfile = async () => {
+  const username = form.username.trim()
   const nickname = form.nickname.trim()
   const email = form.email.trim()
+  if (!USERNAME_PATTERN.test(username)) return setNote('profile', 'error', language.t('usernameInvalid'))
   if (nickname.length > 50) return setNote('profile', 'error', language.t('nicknameTooLong'))
   if (email && !EMAIL_PATTERN.test(email)) return setNote('profile', 'error', language.t('emailInvalid'))
 
   saving.profile = true
-  const result = await customer.updateProfile({ nickname, email })
+  const result = await customer.updateProfile({ username, nickname, email })
   saving.profile = false
 
   if (!result.success) return setNote('profile', 'error', result.message)
@@ -108,6 +112,7 @@ const onAvatarPick = async event => {
       <article class="account-card account-identity">
         <img class="account-avatar-lg" :src="avatarPreview" :alt="customer.displayName" />
         <strong class="account-identity-name">{{ customer.displayName }}</strong>
+        <span class="account-identity-phone">{{ language.t('username') }} {{ customer.profile?.username }}</span>
         <span class="account-identity-phone">{{ language.t('phone') }} {{ customer.profile?.phone }}</span>
         <label class="button account-upload">{{ saving.avatar ? language.t('submitting') : language.t('changeAvatar') }}<input type="file" accept=".jpg,.jpeg,.png,.bmp,.webp" :disabled="saving.avatar" @change="onAvatarPick" /></label>
         <small class="account-hint">{{ language.t('avatarHint') }}</small>
@@ -116,6 +121,7 @@ const onAvatarPick = async event => {
       <article class="account-card">
         <h2>{{ language.t('profileInfo') }}</h2>
         <form class="account-form" @submit.prevent="saveProfile">
+          <label>{{ language.t('username') }}<input v-model="form.username" type="text" maxlength="20" autocomplete="username" autocapitalize="off" spellcheck="false" :placeholder="language.t('usernamePlaceholder')" /><small class="account-field-hint">{{ language.t('usernameNote') }}</small></label>
           <label>{{ language.t('nickname') }}<input v-model="form.nickname" type="text" maxlength="50" autocomplete="nickname" :placeholder="language.t('nicknamePlaceholder')" /></label>
           <label>{{ language.t('email') }}<input v-model="form.email" type="email" autocomplete="email" :placeholder="language.t('emailPlaceholder')" /></label>
           <p v-if="notes.profile" class="account-note" :class="notes.profile.type" role="status">{{ notes.profile.text }}</p>
@@ -143,3 +149,7 @@ const onAvatarPick = async event => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.account-field-hint { display: block; margin-top: 4px; font-size: 12px; color: #909399 }
+</style>

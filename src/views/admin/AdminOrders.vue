@@ -145,6 +145,13 @@ onMounted(() => {
           <small>{{ row.receiver_phone }}</small>
         </template>
       </el-table-column>
+      <!-- 账号快照：下单时写入，顾客改资料或注销后依然保留（见 026 迁移） -->
+      <el-table-column label="账号快照" min-width="170">
+        <template #default="{ row }">
+          <div>{{ row.customer_username || '未记录' }}</div>
+          <small>{{ row.customer_email || '未留邮箱' }}</small>
+        </template>
+      </el-table-column>
       <el-table-column label="订单金额" width="110"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
       <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)">{{ row.status_label }}</el-tag></template></el-table-column>
       <el-table-column label="下单时间" width="170"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
@@ -165,8 +172,10 @@ onMounted(() => {
         <el-descriptions-item label="下单时间">{{ formatTime(detail?.created_at) }}</el-descriptions-item>
         <el-descriptions-item label="最近更新">{{ formatTime(detail?.updated_at) }}</el-descriptions-item>
         <el-descriptions-item label="处理人">{{ detail?.handled_by_name || '未处理' }}</el-descriptions-item>
-        <el-descriptions-item label="顾客账号" :span="2">{{ customerText }}</el-descriptions-item>
-        <el-descriptions-item label="买家备注">{{ detail?.remark || '无' }}</el-descriptions-item>
+        <el-descriptions-item label="顾客账号">{{ customerText }}</el-descriptions-item>
+        <el-descriptions-item label="顾客用户名（快照）">{{ detail?.customer_username || '未记录' }}</el-descriptions-item>
+        <el-descriptions-item label="顾客邮箱（快照）">{{ detail?.customer_email || '未留邮箱' }}</el-descriptions-item>
+        <el-descriptions-item label="买家备注" :span="3">{{ detail?.remark || '无' }}</el-descriptions-item>
       </el-descriptions>
 
       <el-descriptions title="收货信息" :column="3" border size="small" class="detail-block">

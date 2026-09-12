@@ -43,6 +43,8 @@ const LOG_MAP = {
   update_category: { module: '分类管理', type: '编辑分类' },
   delete_category: { module: '分类管理', type: '删除分类' },
   update_settings: { module: '其他设置', type: '修改设置' },
+  update_exchange_rate: { module: '其他设置', type: '修改汇率' },
+  update_shipping_rate: { module: '其他设置', type: '修改运费' },
   create_admin: { module: '管理员管理', type: '新增管理员' },
   update_admin: { module: '管理员管理', type: '编辑管理员' },
   delete_admin: { module: '管理员管理', type: '删除管理员' },

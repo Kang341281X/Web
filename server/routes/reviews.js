@@ -1,7 +1,18 @@
 import { Router } from 'express'
 import db from '../config/db.js'
 import { requireAuth, requirePasswordChanged, writeOperationLog } from '../middleware/auth.js'
+import { optionalCustomerAuth } from '../middleware/customerAuth.js'
 import storageService from '../services/storageService.js'
+import {
+  REVIEW_HIDDEN,
+  REVIEW_VISIBLE,
+  parseImages,
+  publicReview,
+  recalcProductRating,
+  removeReviewImages,
+  reviewEditExpiredSql,
+  toId,
+} from '../utils/review.js'
 
 /**
  * 商品评论（product_review）相关接口。
@@ -10,55 +21,17 @@ import storageService from '../services/storageService.js'
  *   - adminRouter  挂载到 /api/admin-reviews，供后台「商品管理 → 商品评论」查看 / 隐藏 / 删除；
  *   - publicRouter 挂载到 /api/public，供前台商品详情页「买家评价」按商品读取。
  *
- * 关于表设计的两点约定（见 server/sql/025_product_review.sql）：
+ * 关于表设计的约定（见 server/sql/025_product_review.sql、027_product_review_updated_at.sql）：
  *   1. 评论可见性由 status 控制（1 显示 / 0 隐藏），前台只读 status = 1；
  *      隐藏与删除都会改变评分，因此每次变更后都要重算并回写 product.rating / review_count；
  *   2. customer_name 是「评论时的昵称快照」，即使顾客被删除（customer_id 置 NULL）也能正常展示，
- *      所以展示一律用 customer_name，customer 表只用来补头像、手机号等辅助信息。
+ *      所以展示一律用 customer_name，customer 表只用来补头像、手机号等辅助信息；
+ *   3. created_at 是发布时间的唯一依据（24 小时可修改窗口按它计算，不可被编辑刷新），
+ *      updated_at 只用于展示「已编辑」。
+ *
+ * 评分重算、图片解析、24 小时窗口判断等与顾客端共用的逻辑统一放在 utils/review.js，
+ * 顾客端评论接口（routes/customerReview.js）复用同一份实现，避免两边口径不一致。
  */
-
-const REVIEW_VISIBLE = 1
-const REVIEW_HIDDEN = 0
-
-function toId(value) {
-  const id = Number(value)
-  return Number.isInteger(id) && id > 0 ? id : null
-}
-
-// images 在库里存 JSON 数组字符串（如 '["/uploads/products/a.jpg"]'），本阶段前端尚未实现上传。
-// 解析失败或为空统一返回空数组，避免前端拿到字符串后当数组遍历报错。
-function parseImages(value) {
-  if (!value) return []
-  try {
-    const parsed = typeof value === 'string' ? JSON.parse(value) : value
-    return Array.isArray(parsed)
-      ? parsed.filter(item => typeof item === 'string' && item.trim()).map(item => storageService.getUrl(item) || item)
-      : []
-  } catch {
-    return []
-  }
-}
-
-/**
- * 按「可见评论」重算商品平均分与评论数。
- * product_review 是评分的唯一数据来源，隐藏 / 删除评论后若不重算，详情页顶部的评分会虚高。
- * 没有可见评论时评分回落到建表默认值 5.0，避免写入 NULL（product.rating 为 NOT NULL）。
- */
-async function recalcProductRating(productIds) {
-  const ids = [...new Set((Array.isArray(productIds) ? productIds : [productIds]).map(toId).filter(Boolean))]
-  const result = []
-  for (const id of ids) {
-    const [[row]] = await db.execute(
-      'SELECT COUNT(*) AS total, AVG(rating) AS average FROM product_review WHERE product_id = ? AND status = ?',
-      [id, REVIEW_VISIBLE]
-    )
-    const total = Number(row.total) || 0
-    const rating = total ? Number(Number(row.average).toFixed(1)) : 5.0
-    await db.execute('UPDATE product SET rating = ?, review_count = ? WHERE id = ?', [rating, total, id])
-    result.push({ product_id: id, rating, review_count: total })
-  }
-  return result
-}
 
 /* -------------------------------------------------------------------------- */
 /* 后台管理：/api/admin-reviews                                                */
@@ -66,7 +39,7 @@ async function recalcProductRating(productIds) {
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requirePasswordChanged)
 
-const adminFields = `r.id, r.product_id, p.name AS product_name, r.customer_id, r.customer_name, cu.phone AS customer_phone, cu.avatar AS customer_avatar, r.rating, r.content, r.images, r.order_id, o.order_no, r.status, r.created_at`
+const adminFields = `r.id, r.product_id, p.name AS product_name, r.customer_id, r.customer_name, cu.phone AS customer_phone, cu.avatar AS customer_avatar, r.rating, r.content, r.images, r.order_id, o.order_no, r.status, r.created_at, r.updated_at`
 const adminFrom = `FROM product_review r
   LEFT JOIN product p ON p.id = r.product_id
   LEFT JOIN customer cu ON cu.id = r.customer_id
@@ -78,6 +51,8 @@ function adminReviewRow(review) {
     images: parseImages(review.images),
     customer_avatar_url: storageService.getUrl(review.customer_avatar),
     is_purchased: Boolean(review.order_id),
+    // 顾客在 24 小时内改过评价时，updated_at 会晚于 created_at
+    edited: Boolean(review.updated_at && review.updated_at !== review.created_at),
   }
 }
 
@@ -183,12 +158,14 @@ adminRouter.delete('/:id', async (req, res, next) => {
   try {
     const id = toId(req.params.id)
     if (!id) return res.status(404).json({ success: false, message: '评论不存在' })
-    const [rows] = await db.execute('SELECT id, product_id, customer_name FROM product_review WHERE id = ?', [id])
+    const [rows] = await db.execute('SELECT id, product_id, customer_name, images FROM product_review WHERE id = ?', [id])
     const review = rows[0]
     if (!review) return res.status(404).json({ success: false, message: '评论不存在' })
 
     await db.execute('DELETE FROM product_review WHERE id = ?', [id])
     const [product] = await recalcProductRating(review.product_id)
+    // 评论的配图没有其它引用，删除评论后一并清理，避免 /uploads/reviews 里堆积孤儿文件
+    await removeReviewImages(review.images)
     await writeOperationLog(req.admin.id, 'delete_review', `删除评论 #${id}（${review.customer_name}）`, req)
 
     res.json({ success: true, message: '评论已删除，商品评分已同步', product })
@@ -202,7 +179,11 @@ export const publicRouter = Router()
 
 // 前台商品详情「买家评价」：只返回显示中的评论，并附带评分概览（平均分 + 各星级条数）。
 // 顾客可能已注销（customer_id 为 NULL），因此展示统一用 customer_name 快照。
-publicRouter.get('/products/:id/reviews', async (req, res, next) => {
+//
+// 这是公开接口，但允许带顾客 token：带了就多返回 is_mine / can_edit，
+// 让前端知道「哪条是自己写的、还能不能改（24 小时内）」，从而决定编辑/删除按钮是否展示。
+// 未登录（或 token 已过期）时一律按游客处理，接口结果对游客完全不变。
+publicRouter.get('/products/:id/reviews', optionalCustomerAuth, async (req, res, next) => {
   try {
     const productId = toId(req.params.id)
     if (!productId) return res.status(404).json({ success: false, message: '商品不存在' })
@@ -210,6 +191,8 @@ publicRouter.get('/products/:id/reviews', async (req, res, next) => {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const pageSize = Math.min(Math.max(Number.parseInt(req.query.page_size, 10) || 20, 1), 50)
     const rating = Number.parseInt(req.query.rating, 10)
+    // 用 0 代替「未登录」：customer_id 不会是 0，NULL = 0 也不成立，因此不会误判成自己的评论
+    const customerId = req.customer?.id || 0
 
     const clauses = ['r.product_id = ?', 'r.status = ?']
     const params = [productId, REVIEW_VISIBLE]
@@ -230,24 +213,18 @@ publicRouter.get('/products/:id/reviews', async (req, res, next) => {
     )
 
     const [rows] = await db.execute(
-      `SELECT r.id, r.customer_name, cu.avatar AS customer_avatar, r.rating, r.content, r.images, r.order_id, r.created_at
+      `SELECT r.id, r.product_id, r.customer_name, cu.avatar AS customer_avatar, r.rating, r.content, r.images, r.order_id,
+              (r.customer_id = ?) AS is_mine,
+              ${reviewEditExpiredSql('r.')} AS edit_expired,
+              r.created_at, r.updated_at
        FROM product_review r LEFT JOIN customer cu ON cu.id = r.customer_id
        ${where} ORDER BY r.created_at DESC, r.id DESC LIMIT ? OFFSET ?`,
-      [...params, pageSize, (page - 1) * pageSize]
+      [customerId, ...params, pageSize, (page - 1) * pageSize]
     )
 
     res.json({
       success: true,
-      data: rows.map(review => ({
-        id: review.id,
-        customer_name: review.customer_name,
-        avatar_url: storageService.getUrl(review.customer_avatar),
-        rating: Number(review.rating),
-        content: review.content,
-        images: parseImages(review.images),
-        is_purchased: Boolean(review.order_id),
-        created_at: review.created_at,
-      })),
+      data: rows.map(publicReview),
       summary: {
         total: Number(summary.total),
         average: Number(Number(summary.average).toFixed(1)),

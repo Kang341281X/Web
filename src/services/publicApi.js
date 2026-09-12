@@ -1,7 +1,37 @@
 import axios from 'axios'
 import { IMG_FALLBACK } from '../utils/image'
+import { customerToken } from './customerApi'
 
 const publicApi = axios.create({ baseURL: '/api/public', timeout: 15000 })
+
+// 公开接口本身不需要登录，但「买家评价」列表带了顾客 token 后会多返回 is_mine / can_edit，
+// 前端据此决定「编辑 / 删除」按钮是否展示（真正的权限校验始终在后端）。
+// token 失效时后端按游客处理、绝不返回 401，所以这里可以放心无条件下发。
+publicApi.interceptors.request.use(config => {
+  const token = customerToken()
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// 评价数据适配：后端已算好 is_mine / can_edit / edited（见 server/utils/review.js 的 publicReview），
+// 这里只补齐空值兜底，让组件里不必到处写 ?? 。
+export function adaptReview(raw) {
+  return {
+    id: raw.id,
+    productId: raw.product_id,
+    customerName: raw.customer_name || '',
+    avatarUrl: raw.avatar_url || '',
+    rating: Number(raw.rating) || 0,
+    content: raw.content || '',
+    images: Array.isArray(raw.images) ? raw.images.filter(Boolean) : [],
+    isPurchased: Boolean(raw.is_purchased),
+    isMine: Boolean(raw.is_mine),
+    canEdit: Boolean(raw.can_edit),
+    edited: Boolean(raw.edited),
+    createdAt: raw.created_at || '',
+    updatedAt: raw.updated_at || raw.created_at || '',
+  }
+}
 
 // 适配：将后端商品格式转换为前端组件期望的格式。
 // 购物车（stores/cart.js）读取服务端购物车时复用同一个适配器，
@@ -55,13 +85,26 @@ export async function fetchProduct(id) {
 
 // 商品详情页「买家评价」：返回已显示的评论列表 + 评分概览（平均分 / 各星级条数）。
 // 后端只返回 status = 1 的评论，顾客注销后仍以昵称快照展示。
+// 已登录时会带上 is_mine / can_edit，供页面展示「编辑 / 删除」入口。
 export async function fetchProductReviews(productId, params = {}) {
   const { data } = await publicApi.get(`/products/${productId}/reviews`, { params })
-  return { reviews: data.data, summary: data.summary, pagination: data.pagination }
+  return { reviews: (data.data || []).map(adaptReview), summary: data.summary, pagination: data.pagination }
 }
 
 export async function fetchSettings() {
   const { data } = await publicApi.get('/settings')
+  return data.data
+}
+
+// 只读汇率列表：语言 store 启动时拉取，用于把人民币价格换算成当前语言的展示货币
+export async function fetchExchangeRates() {
+  const { data } = await publicApi.get('/exchange-rates')
+  return data.data
+}
+
+// 只读运费列表：语言 store 启动时拉取，用于商品详情页按语言展示「预计运费」
+export async function fetchShippingRates() {
+  const { data } = await publicApi.get('/shipping-rates')
   return data.data
 }
 

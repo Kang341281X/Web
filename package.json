@@ -30,6 +30,7 @@
     "multer": "^2.3.0",
     "mysql2": "^3.24.3",
     "pinia": "latest",
+    "svg-captcha": "^1.4.0",
     "vite": "latest",
     "vue": "latest",
     "vue-router": "latest",

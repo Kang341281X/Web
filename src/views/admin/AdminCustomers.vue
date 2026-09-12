@@ -139,7 +139,7 @@ onMounted(load)
             <el-avatar :src="resolve(row.avatar_url)"><template #default>{{ displayName(row).slice(0, 1) }}</template></el-avatar>
             <div>
               <div>{{ displayName(row) }}</div>
-              <small>{{ row.phone }}</small>
+              <small>{{ row.username || '-' }} · {{ row.phone }}</small>
             </div>
           </div>
         </template>
@@ -165,6 +165,7 @@ onMounted(load)
     <div v-loading="detailLoading" class="customer-detail">
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="昵称">{{ displayName(detail) }}</el-descriptions-item>
+        <el-descriptions-item label="用户名">{{ detail?.username || '-' }}</el-descriptions-item>
         <el-descriptions-item label="手机号">{{ detail?.phone || '-' }}</el-descriptions-item>
         <el-descriptions-item label="邮箱">{{ detail?.email || '-' }}</el-descriptions-item>
         <el-descriptions-item label="账号状态"><el-tag :type="detail?.status ? 'success' : 'danger'">{{ detail?.status ? '启用' : '禁用' }}</el-tag></el-descriptions-item>

@@ -15,13 +15,21 @@ import importsRouter, { startImportCleanupTask } from './routes/imports.js'
 import logsRouter from './routes/logs.js'
 import settingsRouter from './routes/settings.js'
 import publicRouter from './routes/public.js'
+// 汇率设置：后台管理挂在 /api/admin/exchange-rates，前台只读挂在 /api/public/exchange-rates
+import { adminRouter as adminExchangeRatesRouter, publicRouter as publicExchangeRatesRouter } from './routes/exchangeRates.js'
+// 运费设置：后台管理挂在 /api/admin/shipping-rates，前台只读挂在 /api/public/shipping-rates
+import { adminRouter as adminShippingRatesRouter, publicRouter as publicShippingRatesRouter } from './routes/shippingRates.js'
 // 商品评论：后台管理（/api/admin-reviews）与前台按商品读取（/api/public/products/:id/reviews）
 import { adminRouter as adminReviewsRouter, publicRouter as publicReviewsRouter } from './routes/reviews.js'
 import checkoutRouter from './routes/checkout.js'
+// 图形验证码：一份实现挂在 /api/customer（前台）与 /api（后台）两个前缀下
+import captchaRouter from './routes/captcha.js'
 import customerRouter from './routes/customer.js'
 import customerAddressRouter from './routes/customerAddress.js'
 import customerCartRouter from './routes/customerCart.js'
 import customerFavoriteRouter from './routes/customerFavorite.js'
+import customerOrderRouter from './routes/customerOrder.js'
+import customerReviewRouter from './routes/customerReview.js'
 
 const app = express()
 const port = Number(process.env.PORT || 3001)
@@ -62,13 +70,22 @@ app.use('/api/products', productsRouter)
 app.use('/api/products', importsRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/settings', settingsRouter)
+app.use('/api/admin/exchange-rates', adminExchangeRatesRouter)
+app.use('/api/admin/shipping-rates', adminShippingRatesRouter)
 app.use('/api/public', publicRouter)
+app.use('/api/public/exchange-rates', publicExchangeRatesRouter)
+app.use('/api/public/shipping-rates', publicShippingRatesRouter)
 app.use('/api/public', publicReviewsRouter)
 app.use('/api/public', checkoutRouter)
+// 验证码签发：/api/customer/captcha（前台顾客登录）与 /api/captcha（后台管理员登录）共用同一实现
+app.use('/api/customer', captchaRouter)
+app.use('/api', captchaRouter)
 app.use('/api/customer', customerRouter)
 app.use('/api/customer/addresses', customerAddressRouter)
 app.use('/api/customer/cart', customerCartRouter)
 app.use('/api/customer/favorites', customerFavoriteRouter)
+app.use('/api/customer/orders', customerOrderRouter)
+app.use('/api/customer', customerReviewRouter)
 app.use((err, _req, res, _next) => {
   console.error(err)
   if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ success: false, message: '图片大小不能超过 5MB' })

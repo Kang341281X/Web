@@ -8,6 +8,21 @@ const formRef = ref(null); const loading = ref(false); const saving = ref(false)
 const form = reactive({ contact_email: '', contact_email2: '', contact_phone: '', contact_phone2: '' })
 const labels = { contact_email: '联系邮箱', contact_email2: '联系邮箱2', contact_phone: '联系电话', contact_phone2: '联系电话2' }
 
+const activeTab = ref('general')
+
+// 汇率设置：商品价格以人民币为基准，这里维护「1 人民币可兑换的目标货币数量」
+const rates = ref([])
+const ratesLoading = ref(false)
+const savingLocale = ref(null)
+const rateDrafts = reactive({})
+
+// 运费设置：按「语言分组」（区域）维护人民币预估运费，0 表示包邮
+const shippingRates = ref([])
+const shippingLoading = ref(false)
+const savingRegion = ref(null)
+const shippingDrafts = reactive({})
+const REGION_LABELS = { CN: '中国大陆', TW: '中国台湾', JP: '日本', KR: '韩国', OTHER: '其他海外地区' }
+
 // 社交媒体：本地暂存，点「保存修改」后统一提交
 const socials = ref([])
 const socialLoading = ref(false)
@@ -160,7 +175,58 @@ async function saveSocial() {
   } finally { savingSocial.value = false }
 }
 
-onMounted(() => { load(); loadSocials() })
+function isRateDirty(row) {
+  return Number(rateDrafts[row.locale]) !== Number(row.rate_from_cny)
+}
+
+async function loadRates() {
+  ratesLoading.value = true
+  try {
+    const { data } = await api.get('/admin/exchange-rates')
+    rates.value = data.data
+    for (const item of data.data) rateDrafts[item.locale] = String(item.rate_from_cny)
+  } catch (error) { ElMessage.error(error.response?.data?.message || '汇率加载失败') } finally { ratesLoading.value = false }
+}
+
+async function saveRate(row) {
+  const value = Number(rateDrafts[row.locale])
+  if (!Number.isFinite(value) || value <= 0) { ElMessage.error('汇率必须是大于 0 的数字'); return }
+  savingLocale.value = row.locale
+  try {
+    const { data } = await api.put(`/admin/exchange-rates/${row.locale}`, { rate_from_cny: value })
+    const index = rates.value.findIndex(item => item.locale === row.locale)
+    if (index !== -1) rates.value[index] = data.data
+    rateDrafts[row.locale] = String(data.data.rate_from_cny)
+    ElMessage.success('汇率已保存')
+  } catch (error) { ElMessage.error(error.response?.data?.message || '保存失败') } finally { savingLocale.value = null }
+}
+
+function isShippingDirty(row) {
+  return Number(shippingDrafts[row.region_key]) !== Number(row.fee_cny)
+}
+
+async function loadShippingRates() {
+  shippingLoading.value = true
+  try {
+    const { data } = await api.get('/admin/shipping-rates')
+    shippingRates.value = data.data
+    for (const item of data.data) shippingDrafts[item.region_key] = String(item.fee_cny)
+  } catch (error) { ElMessage.error(error.response?.data?.message || '运费加载失败') } finally { shippingLoading.value = false }
+}
+
+async function saveShippingRate(row) {
+  const value = Number(shippingDrafts[row.region_key])
+  if (!Number.isFinite(value) || value < 0) { ElMessage.error('运费必须是大于或等于 0 的数字'); return }
+  savingRegion.value = row.region_key
+  try {
+    const { data } = await api.put('/admin/shipping-rates', { rates: [{ region_key: row.region_key, fee_cny: value }] })
+    shippingRates.value = data.data
+    for (const item of data.data) shippingDrafts[item.region_key] = String(item.fee_cny)
+    ElMessage.success('运费已保存')
+  } catch (error) { ElMessage.error(error.response?.data?.message || '保存失败') } finally { savingRegion.value = null }
+}
+
+onMounted(() => { load(); loadSocials(); loadRates(); loadShippingRates() })
 onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
 </script>
 
@@ -169,10 +235,12 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
     <template #header>
       <div class="page-header">
         <span>其他设置</span>
-        <el-button type="primary" :loading="saving" @click="save">保存设置</el-button>
+        <el-button v-if="activeTab === 'general'" type="primary" :loading="saving" @click="save">保存设置</el-button>
       </div>
     </template>
 
+    <el-tabs v-model="activeTab">
+      <el-tab-pane label="联系方式与社交媒体" name="general">
     <el-alert type="info" :closable="false" show-icon style="margin-bottom: 20px">
       <template #title>
         这些联系方式将显示在购物网站底部，上线前请替换为真实数据。
@@ -235,6 +303,65 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
         </div>
       </div>
     </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="汇率设置" name="rates">
+        <el-alert type="info" :closable="false" show-icon style="margin-bottom: 20px">
+          <template #title>
+            价格以人民币为基准存储；下面设置的是「1 人民币可兑换的目标货币数量」，前台按当前语言实时换算展示。
+          </template>
+        </el-alert>
+
+        <el-table :data="rates" v-loading="ratesLoading" style="max-width: 780px">
+          <el-table-column prop="locale" label="语言" width="110" />
+          <el-table-column prop="currency_code" label="币种" width="100" />
+          <el-table-column prop="currency_symbol" label="符号" width="90" />
+          <el-table-column label="汇率（1 人民币 =）" width="220">
+            <template #default="{ row }">
+              <el-input v-model="rateDrafts[row.locale]" type="number" min="0" step="0.01">
+                <template #append>{{ row.currency_code }}</template>
+              </el-input>
+            </template>
+          </el-table-column>
+          <el-table-column prop="updated_at" label="更新时间" min-width="180" />
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button type="primary" link :loading="savingLocale === row.locale" :disabled="!isRateDirty(row)" @click="saveRate(row)">保存</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
+
+      <el-tab-pane label="运费设置" name="shipping">
+        <el-alert type="info" :closable="false" show-icon style="margin-bottom: 20px">
+          <template #title>
+            本站只按界面语言区分用户、不采集具体收货国家，运费按「语言分组」做近似估算；填 0 表示包邮。前台会注明「预估运费，实际以物流商核算为准」。
+          </template>
+        </el-alert>
+
+        <el-table :data="shippingRates" v-loading="shippingLoading" style="max-width: 860px">
+          <el-table-column label="区域" width="150">
+            <template #default="{ row }">{{ REGION_LABELS[row.region_key] || row.region_key }}</template>
+          </el-table-column>
+          <el-table-column prop="locale" label="语言" width="110" />
+          <el-table-column label="预估运费（人民币）" width="230">
+            <template #default="{ row }">
+              <el-input v-model="shippingDrafts[row.region_key]" type="number" min="0" step="1">
+                <template #append>¥</template>
+              </el-input>
+            </template>
+          </el-table-column>
+          <el-table-column prop="note" label="说明" min-width="180" />
+          <el-table-column prop="updated_at" label="更新时间" min-width="170" />
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button type="primary" link :loading="savingRegion === row.region_key" :disabled="!isShippingDirty(row)" @click="saveShippingRate(row)">保存</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <p class="shipping-tip">提示：未单独列出的国家和地区，统一使用「其他海外地区」这一行估算运费。</p>
+      </el-tab-pane>
+    </el-tabs>
   </el-card>
 </template>
 
@@ -257,4 +384,5 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
 .social-bar-hint { font-size: 12px; color: #909399 }
 .social-bar-hint.is-active { color: #e6a23c }
 .social-bar-btns { display: flex; gap: 10px }
+.shipping-tip { margin: 12px 0 0; font-size: 12px; color: #909399 }
 </style>

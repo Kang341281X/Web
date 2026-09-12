@@ -27,6 +27,8 @@ const router = createRouter({
     { path: '/account', component: () => import('../views/Account.vue') },
     // 收货地址管理：个人中心的子模块，同样在页面内部判断登录态
     { path: '/account/addresses', component: () => import('../views/AddressList.vue') },
+    // 我的订单：Header / 抽屉 / 个人中心入口指向此路由，登录态同样在页面内部判断
+    { path: '/orders', component: () => import('../views/Orders.vue') },
     {
       path: '/admin/login',
       component: () => import('../views/admin/AdminLogin.vue'),

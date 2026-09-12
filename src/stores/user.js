@@ -17,10 +17,10 @@ export const useUserStore = defineStore('user', {
     openLogin() { this.isLoginOpen = true },
     closeLogin() { this.isLoginOpen = false },
 
-    // 后台管理员登录
-    async adminLogin(username, password) {
+    // 后台管理员登录（captcha: { captchaId, captchaText }）
+    async adminLogin(username, password, captcha = {}) {
       const auth = useAuth()
-      const result = await auth.login(username, password)
+      const result = await auth.login(username, password, captcha)
       if (result.success) {
         this.adminToken = result.token
         this.adminUser = result.user

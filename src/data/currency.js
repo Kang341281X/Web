@@ -1,13 +1,25 @@
-export const currencyByLocale = {
-  'zh-CN': { symbol: '¥', code: 'CNY', rateFromCny: 1 },
-  'zh-TW': { symbol: 'NT$', code: 'TWD', rateFromCny: 4.4 },
-  en: { symbol: '$', code: 'USD', rateFromCny: 0.14 },
-  ja: { symbol: '¥', code: 'JPY', rateFromCny: 20.5 },
-  ko: { symbol: '₩', code: 'KRW', rateFromCny: 190 },
-  es: { symbol: '€', code: 'EUR', rateFromCny: 0.13 }
+import { reactive } from 'vue'
+
+// 汇率数据不再硬编码，改由后端接口 GET /api/public/exchange-rates（数据库表 exchange_rate）提供。
+// stores/language.js 在应用启动时拉取并调用 setExchangeRates 写入这里；
+// 用 reactive 包裹后，汇率变化会自动触发依赖它的价格计算与模板重新渲染。
+export const currencyByLocale = reactive({})
+
+const FALLBACK = { symbol: '', code: '', rateFromCny: 1 }
+
+/** 用接口返回的汇率列表刷新本地映射，每项形如 { locale, currency_symbol, currency_code, rate_from_cny } */
+export const setExchangeRates = list => {
+  for (const item of list || []) {
+    if (!item?.locale) continue
+    currencyByLocale[item.locale] = {
+      symbol: item.currency_symbol,
+      code: item.currency_code,
+      rateFromCny: Number(item.rate_from_cny),
+    }
+  }
 }
 
-export const getCurrency = locale => currencyByLocale[locale] || currencyByLocale.en
+export const getCurrency = locale => currencyByLocale[locale] || currencyByLocale.en || FALLBACK
 
 /** Convert amount entered in display currency to CNY (product base currency). */
 export const toCny = (amount, locale) => {

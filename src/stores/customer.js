@@ -25,8 +25,8 @@ export const useCustomerStore = defineStore('customer', {
   }),
   getters: {
     isLoggedIn: state => !!state.token,
-    // 优先昵称，其次手机号（后端返回的 phone 已脱敏）
-    displayName: state => state.profile?.nickname || state.profile?.phone || '',
+    // 优先昵称，其次用户名，最后手机号（后端返回的 phone 已脱敏）
+    displayName: state => state.profile?.nickname || state.profile?.username || state.profile?.phone || '',
     avatarUrl: state => state.profile?.avatar_url || '',
   },
   actions: {
@@ -53,11 +53,18 @@ export const useCustomerStore = defineStore('customer', {
       return error.response?.data?.message || fallback
     },
 
-    // 注册：后端只返回顾客资料，不签发 token，需要登录态时请再调用 login
-    async register(phone, password, nickname) {
+    // 后端用 code 标明可程序化处理的失败（目前只有 CAPTCHA_INVALID），
+    // 前端靠它决定「要不要换一张验证码」，而不是去匹配中文提示
+    errorCode(error) {
+      return error.response?.data?.code || ''
+    },
+
+    // 注册：用户名 + 手机号 + 密码（后端只返回顾客资料，不签发 token，需要登录态时请再调用 login）
+    async register({ username, phone, password, nickname }) {
       this.loading = true
       try {
         const { data } = await customerApi.post('/register', {
+          username,
           phone,
           password,
           nickname: nickname || '',
@@ -70,17 +77,28 @@ export const useCustomerStore = defineStore('customer', {
       }
     },
 
-    async login(phone, password) {
+    // 登录账号是用户名（手机号不再参与登录）；captcha: { captchaId, captchaText } 必须携带，否则后端直接拒绝（400 / CAPTCHA_INVALID）
+    async login(username, password, captcha = {}) {
       this.loading = true
       try {
-        const { data } = await customerApi.post('/login', { phone, password })
+        const { data } = await customerApi.post('/login', {
+          username,
+          password,
+          captchaId: captcha.captchaId || '',
+          captchaText: captcha.captchaText || '',
+        })
         this.applySession(data.token, data.user)
         // 登录成功后把游客购物车/收藏合并到服务端，合并结果会覆盖本地状态。
         // 两个同步动作内部已各自兜底错误（失败时保留 localStorage 游客数据），不影响登录结果
         await Promise.all([useCartStore().syncAfterLogin(), useFavoritesStore().syncAfterLogin()])
         return { success: true, message: data.message || '登录成功', user: data.user }
       } catch (error) {
-        return { success: false, message: this.errorMessage(error, '登录失败，请稍后重试') }
+        // 失败时把 code 一并返回：验证码是一次性的，调用方需要据此换一张新图
+        return {
+          success: false,
+          message: this.errorMessage(error, '登录失败，请稍后重试'),
+          code: this.errorCode(error),
+        }
       } finally {
         this.loading = false
       }
@@ -102,11 +120,12 @@ export const useCustomerStore = defineStore('customer', {
       }
     },
 
-    // payload 支持 nickname / email；带 avatar(File) 时走 multipart 上传
+    // payload 支持 nickname / username / email；带 avatar(File) 时走 multipart 上传
     async updateProfile(payload = {}) {
       try {
         const form = new FormData()
         if (payload.nickname !== undefined) form.append('nickname', payload.nickname ?? '')
+        if (payload.username !== undefined) form.append('username', payload.username ?? '')
         if (payload.email !== undefined) form.append('email', payload.email ?? '')
         if (payload.avatar) form.append('avatar', payload.avatar)
         const { data } = await customerApi.put('/profile', form)

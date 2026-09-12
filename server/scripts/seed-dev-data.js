@@ -34,11 +34,13 @@ const SEED_PASSWORD = '123456'
 const SEED_PHONE_PREFIX = '13800000'
 const SEED_EMAIL_PREFIX = 'seed_'
 const SEED_NICKNAME_PREFIX = '测试用户'
+const SEED_USERNAME_PREFIX = 'seeduser'
 const SEED_ORDER_PREFIX = 'SD'
 
 const seedPhones = Array.from({ length: CUSTOMER_COUNT }, (_, index) => `${SEED_PHONE_PREFIX}${String(index + 1).padStart(3, '0')}`)
 const seedEmail = (index) => `${SEED_EMAIL_PREFIX}${String(index + 1).padStart(2, '0')}@example.com`
 const seedNickname = (index) => `${SEED_NICKNAME_PREFIX}${String(index + 1).padStart(2, '0')}`
+const seedUsername = (index) => `${SEED_USERNAME_PREFIX}${String(index + 1).padStart(2, '0')}`
 
 // 订单状态目标分布：pending 20% / confirmed 20% / shipped 20% / completed 30% / cancelled 10%
 const ORDER_STATUS_RATIOS = [
@@ -405,11 +407,11 @@ function cleanup() {
 }
 
 function createCustomers(passwordHash) {
-  const insert = raw.prepare('INSERT INTO customer (phone, email, password, nickname, avatar, status, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, 1, ?, ?)')
+  const insert = raw.prepare('INSERT INTO customer (phone, username, email, password, nickname, avatar, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?)')
   return seedPhones.map((phone, index) => {
     const createdAt = timeWithinDays(120)
-    const info = insert.run(phone, seedEmail(index), passwordHash, seedNickname(index), createdAt, createdAt)
-    return { id: Number(info.lastInsertRowid), phone, nickname: seedNickname(index) }
+    const info = insert.run(phone, seedUsername(index), seedEmail(index), passwordHash, seedNickname(index), createdAt, createdAt)
+    return { id: Number(info.lastInsertRowid), phone, username: seedUsername(index), nickname: seedNickname(index) }
   })
 }
 
@@ -535,7 +537,8 @@ function createOrders(customers, products, addressesByCustomer) {
 }
 
 function createReviews(customers, products, buyersByProduct) {
-  const insert = raw.prepare('INSERT INTO product_review (product_id, customer_id, customer_name, rating, content, images, order_id, status, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?, 1, ?)')
+  // updated_at 显式写入：见 027 迁移，updated_at = created_at 表示「这条评论从未被修改过」
+  const insert = raw.prepare('INSERT INTO product_review (product_id, customer_id, customer_name, rating, content, images, order_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, 1, ?, ?)')
   const updateProduct = raw.prepare('UPDATE product SET rating = ?, review_count = ? WHERE id = ?')
   let total = 0
 
@@ -571,7 +574,8 @@ function createReviews(customers, products, buyersByProduct) {
       })
       const buyer = buyers[index]
       const reviewer = reviewers[index]
-      insert.run(product.id, reviewer.id, reviewer.nickname, rating, content, buyer ? buyer.orderId : null, buyer ? timeAfter(buyer.orderTime, 20) : timeWithinDays(90))
+      const reviewTime = buyer ? timeAfter(buyer.orderTime, 20) : timeWithinDays(90)
+      insert.run(product.id, reviewer.id, reviewer.nickname, rating, content, buyer ? buyer.orderId : null, reviewTime, reviewTime)
       total++
     })
 
@@ -622,7 +626,7 @@ console.log(`[seed:dev] 数据库：${dbPath}`)
 console.log(`[seed:dev] 清理旧假数据：顾客 ${summary.removed.customers} / 地址 ${summary.removed.addresses} / 收藏 ${summary.removed.favorites} / 购物车 ${summary.removed.cartItems} / 订单 ${summary.removed.orders} / 评论 ${summary.removed.reviews}`)
 console.log(`[seed:dev] 生成顾客 ${summary.created.customers}、地址 ${summary.created.addresses}、收藏 ${summary.created.favorites}、购物车项 ${summary.created.cartItems}、订单 ${summary.created.orders}（${statusText}）、评论 ${summary.created.reviews}`)
 console.log(`[seed:dev] 覆盖商品 ${summary.created.ratedProducts} 个，已回写 product.rating / product.review_count`)
-console.log(`[seed:dev] 测试账号：${seedPhones[0]} ~ ${seedPhones[seedPhones.length - 1]}，密码统一 ${SEED_PASSWORD}（昵称 ${seedNickname(0)} ~ ${seedNickname(CUSTOMER_COUNT - 1)}）`)
+console.log(`[seed:dev] 测试账号：用户名 ${seedUsername(0)} ~ ${seedUsername(CUSTOMER_COUNT - 1)}（手机号 ${seedPhones[0]} ~ ${seedPhones[seedPhones.length - 1]}），密码统一 ${SEED_PASSWORD}（昵称 ${seedNickname(0)} ~ ${seedNickname(CUSTOMER_COUNT - 1)}）`)
 // 提醒：迁移 006/009 每次服务启动都会清空并重建商品目录，评论(ON DELETE CASCADE)/收藏/购物车
 // 会随之被清掉。所以正确顺序是「先启动服务，再跑本脚本」，跑完不要再重启后端。
 console.log('[seed:dev] 提示：请先启动后端再执行本脚本；迁移 006/009 会在每次服务启动时重建商品目录，重启后评论/收藏/购物车会被清空')

@@ -9,6 +9,7 @@ import router from './router'
 import { useCartStore } from './stores/cart'
 import { useCustomerStore } from './stores/customer'
 import { useFavoritesStore } from './stores/favorites'
+import { useLanguageStore } from './stores/language'
 import './styles/main.css'
 import './styles/admin.css'
 
@@ -29,5 +30,11 @@ if (useCustomerStore(pinia).isLoggedIn) {
   useCartStore(pinia).restoreFromServer()
   useFavoritesStore(pinia).restoreFromServer()
 }
+
+// 汇率/运费来自后端（exchange_rate、shipping_rate 表）：启动即拉取（先用 localStorage 缓存预热），
+// 之后切换语言或后台调整都会自动重新换算价格与预估运费。
+const language = useLanguageStore(pinia)
+language.loadRates()
+language.loadShipping()
 
 app.mount('#app')

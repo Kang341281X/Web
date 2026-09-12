@@ -1,4 +1,5 @@
 import db from '../config/db.js'
+import { findProduct } from './customerShop.js'
 
 // 订单状态机：取值与 022_customer_order.sql 的 CHECK 约束保持一致。
 //
@@ -44,9 +45,10 @@ export function publicOrderItem(item) {
 
 // 订单详情（主表 + 明细），customer 用 LEFT JOIN 以兼容 customer_id 为空的历史订单。
 // 可传入事务连接复用，管理端 /api/admin-orders 与顾客端订单接口共用同一份输出结构。
+// customer_username / customer_email 是下单时的账号快照（见 026 迁移），不随账号资料变更。
 export async function findOrderDetail(orderId, connection = db) {
   const [rows] = await connection.execute(
-    `SELECT o.id, o.order_no, o.customer_id, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.status, o.remark, o.handled_by, o.handled_by_name, o.created_at, o.updated_at, cu.phone AS customer_phone, cu.nickname AS customer_nickname FROM customer_order o LEFT JOIN customer cu ON cu.id = o.customer_id WHERE o.id = ?`,
+    `SELECT o.id, o.order_no, o.customer_id, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.status, o.remark, o.handled_by, o.handled_by_name, o.created_at, o.updated_at, cu.phone AS customer_phone, cu.nickname AS customer_nickname FROM customer_order o LEFT JOIN customer cu ON cu.id = o.customer_id WHERE o.id = ?`,
     [orderId]
   )
   const order = rows[0]
@@ -104,5 +106,97 @@ export async function changeOrderStatus(orderId, status, { handledBy = null, han
     }
     await connection.commit()
     return { order, changed: true, restored }
+  } catch (error) { await connection.rollback(); throw error } finally { connection.release() }
+}
+
+// 订单号：CO + 年月日时分秒 + 4 位随机数。
+// 种子脚本生成的假订单号以 SD 开头（见 server/scripts/seed-dev-data.js），真实下单固定用 CO 前缀，
+// 两者在库里一眼可区分，也便于排查「某条订单是真实下单还是造的数据」。
+function generateOrderNo() {
+  const now = new Date()
+  const pad = value => String(value).padStart(2, '0')
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  return `CO${stamp}${Math.floor(1000 + Math.random() * 9000)}`
+}
+
+// 顾客下单（事务）：校验并扣减库存 → 写入订单主表 + 明细 → 清空已下单商品对应的购物车项。
+//
+// items 既可来自购物车，也可由前端传入的选中商品（[{ product_id, quantity }]）。
+// 并发安全：库存扣减用「UPDATE ... WHERE stock >= ?」条件更新，只有成功影响 1 行才算扣减成功，
+// 与 changeOrderStatus 里取消回补库存（stock = stock + ?）共用同一张表的行级更新，
+// 任何并发下库存都不会被扣成负数。
+//
+// 不修改 product.sales：与 restoreOrderStock 的口径保持一致（销量按历史累计售出统计，取消不回滚），
+// 故下单/取消都只操作 stock，取消时能精确回补下单扣掉的数量。
+export async function createCustomerOrder({ customer, address, items, remark = null }) {
+  if (!address) throw Object.assign(new Error('请先选择收货地址'), { status: 400 })
+
+  // 归并重复商品，并按商品 id 升序处理，保证同一事务内扣减顺序稳定、减少并发写同表时的冲突几率
+  const merged = new Map()
+  for (const item of items || []) {
+    const productId = Number(item?.product_id)
+    if (!Number.isInteger(productId) || productId <= 0) continue
+    const quantity = Math.trunc(Number(item?.quantity))
+    if (!Number.isInteger(quantity) || quantity < 1) throw Object.assign(new Error('商品数量不正确'), { status: 400 })
+    merged.set(productId, (merged.get(productId) || 0) + quantity)
+  }
+  if (!merged.size) throw Object.assign(new Error('请先选择要购买的商品'), { status: 400 })
+
+  const connection = await db.getConnection()
+  try {
+    await connection.beginTransaction()
+    const lines = []
+    let totalAmount = 0
+
+    for (const [productId, quantity] of [...merged].sort((a, b) => a[0] - b[0])) {
+      const product = await findProduct(productId, connection)
+      if (!product) throw Object.assign(new Error('商品不存在或已下架'), { status: 400 })
+      if (!product.status) throw Object.assign(new Error(`「${product.name}」已下架`), { status: 400 })
+
+      const [result] = await connection.execute(
+        "UPDATE product SET stock = stock - ?, updated_at = datetime('now') WHERE id = ? AND stock >= ?",
+        [quantity, productId, quantity]
+      )
+      if (!result.affectedRows) throw Object.assign(new Error(`「${product.name}」库存不足`), { status: 400 })
+
+      const price = Number(product.price)
+      const subtotal = Math.round(price * quantity * 100) / 100
+      totalAmount = Math.round((totalAmount + subtotal) * 100) / 100
+      lines.push({ product_id: productId, product_name: product.name, product_sku: product.sku, price, quantity, subtotal })
+    }
+
+    const receiverAddress = [address.province, address.city, address.district, address.detail_address].filter(Boolean).join(' ')
+    // customer_username 取昵称快照，昵称为空时退化为手机号，保证后台始终有可识别的下单人信息
+    const [orderResult] = await connection.execute(
+      `INSERT INTO customer_order (order_no, customer_id, customer_username, customer_email, receiver_name, receiver_phone, receiver_address, total_amount, status, remark)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      [
+        generateOrderNo(),
+        customer.id,
+        customer.nickname || customer.phone || null,
+        customer.email || null,
+        address.receiver_name,
+        address.receiver_phone,
+        receiverAddress,
+        totalAmount,
+        remark,
+      ]
+    )
+    const orderId = orderResult.insertId
+
+    for (const line of lines) {
+      await connection.execute(
+        'INSERT INTO order_item (order_id, product_id, product_name, product_sku, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [orderId, line.product_id, line.product_name, line.product_sku, line.price, line.quantity, line.subtotal]
+      )
+    }
+
+    // 只清掉本次下单的商品，购物车中未下单的其它商品保留
+    for (const productId of merged.keys()) {
+      await connection.execute('DELETE FROM cart_item WHERE customer_id = ? AND product_id = ?', [customer.id, productId])
+    }
+
+    await connection.commit()
+    return findOrderDetail(orderId)
   } catch (error) { await connection.rollback(); throw error } finally { connection.release() }
 }

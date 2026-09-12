@@ -1,10 +1,11 @@
 <script setup>
-import { ref, reactive } from 'vue'
+import { onMounted, ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '../../stores/user'
+import { fetchAdminCaptcha } from '../../services/captcha'
 import {
-  User, Lock, View, Hide
+  User, Lock, View, Hide, Key
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -13,8 +14,30 @@ const userStore = useUserStore()
 const loginForm = reactive({
   username: localStorage.getItem('admin_saved_username') || '',
   password: '',
+  captchaText: '',
   remember: !!localStorage.getItem('admin_saved_username')
 })
+
+// 图形验证码：与前台顾客登录共用后端同一套实现，只是走了 /api/captcha
+const captcha = reactive({ id: '', image: '', loading: false })
+
+async function refreshCaptcha() {
+  captcha.loading = true
+  loginForm.captchaText = ''
+  try {
+    const data = await fetchAdminCaptcha()
+    captcha.id = data.captchaId
+    captcha.image = data.image
+  } catch {
+    captcha.id = ''
+    captcha.image = ''
+  } finally {
+    captcha.loading = false
+  }
+}
+
+// 进入登录页就取一张，不必等用户点一下
+onMounted(refreshCaptcha)
 
 const rules = {
   username: [
@@ -24,6 +47,9 @@ const rules = {
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, max: 30, message: '密码长度 6-30 个字符', trigger: 'blur' }
+  ],
+  captchaText: [
+    { required: true, message: '请输入验证码', trigger: 'blur' }
   ]
 }
 
@@ -36,7 +62,10 @@ async function handleLogin() {
   await formRef.value.validate(async (valid) => {
     if (!valid) return
     loading.value = true
-    const result = await userStore.adminLogin(loginForm.username, loginForm.password)
+    const result = await userStore.adminLogin(loginForm.username, loginForm.password, {
+      captchaId: captcha.id,
+      captchaText: loginForm.captchaText.trim()
+    })
     loading.value = false
     if (result.success) {
       if (loginForm.remember) {
@@ -48,6 +77,8 @@ async function handleLogin() {
       router.push('/admin')
     } else {
       ElMessage.error(result.message || '登录失败')
+      // 验证码是一次性的，任何一次失败都已经把它作废，必须换一张再让用户重试
+      refreshCaptcha()
     }
   })
 }
@@ -104,6 +135,29 @@ function goHome() {
               </el-icon>
             </template>
           </el-input>
+        </el-form-item>
+
+        <el-form-item prop="captchaText">
+          <div class="login-captcha">
+            <el-input
+              v-model="loginForm.captchaText"
+              name="captcha"
+              autocomplete="off"
+              maxlength="8"
+              placeholder="请输入验证码"
+              :prefix-icon="Key"
+              @keyup.enter="handleLogin"
+            />
+            <img
+              v-if="captcha.image"
+              class="login-captcha-image"
+              :src="captcha.image"
+              alt="验证码"
+              title="点击换一张"
+              @click="refreshCaptcha"
+            />
+            <el-button v-else class="login-captcha-image" :loading="captcha.loading" @click="refreshCaptcha">获取验证码</el-button>
+          </div>
         </el-form-item>
 
         <el-form-item>
@@ -166,6 +220,30 @@ function goHome() {
   justify-content: space-between;
   align-items: center;
   margin-top: 20px;
+}
+/* 图形验证码：输入框 + 可点击刷新的图片同一行 */
+.login-captcha {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+}
+.login-captcha :deep(.el-input) {
+  flex: 1;
+  min-width: 0;
+}
+.login-captcha-image {
+  flex: none;
+  width: 118px;
+  height: 40px;
+  display: block;
+  margin-left: 0;
+  padding: 0;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #f5f5f5;
+  cursor: pointer;
+  object-fit: cover;
 }
 .login-back {
   font-size: 13px;

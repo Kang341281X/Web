@@ -9,7 +9,7 @@ import storageService from '../services/storageService.js'
 const router = Router()
 router.use(requireAuth, requirePasswordChanged)
 
-const fields = 'id, phone, email, nickname, avatar, status, last_login_time, created_at, updated_at'
+const fields = 'id, phone, username, email, nickname, avatar, status, last_login_time, created_at, updated_at'
 const addressFields = 'id, customer_id, receiver_name, receiver_phone, province, city, district, detail_address, is_default, created_at, updated_at'
 
 // 管理端不复用顾客端的 publicCustomer：那边会把手机号脱敏成 138****1234，
@@ -24,7 +24,7 @@ function parseId(value) {
   return Number.isInteger(id) && id > 0 ? id : null
 }
 
-// 顾客列表：分页 + 关键词（手机号 / 昵称 / 邮箱模糊匹配）
+// 顾客列表：分页 + 关键词（用户名 / 手机号 / 昵称 / 邮箱模糊匹配）
 router.get('/', async (req, res, next) => {
   try {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
@@ -36,8 +36,8 @@ router.get('/', async (req, res, next) => {
     const params = []
     if (keyword) {
       const like = `%${keyword}%`
-      clauses.push('(phone LIKE ? OR nickname LIKE ? OR email LIKE ?)')
-      params.push(like, like, like)
+      clauses.push('(username LIKE ? OR phone LIKE ? OR nickname LIKE ? OR email LIKE ?)')
+      params.push(like, like, like, like)
     }
     // 可选的状态筛选，仅接受 0/1，便于后台单独查看被禁用的账号
     if (status === '0' || status === '1') { clauses.push('status = ?'); params.push(Number(status)) }
