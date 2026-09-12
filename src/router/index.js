@@ -22,6 +22,11 @@ const router = createRouter({
     { path: '/search', component: Search },
     { path: '/favorites', component: Favorites },
     { path: '/cart', component: Cart },
+    // 前台顾客路由：登录态在页面内部判断（见 views/Account.vue），不用 admin 的 requiresAuth。
+    // 页面依赖裁剪组件（cropperjs），单独分包，不增加前台首屏体积。
+    { path: '/account', component: () => import('../views/Account.vue') },
+    // 收货地址管理：个人中心的子模块，同样在页面内部判断登录态
+    { path: '/account/addresses', component: () => import('../views/AddressList.vue') },
     {
       path: '/admin/login',
       component: () => import('../views/admin/AdminLogin.vue'),

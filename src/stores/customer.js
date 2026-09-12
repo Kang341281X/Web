@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import customerApi, { CUSTOMER_TOKEN_KEY, CUSTOMER_USER_KEY, setUnauthorizedHandler } from '../services/customerApi'
+import { useAddressStore } from './address'
 
 // 读取本地缓存的顾客资料（内容损坏时忽略，后续可用 fetchProfile 重新拉取）
 function readStoredProfile() {
@@ -29,12 +30,15 @@ export const useCustomerStore = defineStore('customer', {
   actions: {
     // state 与 localStorage 一起更新，避免刷新后登录态不一致
     applySession(token, profile) {
+      // 换顾客（含退出登录）时清掉上一个账号的收货地址，避免串号
+      const previousCustomerId = this.profile?.id ?? null
       this.token = token || ''
       this.profile = profile || null
       if (this.token) localStorage.setItem(CUSTOMER_TOKEN_KEY, this.token)
       else localStorage.removeItem(CUSTOMER_TOKEN_KEY)
       if (this.profile) localStorage.setItem(CUSTOMER_USER_KEY, JSON.stringify(this.profile))
       else localStorage.removeItem(CUSTOMER_USER_KEY)
+      if ((profile?.id ?? null) !== previousCustomerId) useAddressStore().reset()
     },
 
     errorMessage(error, fallback) {
