@@ -1,9 +1,8 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Goods, DataLine, Setting, Document, User, List, Avatar, Tickets, ChatDotRound } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
-import api from '../../services/api'
 
 const props = defineProps({
   collapsed: { type: Boolean, default: false },
@@ -13,22 +12,10 @@ const emit = defineEmits(['select'])
 
 const route = useRoute()
 const userStore = useUserStore()
-const menuCategories = ref([])
 
 const isSuperAdmin = computed(() => userStore.adminUser?.role === 'super_admin')
-const activeMenu = computed(() => route.fullPath)
-
-async function loadMenuCategories() {
-  try {
-    const { data } = await api.get('/categories')
-    menuCategories.value = (data.data || []).filter(category => category.status)
-  } catch {
-    // 初始密码尚未修改或网络异常时，保留主菜单；页面本身会给出具体错误。
-  }
-}
-onMounted(loadMenuCategories)
-watch(() => userStore.adminUser?.must_change_password, value => { if (!value) loadMenuCategories() })
-watch(() => route.fullPath, () => loadMenuCategories())
+// 菜单全部是一级路径，按 path 高亮，避免链接带上查询参数（如 ?category_id=）时菜单失去选中态
+const activeMenu = computed(() => route.path)
 </script>
 
 <template>
@@ -56,21 +43,11 @@ watch(() => route.fullPath, () => loadMenuCategories())
         <template #title>管理员信息</template>
       </el-menu-item>
 
-      <!-- 商品管理：二级菜单，子项为“全部商品”+ 各分类的“{分类名}商品信息” -->
-      <el-sub-menu index="products-group">
-        <template #title>
-          <el-icon><Goods /></el-icon>
-          <span>商品管理</span>
-        </template>
-        <el-menu-item index="/admin/products">全部商品</el-menu-item>
-        <el-menu-item
-          v-for="category in menuCategories"
-          :key="category.id"
-          :index="`/admin/products?category_id=${category.id}`"
-        >
-          {{ category.name }}商品信息
-        </el-menu-item>
-      </el-sub-menu>
+      <!-- 商品管理：一级菜单，点击直接进入全部商品列表 -->
+      <el-menu-item index="/admin/products">
+        <el-icon><Goods /></el-icon>
+        <template #title>商品管理</template>
+      </el-menu-item>
 
       <el-menu-item index="/admin/customers">
         <el-icon><Avatar /></el-icon>

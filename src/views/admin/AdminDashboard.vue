@@ -2,12 +2,12 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../../services/api'
-import { Goods, Files, Box, Warning, Tickets, Bell, User } from '@element-plus/icons-vue'
+import { Goods, Warning, Tickets, Bell, User } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const loading = ref(false)
 const stats = ref({
-  totalProducts: 0, totalCategories: 0, monthNew: 0, lowStock: 0, lowStockThreshold: 10,
+  totalProducts: 0, lowStock: 0, lowStockThreshold: 10,
   todayOrders: 0, pendingOrders: 0, totalCustomers: 0,
 })
 const recentLogs = ref([])
@@ -34,8 +34,6 @@ async function loadDashboard() {
 
     stats.value = {
       totalProducts: productStats.total_products,
-      totalCategories: productStats.total_categories,
-      monthNew: productStats.month_new,
       lowStock: productStats.low_stock,
       lowStockThreshold: productStats.low_stock_threshold,
       todayOrders: orderStats.today_orders,
@@ -102,18 +100,6 @@ onMounted(loadDashboard)
       </el-card>
       <el-card shadow="hover" body-style="padding: 20px;">
         <div class="dashboard-stat-card">
-          <div class="dashboard-stat-icon dashboard-stat-icon--green"><el-icon :size="28"><Files /></el-icon></div>
-          <div><div class="dashboard-stat-value">{{ stats.totalCategories }}</div><div class="dashboard-stat-label">分类数</div></div>
-        </div>
-      </el-card>
-      <el-card shadow="hover" body-style="padding: 20px;">
-        <div class="dashboard-stat-card">
-          <div class="dashboard-stat-icon dashboard-stat-icon--orange"><el-icon :size="28"><Box /></el-icon></div>
-          <div><div class="dashboard-stat-value">{{ stats.monthNew }}</div><div class="dashboard-stat-label">本月新增</div></div>
-        </div>
-      </el-card>
-      <el-card shadow="hover" body-style="padding: 20px;">
-        <div class="dashboard-stat-card">
           <div class="dashboard-stat-icon dashboard-stat-icon--red"><el-icon :size="28"><Warning /></el-icon></div>
           <div><div class="dashboard-stat-value">{{ stats.lowStock }}</div><div class="dashboard-stat-label">低库存预警(&lt;{{ stats.lowStockThreshold }})</div></div>
         </div>
@@ -175,12 +161,11 @@ onMounted(loadDashboard)
 </template>
 
 <style scoped>
-.dashboard-stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px }
+/* 统计卡片：桌面端固定为一行，用 fr 均分，各卡片宽度之和始终跟随容器（窗口）宽度；窄屏逐级降列 */
+.dashboard-stat-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px }
 .dashboard-stat-card { display: flex; align-items: center; gap: 14px }
 .dashboard-stat-icon { width: 56px; height: 56px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: none }
 .dashboard-stat-icon--blue { background: #ecf5ff; color: #409eff }
-.dashboard-stat-icon--green { background: #f0f9eb; color: #67c23a }
-.dashboard-stat-icon--orange { background: #fdf6ec; color: #e6a23c }
 .dashboard-stat-icon--red { background: #fef0f0; color: #f56c6c }
 .dashboard-stat-icon--indigo { background: #eef2ff; color: #6366f1 }
 .dashboard-stat-icon--magenta { background: #fff0f6; color: #eb2f96 }
@@ -189,4 +174,8 @@ onMounted(loadDashboard)
 .dashboard-stat-clickable { cursor: pointer }
 .dashboard-stat-value { font-size: 28px; font-weight: 700; color: #303133 }
 .dashboard-stat-label { font-size: 13px; color: #909399; margin-top: 2px }
+/* 窄屏降列：3 列 → 2 列 → 单列，避免卡片被压得过窄 */
+@media (max-width: 1200px) { .dashboard-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) } }
+@media (max-width: 900px) { .dashboard-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+@media (max-width: 560px) { .dashboard-stat-grid { grid-template-columns: 1fr } }
 </style>

@@ -1,18 +1,23 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
+import { useUserStore } from '../../stores/user'
 import { resolve } from '../../utils/image'
 import { formatAddress } from '../../utils/address'
 import { formatAmount, orderStatusTag } from '../../utils/order'
 
 /**
  * 后台「用户管理」：顾客列表 + 详情（收货地址、历史订单概览）+ 启用/禁用。
- * 顾客资料与密码只能由顾客本人修改，后台刻意不提供编辑入口
- * （见 server/routes/customers.js 的注释）。
+ * 编辑顾客资料只能由顾客本人操作（见 server/routes/customers.js 的注释）；
+ * 登录密码可由超级管理员在详情弹窗里一键重置为手机号。
  */
 const router = useRouter()
+const userStore = useUserStore()
+
+// 只有超级管理员能重置顾客登录密码：普通管理员连入口都看不到，后端还有 requireSuperAdmin 兜底
+const isSuperAdmin = computed(() => userStore.adminUser?.role === 'super_admin')
 
 const loading = ref(false)
 const list = ref([])
@@ -27,6 +32,7 @@ const detail = ref(null)
 const recentOrders = ref([])
 const ordersLoading = ref(false)
 const statusSaving = ref(false)
+const resetSaving = ref(false)
 
 async function load() {
   loading.value = true
@@ -114,6 +120,34 @@ async function toggleStatus(customer) {
   }
 }
 
+/**
+ * 一键重置顾客登录密码为手机号（仅超级管理员）。
+ * 新密码就是明文手机号，等于把账号交回给掌握该手机号的人，所以同样必须二次确认。
+ */
+async function resetPassword(customer) {
+  if (!customer) return
+  const phone = String(customer.phone || '').trim()
+  if (!phone) return ElMessage.warning('该顾客未登记手机号，无法重置为手机号')
+  const name = customer.nickname || phone
+  try {
+    await ElMessageBox.confirm(
+      `将把「${name}」的登录密码重置为手机号 ${phone}。重置后请提醒对方使用该手机号作为新密码登录，确认重置吗？`,
+      '重置登录密码',
+      { type: 'warning', confirmButtonText: '确认重置', cancelButtonText: '取消' }
+    )
+  } catch { return }
+
+  resetSaving.value = true
+  try {
+    const { data } = await api.post(`/admin-customers/${customer.id}/reset-password`)
+    ElMessage.success(data.message || '密码已重置为手机号')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '重置密码失败')
+  } finally {
+    resetSaving.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -132,26 +166,27 @@ onMounted(load)
     </div>
 
     <el-table v-loading="loading" :data="list" height="100%" stripe style="width: 100%">
-      <el-table-column label="序号" width="70"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
+      <!-- 各列统一用 min-width：多余宽度会按最小宽度比例分摊到每一列，
+           不会只把「顾客」「邮箱」两列撑得过宽、其余列挤在一起 -->
+      <el-table-column label="序号" min-width="80" align="center"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
       <el-table-column label="顾客" min-width="200">
         <template #default="{ row }">
           <div class="user-cell">
             <el-avatar :src="resolve(row.avatar_url)"><template #default>{{ displayName(row).slice(0, 1) }}</template></el-avatar>
             <div>
               <div>{{ displayName(row) }}</div>
-              <small>{{ row.username || '-' }} · {{ row.phone }}</small>
+              <small>{{ row.username || '-' }}</small>
             </div>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="邮箱" min-width="180"><template #default="{ row }">{{ row.email || '-' }}</template></el-table-column>
-      <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'danger'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
-      <el-table-column label="注册时间" width="170"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-      <el-table-column label="最近登录" width="170"><template #default="{ row }">{{ formatTime(row.last_login_time) }}</template></el-table-column>
-      <el-table-column label="操作" width="140" fixed="right">
+      <el-table-column label="手机号" min-width="140" align="center"><template #default="{ row }">{{ row.phone || '-' }}</template></el-table-column>
+      <el-table-column label="邮箱" min-width="200"><template #default="{ row }">{{ row.email || '-' }}</template></el-table-column>
+      <el-table-column label="状态" min-width="110" align="center"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'danger'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
+      <el-table-column label="注册时间" min-width="180" align="center"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+      <el-table-column label="操作" min-width="110" align="center" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-          <el-button link :type="row.status ? 'danger' : 'success'" @click="toggleStatus(row)">{{ row.status ? '禁用' : '启用' }}</el-button>
+          <el-button link type="primary" @click="openDetail(row)">查看</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -204,7 +239,9 @@ onMounted(load)
 
     <template #footer>
       <el-button @click="detailVisible = false">关闭</el-button>
+      <!-- 启用/禁用是破坏性操作，沿用二次确认；重置密码入口仅超级管理员可见 -->
       <el-button :type="detail?.status ? 'danger' : 'success'" :loading="statusSaving" @click="toggleStatus(detail)">{{ detail?.status ? '禁用该账号' : '启用该账号' }}</el-button>
+      <el-button v-if="isSuperAdmin" type="primary" plain :loading="resetSaving" @click="resetPassword(detail)">重置密码为手机号</el-button>
     </template>
   </el-dialog>
 </template>

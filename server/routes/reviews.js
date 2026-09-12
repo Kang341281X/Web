@@ -56,7 +56,7 @@ function adminReviewRow(review) {
   }
 }
 
-// 评论列表：分页 + 关键词（商品名 / 评价人 / 评论内容）+ 评分 / 状态 / 指定商品筛选
+// 评论列表：分页 + 关键词（商品名 / 评价人昵称 / 评价人手机号 / 评论内容）+ 评分 / 状态 / 指定商品筛选
 adminRouter.get('/', async (req, res, next) => {
   try {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
@@ -70,8 +70,9 @@ adminRouter.get('/', async (req, res, next) => {
     const params = []
     if (keyword) {
       const like = `%${keyword}%`
-      clauses.push('(p.name LIKE ? OR r.customer_name LIKE ? OR r.content LIKE ?)')
-      params.push(like, like, like)
+      // 带上 cu.phone 后，直接输入手机号就能一次列出该评价人的全部评价
+      clauses.push('(p.name LIKE ? OR r.customer_name LIKE ? OR r.content LIKE ? OR cu.phone LIKE ?)')
+      params.push(like, like, like, like)
     }
     if (productId) { clauses.push('r.product_id = ?'); params.push(productId) }
     if ([1, 2, 3, 4, 5].includes(rating)) { clauses.push('r.rating = ?'); params.push(rating) }

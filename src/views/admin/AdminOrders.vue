@@ -34,6 +34,14 @@ const nextActions = computed(() => {
   }
 })
 
+// 每个状态流转都是不可逆的推进（取消还会回补库存），执行前统一弹窗二次确认
+const STATUS_CONFIRM = {
+  confirmed: { title: '确认订单', confirm: '确认接单', text: orderNo => `确认后订单 ${orderNo} 将进入待发货状态，请先核对收货信息。确认接单吗？` },
+  shipped: { title: '标记发货', confirm: '确认发货', text: orderNo => `标记发货后订单 ${orderNo} 将无法再取消。确认该订单已发出吗？` },
+  completed: { title: '标记完成', confirm: '确认完成', text: orderNo => `标记完成后订单 ${orderNo} 将结束流转。确认该订单已完成吗？` },
+  cancelled: { title: '取消订单', confirm: '确认取消', text: orderNo => `取消后订单不可恢复，且该订单内商品的数量会立即退还到库存。确认取消订单 ${orderNo} 吗？` },
+}
+
 const customerText = computed(() => {
   const nickname = detail.value?.customer_nickname
   const phone = detail.value?.customer_phone
@@ -80,12 +88,13 @@ async function refreshDetail() {
 
 async function updateStatus(action) {
   if (!detail.value) return
-  if (action.status === 'cancelled') {
+  const rule = STATUS_CONFIRM[action.status]
+  if (rule) {
     try {
       await ElMessageBox.confirm(
-        `取消后订单不可恢复，且该订单内商品的数量会立即退还到库存。确认取消订单 ${detail.value.order_no} 吗？`,
-        '取消订单',
-        { type: 'warning', confirmButtonText: '确认取消', cancelButtonText: '再想想' }
+        rule.text(detail.value.order_no),
+        rule.title,
+        { type: 'warning', confirmButtonText: rule.confirm, cancelButtonText: '再想想' }
       )
     } catch { return }
   }

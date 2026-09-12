@@ -52,6 +52,7 @@ const LOG_MAP = {
   update_profile: { module: '其他设置', type: '修改个人信息' },
   unauthorized_admin_access: { module: '其他设置', type: '越权访问' },
   update_customer_status: { module: '顾客管理', type: '启用/禁用顾客' },
+  reset_customer_password: { module: '顾客管理', type: '重置顾客密码' },
   update_order_status: { module: '订单管理', type: '更新订单状态' },
   update_review_status: { module: '商品评论', type: '显示/隐藏评论' },
   delete_review: { module: '商品评论', type: '删除评论' },

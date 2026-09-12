@@ -1,11 +1,11 @@
 import { Router } from 'express'
+import bcrypt from 'bcryptjs'
 import db from '../config/db.js'
-import { requireAuth, requirePasswordChanged, writeOperationLog } from '../middleware/auth.js'
+import { requireAuth, requirePasswordChanged, requireSuperAdmin, writeOperationLog } from '../middleware/auth.js'
 import storageService from '../services/storageService.js'
 
-// 后台「顾客管理」：只做查看与启用/禁用。
-// 刻意不提供编辑顾客资料、重置顾客密码的接口——这两件事只能由顾客本人操作
-// （见 routes/customer.js 的 PUT /profile、PUT /password）。
+// 后台「顾客管理」：查看、启用/禁用，以及由超级管理员把顾客登录密码一键重置为手机号。
+// 编辑顾客资料仍只能由顾客本人操作（见 routes/customer.js 的 PUT /profile）。
 const router = Router()
 router.use(requireAuth, requirePasswordChanged)
 
@@ -143,6 +143,36 @@ router.put('/:id/status', async (req, res, next) => {
       success: true,
       changed: true,
       message: status ? '已启用该顾客账号' : '已禁用该顾客账号，其登录状态将立即失效',
+      data: publicCustomerRow(updated[0]),
+    })
+  } catch (error) { next(error) }
+})
+
+// 一键重置顾客登录密码：仅超级管理员可用，新密码固定为该顾客的手机号。
+// 顾客登录用的是 username + password（见 routes/customer.js 的 POST /login），
+// 这里只覆盖 password，不改动账号本身；顾客端没有强制改密流程，故不设 must_change_password。
+router.post('/:id/reset-password', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id)
+    if (!id) return res.status(404).json({ success: false, message: '顾客不存在' })
+
+    const [rows] = await db.execute('SELECT id, phone, nickname FROM customer WHERE id = ?', [id])
+    const customer = rows[0]
+    if (!customer) return res.status(404).json({ success: false, message: '顾客不存在' })
+
+    const phone = String(customer.phone || '').trim()
+    if (!phone) return res.status(400).json({ success: false, message: '该顾客未登记手机号，无法重置为手机号' })
+
+    await db.execute("UPDATE customer SET password = ?, updated_at = datetime('now') WHERE id = ?", [
+      await bcrypt.hash(phone, 12),
+      id,
+    ])
+    await writeOperationLog(req.admin.id, 'reset_customer_password', `${phone} → 重置为手机号`, req)
+
+    const [updated] = await db.execute(`SELECT ${fields} FROM customer WHERE id = ?`, [id])
+    res.json({
+      success: true,
+      message: `已将「${customer.nickname || phone}」的登录密码重置为手机号`,
       data: publicCustomerRow(updated[0]),
     })
   } catch (error) { next(error) }
