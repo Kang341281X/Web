@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Goods, DataLine, Setting, Document, User, List } from '@element-plus/icons-vue'
+import { Goods, DataLine, Setting, Document, User, List, Avatar, Tickets } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 import api from '../../services/api'
 
@@ -75,6 +75,16 @@ watch(() => route.fullPath, () => loadMenuCategories())
       <el-menu-item index="/admin/categories">
         <el-icon><Document /></el-icon>
         <template #title>商品分类</template>
+      </el-menu-item>
+
+      <el-menu-item index="/admin/orders">
+        <el-icon><Tickets /></el-icon>
+        <template #title>订单管理</template>
+      </el-menu-item>
+
+      <el-menu-item index="/admin/customers">
+        <el-icon><Avatar /></el-icon>
+        <template #title>用户管理</template>
       </el-menu-item>
 
       <el-menu-item index="/admin/logs">

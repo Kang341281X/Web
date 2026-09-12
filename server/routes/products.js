@@ -84,6 +84,47 @@ router.get('/', async (req, res, next) => {
     res.json({ success: true, data: rows.map(publicProduct), pagination: { page, page_size: pageSize, total } })
   } catch (error) { next(error) }
 })
+// 仪表盘统计：一次聚合出概览指标 + 各分类占比 + 近 7 天新增趋势。
+// 注册在 '/:id' 之前，避免 stats 被当作商品 id。
+// 此前仪表盘是「拉前 100 条商品在前端过滤统计」，商品超过 100 条后数字会失真，
+// 且每次打开仪表盘都要传输全量商品；改为数据库聚合后与数据量无关。
+const LOW_STOCK_THRESHOLD = 10
+router.get('/stats', async (req, res, next) => {
+  try {
+    const [[overview]] = await db.execute(
+      `SELECT COUNT(*) AS total_products,
+              COALESCE(SUM(CASE WHEN date(created_at) = date('now') THEN 1 ELSE 0 END), 0) AS today_new,
+              COALESCE(SUM(CASE WHEN date(created_at) >= date('now', 'start of month') THEN 1 ELSE 0 END), 0) AS month_new,
+              COALESCE(SUM(CASE WHEN stock < ? THEN 1 ELSE 0 END), 0) AS low_stock
+       FROM product`,
+      [LOW_STOCK_THRESHOLD]
+    )
+    // 分类数与「商品分类」页口径一致：只统计启用中的分类
+    const [[categories]] = await db.execute('SELECT COUNT(*) AS total FROM category WHERE status = 1')
+    const [distribution] = await db.execute('SELECT c.name AS name, COUNT(p.id) AS value FROM product p JOIN category c ON c.id = p.category_id GROUP BY c.id ORDER BY value DESC, c.id')
+    const [dailyRows] = await db.execute("SELECT date(created_at) AS date, COUNT(*) AS count FROM product WHERE date(created_at) >= date('now', '-6 days') GROUP BY date(created_at)")
+    // 没有新增商品的日期由后端补 0，前端不再自己拼日期轴
+    const dailyCounts = new Map(dailyRows.map(row => [row.date, Number(row.count)]))
+    const dailyNew = []
+    for (let offset = 6; offset >= 0; offset--) {
+      const day = new Date(Date.now() - offset * 86400000).toISOString().slice(0, 10)
+      dailyNew.push({ date: day, count: dailyCounts.get(day) || 0 })
+    }
+    res.json({
+      success: true,
+      data: {
+        total_products: Number(overview.total_products),
+        today_new: Number(overview.today_new),
+        month_new: Number(overview.month_new),
+        low_stock: Number(overview.low_stock),
+        low_stock_threshold: LOW_STOCK_THRESHOLD,
+        total_categories: Number(categories.total),
+        category_distribution: distribution.map(item => ({ name: item.name, value: Number(item.value) })),
+        daily_new: dailyNew,
+      },
+    })
+  } catch (error) { next(error) }
+})
 router.get('/:id', async (req, res, next) => { try { const product = await getProduct(Number(req.params.id)); if (!product) return res.status(404).json({ success: false, message: '商品不存在' }); res.json({ success: true, data: product }) } catch (error) { next(error) } })
 router.post('/', async (req, res, next) => {
   try {

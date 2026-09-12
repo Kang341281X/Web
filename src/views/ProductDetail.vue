@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useLanguageStore } from '../stores/language'
 import { useCartStore } from '../stores/cart'
 import { productBadge, productTitle, productDescription } from '../data/translations'
@@ -30,7 +31,15 @@ async function loadProduct(id) {
   }
 }
 
-const add = () => { if (!product.value) return; cart.add(product.value, quantity.value); added.value = true; setTimeout(() => added.value = false, 1500) }
+// 登录态下加购会请求服务端，失败或按库存截断时给出提示；游客仍是纯本地操作
+const add = async () => {
+  if (!product.value) return
+  const result = await cart.add(product.value, quantity.value)
+  if (!result.success) { ElMessage.error(result.message); return }
+  if (result.truncated) ElMessage.warning(result.message)
+  added.value = true
+  setTimeout(() => { added.value = false }, 1500)
+}
 
 onMounted(() => loadProduct(route.params.id))
 watch(() => route.params.id, (id) => { if (id) { quantity.value = 1; activeTab.value = 'description'; loadProduct(id) } })

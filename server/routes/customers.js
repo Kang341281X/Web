@@ -52,6 +52,30 @@ router.get('/', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+// 仪表盘统计：顾客总数 / 启用数 / 禁用数 / 今日新增。
+// 必须注册在 '/:id' 之前，否则 stats 会被当成顾客 id。
+// 「今日」按 UTC 日期切分（created_at 由 SQLite CURRENT_TIMESTAMP 写入）。
+router.get('/stats', async (req, res, next) => {
+  try {
+    const [[row]] = await db.execute(
+      `SELECT COUNT(*) AS total_customers,
+              COALESCE(SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END), 0) AS active_customers,
+              COALESCE(SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END), 0) AS disabled_customers,
+              COALESCE(SUM(CASE WHEN date(created_at) = date('now') THEN 1 ELSE 0 END), 0) AS today_new
+       FROM customer`
+    )
+    res.json({
+      success: true,
+      data: {
+        total_customers: Number(row.total_customers),
+        active_customers: Number(row.active_customers),
+        disabled_customers: Number(row.disabled_customers),
+        today_new: Number(row.today_new),
+      },
+    })
+  } catch (error) { next(error) }
+})
+
 // 顾客详情：附带地址列表 + 订单数量 / 总消费金额
 router.get('/:id', async (req, res, next) => {
   try {

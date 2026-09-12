@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import customerApi, { CUSTOMER_TOKEN_KEY, CUSTOMER_USER_KEY, setUnauthorizedHandler } from '../services/customerApi'
 import { useAddressStore } from './address'
+import { useCartStore } from './cart'
+import { useFavoritesStore } from './favorites'
 
 // 读取本地缓存的顾客资料（内容损坏时忽略，后续可用 fetchProfile 重新拉取）
 function readStoredProfile() {
@@ -38,7 +40,13 @@ export const useCustomerStore = defineStore('customer', {
       else localStorage.removeItem(CUSTOMER_TOKEN_KEY)
       if (this.profile) localStorage.setItem(CUSTOMER_USER_KEY, JSON.stringify(this.profile))
       else localStorage.removeItem(CUSTOMER_USER_KEY)
-      if ((profile?.id ?? null) !== previousCustomerId) useAddressStore().reset()
+      if ((profile?.id ?? null) !== previousCustomerId) {
+        // 换顾客（含退出登录）时清掉上一个账号的前台数据，避免串号；
+        // 购物车/收藏只是清空前端展示，服务端数据保留，下次登录会重新拉取
+        useAddressStore().reset()
+        useCartStore().reset()
+        useFavoritesStore().reset()
+      }
     },
 
     errorMessage(error, fallback) {
@@ -67,6 +75,9 @@ export const useCustomerStore = defineStore('customer', {
       try {
         const { data } = await customerApi.post('/login', { phone, password })
         this.applySession(data.token, data.user)
+        // 登录成功后把游客购物车/收藏合并到服务端，合并结果会覆盖本地状态。
+        // 两个同步动作内部已各自兜底错误（失败时保留 localStorage 游客数据），不影响登录结果
+        await Promise.all([useCartStore().syncAfterLogin(), useFavoritesStore().syncAfterLogin()])
         return { success: true, message: data.message || '登录成功', user: data.user }
       } catch (error) {
         return { success: false, message: this.errorMessage(error, '登录失败，请稍后重试') }

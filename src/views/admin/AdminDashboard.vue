@@ -2,67 +2,52 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../../services/api'
-import { Goods, Files, Box, Warning } from '@element-plus/icons-vue'
+import { Goods, Files, Box, Warning, Tickets, Bell, User } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const loading = ref(false)
-const stats = ref({ totalProducts: 0, totalCategories: 0, todayNew: 0, monthNew: 0, lowStock: 0 })
+const stats = ref({
+  totalProducts: 0, totalCategories: 0, monthNew: 0, lowStock: 0, lowStockThreshold: 10,
+  todayOrders: 0, pendingOrders: 0, totalCustomers: 0,
+})
 const recentLogs = ref([])
 const categoryChart = ref(null)
 const trendChart = ref(null)
 const categoryData = ref([])
 const trendData = ref([])
 
+// 所有指标都由后端聚合接口给出（/products/stats、/admin-orders/stats、/admin-customers/stats），
+// 不再拉取全量商品在前端自己统计——那样商品数量超过一页时结果会失真，且每次进仪表盘都要传大量数据。
 async function loadDashboard() {
   loading.value = true
   try {
-    const [productsRes, categoriesRes, logsRes] = await Promise.all([
-      api.get('/products', { params: { page: 1, page_size: 1 } }),
-      api.get('/categories'),
+    const [productRes, orderRes, customerRes, logsRes] = await Promise.all([
+      api.get('/products/stats'),
+      api.get('/admin-orders/stats'),
+      api.get('/admin-customers/stats'),
       api.get('/logs', { params: { page: 1, page_size: 8 } }),
     ])
 
-    const totalProducts = productsRes.data.pagination.total
-    const categories = categoriesRes.data.data.filter(c => c.status)
-    const today = new Date().toISOString().slice(0, 10)
-    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
-
-    const lowStockRes = await api.get('/products', { params: { page: 1, page_size: 100 } })
-
-    const allProducts = lowStockRes.data.data
-    const todayNew = allProducts.filter(p => new Date(p.created_at).toISOString().slice(0, 10) === today).length
-    const monthNew = allProducts.filter(p => new Date(p.created_at).toISOString().slice(0, 10) >= monthStart).length
-    const lowStock = allProducts.filter(p => p.stock < 10).length
+    const productStats = productRes.data.data
+    const orderStats = orderRes.data.data
+    const customerStats = customerRes.data.data
 
     stats.value = {
-      totalProducts,
-      totalCategories: categories.length,
-      todayNew,
-      monthNew,
-      lowStock,
+      totalProducts: productStats.total_products,
+      totalCategories: productStats.total_categories,
+      monthNew: productStats.month_new,
+      lowStock: productStats.low_stock,
+      lowStockThreshold: productStats.low_stock_threshold,
+      todayOrders: orderStats.today_orders,
+      pendingOrders: orderStats.pending_orders,
+      totalCustomers: customerStats.total_customers,
     }
 
     recentLogs.value = logsRes.data.data
 
-    // 分类占比
-    const catCount = {}
-    for (const p of allProducts) {
-      catCount[p.category_name] = (catCount[p.category_name] || 0) + 1
-    }
-    categoryData.value = Object.entries(catCount).map(([name, value]) => ({ name, value }))
-
-    // 近7天趋势
-    const days = []
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      days.push(d.toISOString().slice(0, 10))
-    }
-    const dayCounts = days.map(d => ({
-      date: d.slice(5),
-      count: allProducts.filter(p => new Date(p.created_at).toISOString().slice(0, 10) === d).length,
-    }))
-    trendData.value = dayCounts
+    // 分类占比 / 近 7 天新增趋势同样来自后端聚合结果（日期轴已由后端补齐）
+    categoryData.value = productStats.category_distribution
+    trendData.value = productStats.daily_new.map(item => ({ date: item.date.slice(5), count: item.count }))
 
     renderCharts()
   } catch (error) {
@@ -130,7 +115,26 @@ onMounted(loadDashboard)
       <el-card shadow="hover" body-style="padding: 20px;">
         <div class="dashboard-stat-card">
           <div class="dashboard-stat-icon dashboard-stat-icon--red"><el-icon :size="28"><Warning /></el-icon></div>
-          <div><div class="dashboard-stat-value">{{ stats.lowStock }}</div><div class="dashboard-stat-label">低库存预警(&lt;10)</div></div>
+          <div><div class="dashboard-stat-value">{{ stats.lowStock }}</div><div class="dashboard-stat-label">低库存预警(&lt;{{ stats.lowStockThreshold }})</div></div>
+        </div>
+      </el-card>
+      <!-- 订单与顾客指标：点击可直达带筛选条件的列表页 -->
+      <el-card shadow="hover" body-style="padding: 20px;" class="dashboard-stat-clickable" @click="router.push('/admin/orders')">
+        <div class="dashboard-stat-card">
+          <div class="dashboard-stat-icon dashboard-stat-icon--indigo"><el-icon :size="28"><Tickets /></el-icon></div>
+          <div><div class="dashboard-stat-value">{{ stats.todayOrders }}</div><div class="dashboard-stat-label">今日订单数</div></div>
+        </div>
+      </el-card>
+      <el-card shadow="hover" body-style="padding: 20px;" class="dashboard-stat-clickable" @click="router.push('/admin/orders?status=pending')">
+        <div class="dashboard-stat-card">
+          <div class="dashboard-stat-icon dashboard-stat-icon--magenta"><el-icon :size="28"><Bell /></el-icon></div>
+          <div><div class="dashboard-stat-value">{{ stats.pendingOrders }}</div><div class="dashboard-stat-label">待处理订单数（待确认）</div></div>
+        </div>
+      </el-card>
+      <el-card shadow="hover" body-style="padding: 20px;" class="dashboard-stat-clickable" @click="router.push('/admin/customers')">
+        <div class="dashboard-stat-card">
+          <div class="dashboard-stat-icon dashboard-stat-icon--teal"><el-icon :size="28"><User /></el-icon></div>
+          <div><div class="dashboard-stat-value">{{ stats.totalCustomers }}</div><div class="dashboard-stat-label">顾客总数</div></div>
         </div>
       </el-card>
     </div>
@@ -178,6 +182,11 @@ onMounted(loadDashboard)
 .dashboard-stat-icon--green { background: #f0f9eb; color: #67c23a }
 .dashboard-stat-icon--orange { background: #fdf6ec; color: #e6a23c }
 .dashboard-stat-icon--red { background: #fef0f0; color: #f56c6c }
+.dashboard-stat-icon--indigo { background: #eef2ff; color: #6366f1 }
+.dashboard-stat-icon--magenta { background: #fff0f6; color: #eb2f96 }
+.dashboard-stat-icon--teal { background: #e6fffb; color: #13c2c2 }
+/* 可点击的卡片（订单 / 顾客）：整卡可点，跳转到对应列表页 */
+.dashboard-stat-clickable { cursor: pointer }
 .dashboard-stat-value { font-size: 28px; font-weight: 700; color: #303133 }
 .dashboard-stat-label { font-size: 13px; color: #909399; margin-top: 2px }
 </style>

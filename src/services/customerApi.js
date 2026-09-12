@@ -7,8 +7,14 @@ export const CUSTOMER_USER_KEY = 'customer_user'
 // 前台顾客专用实例：baseURL 固定指向 /api/customer，与后台的 /api 实例互不影响
 const customerApi = axios.create({ baseURL: '/api/customer', timeout: 15000 })
 
+// 当前顾客 token / 是否处于登录态。
+// 与 customer store 的 token 同源：store 的 applySession 始终同步写 localStorage。
+// 购物车/收藏 store 用它判断「走服务端还是 localStorage」，避免 store 之间循环依赖。
+export const customerToken = () => localStorage.getItem(CUSTOMER_TOKEN_KEY) || ''
+export const isCustomerLoggedIn = () => !!customerToken()
+
 customerApi.interceptors.request.use(config => {
-  const token = localStorage.getItem(CUSTOMER_TOKEN_KEY)
+  const token = customerToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })

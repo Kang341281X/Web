@@ -49,6 +49,15 @@ const router = createRouter({
           path: 'categories',
           component: () => import('../views/admin/AdminCategories.vue'),
         },
+        // 用户管理 / 订单管理：对应阶段 6 的 /api/admin-customers 与 /api/admin-orders
+        {
+          path: 'customers',
+          component: () => import('../views/admin/AdminCustomers.vue'),
+        },
+        {
+          path: 'orders',
+          component: () => import('../views/admin/AdminOrders.vue'),
+        },
         // settings/logs 对普通管理员可见，仅 admins 仍限 super_admin
         {
           path: 'settings',

@@ -12,6 +12,9 @@ const moduleOptions = [
   { label: '商品管理', value: '商品管理' },
   { label: '分类管理', value: '分类管理' },
   { label: '管理员管理', value: '管理员管理' },
+  // 模块名与 server/middleware/auth.js 的 LOG_MAP 保持一致
+  { label: '顾客管理', value: '顾客管理' },
+  { label: '订单管理', value: '订单管理' },
   { label: '其他设置', value: '其他设置' },
 ]
 const dateRange = computed({

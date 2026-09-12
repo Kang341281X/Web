@@ -3,7 +3,9 @@ import storageService from '../services/storageService.js'
 
 // 顾客端（购物车 / 收藏）联表商品时共用的字段。
 // p.id 统一别名为 product_id，避免与 cart_item.id / customer_favorite.id 冲突。
-export const PRODUCT_FIELDS = `p.id AS product_id, p.name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.main_image, p.status`
+// manufacturer / brand / sku 是前台展示与结算清单（Excel 的 SKU 列）需要的字段，
+// 与 /api/public/products 的口径保持一致，前端购物车才能复用同一个商品适配器。
+export const PRODUCT_FIELDS = `p.id AS product_id, p.name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.manufacturer, p.brand, p.sku, p.main_image, p.status`
 
 // 对外输出：价格转数值、主图补全为可直接访问的地址
 export function publicProduct(product) {

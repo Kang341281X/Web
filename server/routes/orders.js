@@ -55,6 +55,40 @@ router.get('/', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+// 仪表盘统计：聚合出订单总数 / 各状态数量 / 今日订单数 / 有效金额，供仪表盘直接展示。
+// 必须注册在 '/:id' 之前，否则 stats 会被当成订单 id。
+// 口径与其它接口保持一致：总金额排除已取消订单（取消不算消费）；
+// 「今日」按 UTC 日期切分（created_at 由 SQLite CURRENT_TIMESTAMP 写入，与仪表盘商品的今日口径相同）。
+router.get('/stats', async (req, res, next) => {
+  try {
+    const [[row]] = await db.execute(
+      `SELECT COUNT(*) AS total_orders,
+              COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_orders,
+              COALESCE(SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END), 0) AS confirmed_orders,
+              COALESCE(SUM(CASE WHEN status = 'shipped' THEN 1 ELSE 0 END), 0) AS shipped_orders,
+              COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_orders,
+              COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled_orders,
+              COALESCE(SUM(CASE WHEN date(created_at) = date('now') THEN 1 ELSE 0 END), 0) AS today_orders,
+              COALESCE(SUM(CASE WHEN status <> 'cancelled' THEN total_amount ELSE 0 END), 0) AS total_amount
+       FROM customer_order`
+    )
+    res.json({
+      success: true,
+      data: {
+        total_orders: Number(row.total_orders),
+        // 待处理 = 等待客服确认的订单（pending），已确认待发货单独返回，避免前端误解口径
+        pending_orders: Number(row.pending_orders),
+        confirmed_orders: Number(row.confirmed_orders),
+        shipped_orders: Number(row.shipped_orders),
+        completed_orders: Number(row.completed_orders),
+        cancelled_orders: Number(row.cancelled_orders),
+        today_orders: Number(row.today_orders),
+        total_amount: Number(row.total_amount),
+      },
+    })
+  } catch (error) { next(error) }
+})
+
 // 订单详情：主表 + 明细（商品名称/SKU/单价为下单时快照，商品被删也能还原）
 router.get('/:id', async (req, res, next) => {
   try {

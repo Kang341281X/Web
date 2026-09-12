@@ -3,8 +3,10 @@ import { IMG_FALLBACK } from '../utils/image'
 
 const publicApi = axios.create({ baseURL: '/api/public', timeout: 15000 })
 
-// 适配：将后端商品格式转换为前端组件期望的格式
-function adaptProduct(raw) {
+// 适配：将后端商品格式转换为前端组件期望的格式。
+// 购物车（stores/cart.js）读取服务端购物车时复用同一个适配器，
+// 这样游客（localStorage）与登录用户（服务端）拿到的商品结构完全一致。
+export function adaptProduct(raw) {
   return {
     id: raw.id,
     title: raw.name,

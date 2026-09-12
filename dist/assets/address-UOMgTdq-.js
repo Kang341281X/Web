@@ -1,0 +1,1 @@
+function e(e){return e?[e.province,e.city,e.district].filter(Boolean).join(` `):``}function t(t){return t?[e(t),t.detail_address].filter(Boolean).join(` `):``}export{e as n,t};

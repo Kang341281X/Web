@@ -26,4 +26,4 @@ async function loadFavorites() {
 onMounted(loadFavorites)
 watch(() => favorites.ids.length, loadFavorites)
 </script>
-<template><section class="container page"><div class="page-intro"><span class="eyebrow">{{ language.t('savedPieces') }}</span><h1>{{ language.t('favorites') }}</h1><p>{{ saved.length }} {{ language.t('items') }}</p></div><ProductGrid v-if="saved.length" :products="saved" /><EmptyState v-else icon="♡" :title="language.t('emptyFavorites')" :action="language.t('continueShopping')" /></section></template>
+<template><section class="container page"><div class="page-intro"><span class="eyebrow">{{ language.t('savedPieces') }}</span><h1>{{ language.t('favorites') }}</h1><p>{{ saved.length }} {{ language.t('items') }}</p></div><ProductGrid v-if="saved.length" :products="saved" /><EmptyState v-else-if="!favorites.loading" icon="♡" :title="language.t('emptyFavorites')" :action="language.t('continueShopping')" /></section></template>

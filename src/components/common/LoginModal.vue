@@ -66,7 +66,7 @@ const submit = async () => {
   }
 
   user.closeLogin()
-  // 阶段 10 会在这里同步购物车与收藏
+  // 游客购物车/收藏的合并已在 customer.login() 内完成（见 stores/customer.js）
   emit('logged-in', result.user)
 }
 </script>
