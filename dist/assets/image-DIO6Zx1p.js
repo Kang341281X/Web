@@ -1,1 +1,0 @@
-var e=`/assets/images/placeholders/product-placeholder.svg`;function t(t){return t&&String(t).trim()?t:e}function n(t){let n=t&&t.target;!n||typeof n.src!=`string`||n.src!==new URL(`/assets/images/placeholders/product-placeholder.svg`,location.origin).href&&(n.src=e)}export{n,t as r,e as t};
