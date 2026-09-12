@@ -63,6 +63,7 @@ watch(() => route.fullPath, () => loadMenuCategories())
           <span>商品管理</span>
         </template>
         <el-menu-item index="/admin/products">全部商品</el-menu-item>
+        <el-menu-item index="/admin/reviews">商品评论</el-menu-item>
         <el-menu-item
           v-for="category in menuCategories"
           :key="category.id"

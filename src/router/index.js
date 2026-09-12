@@ -49,6 +49,11 @@ const router = createRouter({
           path: 'categories',
           component: () => import('../views/admin/AdminCategories.vue'),
         },
+        // 商品评论：商品管理下的二级菜单，对应 /api/admin-reviews
+        {
+          path: 'reviews',
+          component: () => import('../views/admin/AdminReviews.vue'),
+        },
         // 用户管理 / 订单管理：对应阶段 6 的 /api/admin-customers 与 /api/admin-orders
         {
           path: 'customers',

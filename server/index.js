@@ -15,6 +15,8 @@ import importsRouter, { startImportCleanupTask } from './routes/imports.js'
 import logsRouter from './routes/logs.js'
 import settingsRouter from './routes/settings.js'
 import publicRouter from './routes/public.js'
+// 商品评论：后台管理（/api/admin-reviews）与前台按商品读取（/api/public/products/:id/reviews）
+import { adminRouter as adminReviewsRouter, publicRouter as publicReviewsRouter } from './routes/reviews.js'
 import checkoutRouter from './routes/checkout.js'
 import customerRouter from './routes/customer.js'
 import customerAddressRouter from './routes/customerAddress.js'
@@ -54,12 +56,14 @@ app.use('/api/admin', adminRouter)
 app.use('/api/admins', adminsRouter)
 app.use('/api/admin-customers', adminCustomersRouter)
 app.use('/api/admin-orders', adminOrdersRouter)
+app.use('/api/admin-reviews', adminReviewsRouter)
 app.use('/api/categories', categoriesRouter)
 app.use('/api/products', productsRouter)
 app.use('/api/products', importsRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/settings', settingsRouter)
 app.use('/api/public', publicRouter)
+app.use('/api/public', publicReviewsRouter)
 app.use('/api/public', checkoutRouter)
 app.use('/api/customer', customerRouter)
 app.use('/api/customer/addresses', customerAddressRouter)

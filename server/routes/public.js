@@ -4,7 +4,7 @@ import storageService from '../services/storageService.js'
 
 const router = Router()
 
-const selectFields = `p.id, p.name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.manufacturer, p.brand, p.description, p.detail, p.main_image, p.sku, p.is_customizable, p.rating, p.created_at`
+const selectFields = `p.id, p.name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.manufacturer, p.brand, p.description, p.detail, p.main_image, p.sku, p.is_customizable, p.rating, p.review_count, p.created_at`
 
 function publicProduct(product) {
   return {

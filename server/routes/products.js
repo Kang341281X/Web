@@ -10,7 +10,7 @@ import { generateSkuCode, normalizeRating } from '../utils/productRules.js'
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 10 } })
 router.use(requireAuth, requirePasswordChanged)
-const selectFields = `p.id, p.name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.manufacturer, p.brand, p.description, p.detail, p.main_image, p.sku, p.is_customizable, p.rating, p.status, p.created_by, p.created_by_name, p.created_at, p.updated_at`
+const selectFields = `p.id, p.name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.manufacturer, p.brand, p.description, p.detail, p.main_image, p.sku, p.is_customizable, p.rating, p.review_count, p.status, p.created_by, p.created_by_name, p.created_at, p.updated_at`
 
 function numberValue(value, label, { min = 0, integer = false, nullable = false } = {}) {
   if ((value === '' || value === null || value === undefined) && nullable) return null
