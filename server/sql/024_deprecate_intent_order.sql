@@ -1,0 +1,13 @@
+-- 废弃：intent_order（购买意向单）
+--
+-- 背景：顾客账号与订单体系（018-023：customer / customer_order / order_item 等）上线后，
+--   前台下单统一写入 customer_order + order_item，intent_order 不再接收任何新写入。
+--
+-- 本迁移刻意不删表、不改结构：保留历史数据以便人工核对。
+--
+-- 「不再写入」属于应用层行为，将在后续阶段调整 routes/public.js 的下单写入目标时落地。
+-- 现状提示：当前 routes/public.js 仍在 INSERT INTO intent_order，属过渡状态，本次不改动。
+--
+-- 待历史数据核对完毕、确认无需回滚后，可另起迁移执行 DROP TABLE IF EXISTS intent_order。
+--
+-- 本文件不含可执行 SQL（仅注释说明），迁移器执行时为空操作，保持幂等。

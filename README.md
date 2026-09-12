@@ -31,3 +31,11 @@ npm run db:seed
 npm run server
 npm run dev
 ```
+
+# GitHub
+每次修改代码后，重复以下命令即可同步：
+```
+git add .
+git commit -m ""
+git push origin main
+```

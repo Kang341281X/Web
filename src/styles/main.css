@@ -69,3 +69,26 @@
 /* Product gallery: arrow buttons on the thumbnail strip and image crossfade. */
 .gallery-arrow{flex:none;display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.92);color:var(--ink);transition:background .18s ease,color .18s ease,transform .18s ease}.gallery-arrow svg{width:18px;height:18px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.gallery-arrow:hover,.gallery-arrow:focus-visible{background:#fff;color:var(--clay-dark);transform:scale(1.05)}.gallery-arrow:focus-visible{outline:2px solid var(--clay);outline-offset:2px}.gallery-fade-enter-active,.gallery-fade-leave-active{transition:opacity .24s ease,transform .24s ease}.gallery-fade-enter-from{opacity:0;transform:scale(.985)}.gallery-fade-leave-to{opacity:0}
 @media(max-width:760px){.gallery-thumbs{gap:6px;margin-top:8px}.gallery-thumbs__track{gap:8px}.gallery-thumb{width:60px}.gallery-arrow{width:32px;height:32px}.gallery-arrow svg{width:16px;height:16px}}
+
+/* Customer auth modal: login / register tabs. Field styles reuse .login-modal label/input. */
+.auth-tabs{display:flex;gap:24px;margin-top:20px;border-bottom:1px solid var(--line)}
+.auth-tabs button{border:0;background:transparent;padding:11px 0;color:var(--muted);font-size:.86rem;font-weight:600;border-bottom:2px solid transparent;transition:color .18s,border-color .18s}
+.auth-tabs button:hover{color:var(--ink)}
+.auth-tabs button.active{color:var(--ink);border-color:var(--clay)}
+.login-modal h2{margin:15px 0 7px}
+.login-modal input:focus{outline:2px solid var(--clay);outline-offset:1px}
+.login-modal .auth-error{margin:10px 0 0;color:#b3261e;font-size:.8rem;line-height:1.5}
+.login-modal .button[disabled]{opacity:.62;cursor:progress}
+
+/* Signed-in customer account menu in the header. */
+.account-menu{position:relative;display:flex;align-items:center;justify-content:center}
+.account-avatar{width:1.5rem;height:1.5rem;border-radius:50%;object-fit:cover;display:block}
+.account-options{position:absolute;z-index:60;top:calc(100% + 9px);right:0;width:200px;margin:0;padding:6px 0;list-style:none;background:#fffdf9;color:var(--ink);border:1px solid #dfd5c9;border-radius:4px;box-shadow:0 13px 28px rgba(70,53,38,.15)}
+.account-summary{display:flex;flex-direction:column;gap:3px;padding:10px 14px 9px}
+.account-summary-name{font-size:.84rem;font-weight:700}
+.account-summary-phone{font-size:.74rem;color:var(--muted)}
+.account-options li+li{margin:0 10px;border-top:1px solid #eee5db}
+.account-options a,.account-options button{display:block;width:100%;padding:11px 14px;border:0;background:transparent;color:#574d43;font-size:.81rem;text-align:left;transition:background .18s,color .18s}
+.account-options a:hover,.account-options a:focus-visible,.account-options button:hover,.account-options button:focus-visible{background:#f5ece2;color:var(--clay);outline:0}
+/* Mobile keeps the account entry inside the drawer, same as before. */
+@media(max-width:760px){.account-menu{display:none}}

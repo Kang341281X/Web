@@ -49,6 +49,8 @@ const LOG_MAP = {
   reset_admin_password: { module: '管理员管理', type: '重置密码' },
   update_profile: { module: '其他设置', type: '修改个人信息' },
   unauthorized_admin_access: { module: '其他设置', type: '越权访问' },
+  update_customer_status: { module: '顾客管理', type: '启用/禁用顾客' },
+  update_order_status: { module: '订单管理', type: '更新订单状态' },
 }
 
 export async function writeOperationLog(adminId, action, detail, req) {

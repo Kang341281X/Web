@@ -5,17 +5,15 @@ import api from '../services/api'
 export const useUserStore = defineStore('user', {
   state: () => ({
     isLoginOpen: false,
-    // 前台访客名称
-    name: '',
     // 后台管理员登录状态
     adminToken: localStorage.getItem('admin_token') || '',
     adminUser: JSON.parse(localStorage.getItem('admin_user') || 'null')
   }),
   getters: {
-    isGuest: s => !s.name,
     isAdmin: s => !!s.adminToken
   },
   actions: {
+    // 前台登录弹窗开关（真正的顾客登录态在 stores/customer.js）
     openLogin() { this.isLoginOpen = true },
     closeLogin() { this.isLoginOpen = false },
 

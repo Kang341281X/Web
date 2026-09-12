@@ -1,0 +1,29 @@
+◇ injected env (0) from .env // tip: ⌘ enable debugging { debug: true }
+◇ injected env (0) from .env.test // tip: ◈ encrypted .env [www.dotenvx.com]
+Applied 001_admin.sql
+Applied 002_catalog.sql
+Applied 003_import_batch.sql
+Applied 004_operation_log_setting.sql
+Applied 005_intent_order.sql
+Applied 006_seed_catalog.sql
+Applied 007_social_qr.sql
+Skipped 008_category_image.sql (column already exists)
+Applied 009_reseed_catalog.sql
+Applied 010_contact_fields2.sql
+Applied 011_remove_social_text_fields.sql
+Applied 012_social_media.sql
+Skipped 013_product_sku_customizable_rating.sql (column already exists)
+Applied 014_backfill_product_sku.sql
+Skipped 015_category_product_created_by.sql (column already exists)
+Applied 016_backfill_created_by.sql
+Applied 017_product_sku_format.sql
+Applied 018_customer.sql
+Applied 019_customer_address.sql
+Applied 020_customer_favorite.sql
+Applied 021_cart_item.sql
+Applied 022_customer_order.sql
+Applied 023_order_item.sql
+Applied 024_deprecate_intent_order.sql
+Migration completed: D:\Projects\Web\server\tmp7.db
+[Server] API service: http://localhost:3001
+[Import Cleanup] 定时清理任务已启动，每 5 分钟执行一次
