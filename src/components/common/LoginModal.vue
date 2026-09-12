@@ -15,7 +15,7 @@ const user = useUserStore()
 const tab = ref('login')
 const error = ref('')
 const usernameInput = ref(null)
-const form = reactive({ username: '', phone: '', password: '', nickname: '' })
+const form = reactive({ username: '', phone: '', password: '', confirmPassword: '', email: '', nickname: '' })
 // 图形验证码：id 由后端签发（一次性），image 是 data URI，直接交给 <img src>
 const captcha = reactive({ id: '', image: '', text: '', loading: false })
 const isRegister = computed(() => tab.value === 'register')
@@ -24,6 +24,8 @@ const isRegister = computed(() => tab.value === 'register')
 // 用户名：4-20 位字母 / 数字 / 下划线；手机号：中国大陆 11 位（仅注册时填写，不用于登录）
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{4,20}$/
 const PHONE_PATTERN = /^1[3-9]\d{9}$/
+// 与后端 normalizeEmail 的 EMAIL_PATTERN 对齐；邮箱选填，为空时不校验
+const EMAIL_PATTERN = /^\S+@\S+\.\S+$/
 
 // 换一张验证码。失败时把 image 置空，界面会退化成「点击重试」，而不是留着一张已作废的旧图让人白填。
 const refreshCaptcha = async () => {
@@ -45,7 +47,7 @@ const refreshCaptcha = async () => {
 watch(() => user.isLoginOpen, async visible => {
   if (!visible) return
   tab.value = 'login'
-  Object.assign(form, { username: '', phone: '', password: '', nickname: '' })
+  Object.assign(form, { username: '', phone: '', password: '', confirmPassword: '', email: '', nickname: '' })
   error.value = ''
   refreshCaptcha()
   await nextTick()
@@ -63,7 +65,14 @@ const validate = () => {
   // 手机号只在注册时填写：它是账号的内部唯一标识，不再作为登录账号
   if (isRegister.value && !PHONE_PATTERN.test(form.phone.trim())) return language.t('phoneInvalid')
   if (form.password.length < 6) return language.t('passwordTooShort')
-  if (isRegister.value && form.nickname.trim().length > 50) return language.t('nicknameTooLong')
+  if (isRegister.value) {
+    // 确认密码必填：与密码不一致即报错（只在前端校验，不提交给后端）
+    if (form.confirmPassword !== form.password) return language.t('registerPasswordMismatch')
+    // 邮箱选填：填了才校验格式，规则与后端 normalizeEmail 对齐
+    const email = form.email.trim()
+    if (email && !EMAIL_PATTERN.test(email)) return language.t('emailInvalid')
+    if (form.nickname.trim().length > 50) return language.t('nicknameTooLong')
+  }
   // 注册接口本身不校验验证码，但注册成功后紧接着会调用登录接口，那条链路需要它；
   // 所以两个 tab 都要求填写，避免用户填完注册信息才被验证码拦下。
   if (!captcha.text.trim()) return language.t('captchaRequired')
@@ -78,11 +87,14 @@ const submit = async () => {
   const password = form.password
 
   if (isRegister.value) {
+    // 邮箱选填：为空时不传该字段，由后端按「未填写」处理
+    const email = form.email.trim()
     const registered = await customer.register({
       username,
       phone: form.phone.trim(),
       password,
       nickname: form.nickname.trim(),
+      ...(email ? { email } : {}),
     })
     if (!registered.success) {
       // 注册接口不校验验证码，此时它还没被消耗，保留用户已填的字符，不让人白输一遍
@@ -121,6 +133,8 @@ const submit = async () => {
       <label>{{ language.t('username') }}<input ref="usernameInput" v-model="form.username" type="text" maxlength="20" autocomplete="username" autocapitalize="off" spellcheck="false" :placeholder="language.t('usernamePlaceholder')" /><small v-if="isRegister" class="auth-hint">{{ language.t('usernameHint') }}</small></label>
       <label v-if="isRegister">{{ language.t('phone') }}<input v-model="form.phone" type="tel" inputmode="numeric" maxlength="11" autocomplete="tel" :placeholder="language.t('phonePlaceholder')" /></label>
       <label>{{ language.t('password') }}<input v-model="form.password" type="password" maxlength="128" :autocomplete="isRegister ? 'new-password' : 'current-password'" :placeholder="language.t('passwordPlaceholder')" /></label>
+      <label v-if="isRegister">{{ language.t('registerConfirmPassword') }}<input v-model="form.confirmPassword" type="password" maxlength="128" autocomplete="new-password" :placeholder="language.t('registerConfirmPasswordPlaceholder')" /></label>
+      <label v-if="isRegister">{{ language.t('email') }}<input v-model="form.email" type="email" autocomplete="email" spellcheck="false" :placeholder="language.t('registerEmailPlaceholder')" /></label>
       <label v-if="isRegister">{{ language.t('nickname') }}<input v-model="form.nickname" type="text" maxlength="50" autocomplete="nickname" :placeholder="language.t('nicknamePlaceholder')" /></label>
       <label>{{ language.t('captcha') }}<span class="auth-captcha"><input v-model="captcha.text" type="text" maxlength="8" autocomplete="off" autocapitalize="off" spellcheck="false" :placeholder="language.t('captchaPlaceholder')" /><img v-if="captcha.image" class="auth-captcha-image" :src="captcha.image" :alt="language.t('captcha')" :title="language.t('captchaRefresh')" @click="refreshCaptcha" /><button v-else type="button" class="auth-captcha-image auth-captcha-retry" :disabled="captcha.loading" @click="refreshCaptcha">{{ captcha.loading ? language.t('loading') : language.t('captchaLoadFailed') }}</button></span></label>
       <div class="auth-captcha-actions"><button type="button" :disabled="captcha.loading" @click="refreshCaptcha">{{ language.t('captchaRefresh') }}</button></div>

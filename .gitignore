@@ -18,6 +18,8 @@ uploads/*
 # 本地 SQLite 数据库与临时文件（data.db / tmp*.db 及 WAL / SHM）
 server/data.db*
 server/tmp*.db
+# seed 脚本执行前的数据库备份目录（server/backup-<时间戳>/）
+server/backup-*/
 *.db-shm
 *.db-wal
 *.sqlite

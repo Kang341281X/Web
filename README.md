@@ -12,7 +12,12 @@
 3. 初始化数据库：执行 `npm run db:migrate`，自动按 `server/sql/` 下的迁移脚本创建表结构（脚本幂等，可重复执行；`npm run server` 启动时也会自动跑一遍迁移）。新增迁移脚本请按现有编号递增，不要修改历史文件。
 4. 写入种子数据：执行 `npm run db:seed`，创建 `superadmin`、`admin`、`admin01`、`admin02` 四个初始账号，密码均为 `123456`，且 `must_change_password = 1`，首次登录后必须在“个人中心”修改密码。
 5. 分别运行 `npm run server` 与 `npm run dev`，访问后台 `http://localhost:5173/admin/login`。
-6. 可选：执行 `npm run seed:dev` 写入开发联调用的假数据（生成的数据都带可识别标记，重复执行会先清理上一轮再重建）。
+6. 可选：写入开发联调用的大批量假数据（都带可识别标记，重复执行会先清理上一轮再重建），按下面顺序执行：
+   - `npm run seed:products`：写入 400 条商品假数据，按权重分布在现有 7 个分类下，图片统一复用 `/assets/images/placeholders/product-placeholder.svg`。SKU 统一使用保留前缀 `ZZZ` + 7 位数字作为清理标记（后台是只读字段，改名或改描述都不影响识别），因此脚本只删除上一轮由它自己创建的商品，不会影响管理后台手工新增的商品，也不会影响 `006` / `009` 的 40 条历史演示商品。脚本跑完会把 `006_seed_catalog.sql`、`009_reseed_catalog.sql` 写入 `schema_migrations` 标记为已执行，避免后续迁移重跑它们（它们是「整表清空 + 重建 40 条」的破坏性写法）把商品目录清空。
+   - `npm run seed:dev`：在现有商品之上写入 100 位测试顾客（`seeduser001` ~ `seeduser100`，密码 `123456`）、500 条订单（pending / confirmed / shipped / completed / cancelled = 20% / 20% / 20% / 30% / 10%）与 1000 条商品评论（长尾分布），并回写 `product.rating` / `product.review_count`。
+   > 完整顺序：`npm run db:migrate` → `npm run db:seed` → `npm run seed:products` → `npm run seed:dev`。
+   >
+   > 注意：`seed:products` 重跑会把这 400 条假商品连同它们的评论 / 收藏 / 购物车一起删掉重建（历史订单明细只解绑商品关联，商品名/SKU/单价快照仍保留），所以重跑它之后需要再执行一次 `npm run seed:dev` 补回评论。
 
 数据库中只保存相对图片路径，`PUBLIC_BASE_URL` 负责生成可访问图片地址。
 
@@ -186,6 +191,8 @@
 ```
 npm run db:migrate
 npm run db:seed
+npm run seed:products   # 可选：400 条商品假数据
+npm run seed:dev        # 可选：100 位顾客 + 500 条订单 + 1000 条评论
 npm run server
 npm run dev
 ```

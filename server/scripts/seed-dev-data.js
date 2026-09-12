@@ -4,18 +4,29 @@
  * 用法：npm run seed:dev
  * 前置：先执行 npm run db:migrate（或启动过一次后端，server/index.js 会自动迁移），
  *       确保 product_review 表与 product.review_count 字段存在。
+ *       推荐顺序：npm run db:migrate → npm run seed:products → npm run seed:dev
+ *
+ * 数据量（都集中在下方常量里，按需调整）：
+ *   - 顾客 100 位（CUSTOMER_COUNT）
+ *   - 订单 500 条（ORDER_TARGET_COUNT），按 pending 20% / confirmed 20% / shipped 20% /
+ *     completed 30% / cancelled 10% 分布，摊到 100 位顾客后人均恰好 5 单
+ *   - 评论 1000 条（REVIEW_TARGET_COUNT），在全部上架商品之间长尾分布
+ *     （多数商品 1~3 条，少数热门商品 8 条以上）
  *
  * 设计要点：
  *  1. 幂等：脚本生成的数据全部带可识别标记，每次执行先按标记清理上一轮假数据再重建，
  *     重复执行不会重复插入，也不会误删真实数据。标记如下：
- *       - customer.phone          13800000001 ~ 13800000015
- *       - customer.email          seed_XX@example.com
- *       - customer.nickname       测试用户XX
+ *       - customer.phone          13800000001 ~ 13800000100
+ *       - customer.email          seed_XXX@example.com
+ *       - customer.nickname       测试用户XXX
  *       - customer_order.order_no 以 SD 开头（真实下单为 CO 开头）
  *       - product_review.customer_name 以「测试用户」开头（昵称快照，账号被删也认得出）
  *  2. 不扣库存：补的是历史订单，其库存扣减视为早已完成，不再回扣 product.stock，
  *     避免把当前库存拉成负数、或与真实库存对不上。
  *  3. 可复现：使用固定种子的伪随机数，同一个库重复执行得到同一批假数据，便于对比联调。
+ *  4. 总量可控：订单 / 评论都按「固定目标值 + 精确配平」生成，不再跟着顾客数、商品数浮动；
+ *     订单数的顾客分配、评论数的商品分配都用「先按权重取整、再逐条 ±1 配平」的方式，
+ *     保证实际生成数量与目标值严格一致。
  */
 import '../config/env.js'
 import { resolve } from 'node:path'
@@ -29,7 +40,7 @@ raw.pragma('busy_timeout = 10000')
 // ---------------------------------------------------------------------------
 // 标记与常量
 // ---------------------------------------------------------------------------
-const CUSTOMER_COUNT = 15
+const CUSTOMER_COUNT = 100
 const SEED_PASSWORD = '123456'
 const SEED_PHONE_PREFIX = '13800000'
 const SEED_EMAIL_PREFIX = 'seed_'
@@ -37,10 +48,25 @@ const SEED_NICKNAME_PREFIX = '测试用户'
 const SEED_USERNAME_PREFIX = 'seeduser'
 const SEED_ORDER_PREFIX = 'SD'
 
+// 订单总量固定为 500 条，不再跟着「顾客数 × 随机(2~5)」浮动
+const ORDER_TARGET_COUNT = 500
+// 单个顾客的订单条数区间：活跃度权重分摊后夹在这个范围内。
+// 100 位顾客 / 500 条订单 => 人均恰好 5 单，重度用户会到 10 单上下，轻度用户被夹到 2 单。
+const ORDER_MIN_PER_CUSTOMER = 2
+const ORDER_MAX_PER_CUSTOMER = 12
+
+// 评论总量固定为 1000 条，不再跟着「商品数 × 7」浮动
+const REVIEW_TARGET_COUNT = 1000
+// 单个商品的评论条数区间与长尾权重：[条数, 权重]，条数越少越常见
+const REVIEW_MIN_PER_PRODUCT = 1
+const REVIEW_MAX_PER_PRODUCT = 12
+const REVIEW_COUNT_WEIGHTS = [[1, 26], [2, 24], [3, 18], [4, 12], [5, 8], [6, 5], [7, 3], [8, 2], [9, 1], [10, 1]]
+
 const seedPhones = Array.from({ length: CUSTOMER_COUNT }, (_, index) => `${SEED_PHONE_PREFIX}${String(index + 1).padStart(3, '0')}`)
-const seedEmail = (index) => `${SEED_EMAIL_PREFIX}${String(index + 1).padStart(2, '0')}@example.com`
-const seedNickname = (index) => `${SEED_NICKNAME_PREFIX}${String(index + 1).padStart(2, '0')}`
-const seedUsername = (index) => `${SEED_USERNAME_PREFIX}${String(index + 1).padStart(2, '0')}`
+// 序号统一补到 3 位（seed_001 / 测试用户001 / seeduser001），避免 100 个账号出现「01 和 100 混排」的宽度不一致
+const seedEmail = (index) => `${SEED_EMAIL_PREFIX}${String(index + 1).padStart(3, '0')}@example.com`
+const seedNickname = (index) => `${SEED_NICKNAME_PREFIX}${String(index + 1).padStart(3, '0')}`
+const seedUsername = (index) => `${SEED_USERNAME_PREFIX}${String(index + 1).padStart(3, '0')}`
 
 // 订单状态目标分布：pending 20% / confirmed 20% / shipped 20% / completed 30% / cancelled 10%
 const ORDER_STATUS_RATIOS = [
@@ -50,7 +76,9 @@ const ORDER_STATUS_RATIOS = [
   ['completed', 0.3],
   ['cancelled', 0.1],
 ]
-const REVIEW_RATINGS = [5, 5, 5, 5, 4, 4, 3] // 每个商品固定 7 条：4 条 5 星 + 2 条 4 星 + 1 条 3 星
+// 评分分布沿用原来的 [5,5,5,5,4,4,3]（约 57% 5 星 / 29% 4 星 / 14% 3 星）：
+// 现在按每个商品的实际评论条数循环取值再打散，不再假设「每个商品固定 7 条」
+const RATING_TEMPLATE = [5, 5, 5, 5, 4, 4, 3]
 
 // ---------------------------------------------------------------------------
 // 工具
@@ -91,6 +119,38 @@ function timeAfter(orderTime, maxDays) {
 }
 const money = (value) => Math.round(value * 100) / 100
 const inClause = (ids) => (ids.length ? ids.map(() => '?').join(', ') : 'NULL') // IN (NULL) 不匹配任何行
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+// 按 [[取值, 权重], ...] 加权抽一个取值
+function pickWeighted(weights) {
+  const weightSum = weights.reduce((sum, [, weight]) => sum + weight, 0)
+  let hit = random() * weightSum
+  for (const [value, weight] of weights) {
+    hit -= weight
+    if (hit <= 0) return value
+  }
+  return weights[weights.length - 1][0]
+}
+// 从素材池里取 count 条：池子够长时天然不重复，不够长时循环复用，避免取到 undefined
+function fillFrom(pool, count) {
+  return Array.from({ length: count }, (_, index) => pool[index % pool.length])
+}
+// 按权重取整后总数会和目标值有偏差：按随机顺序逐条 ±1 挪动，直到严格等于目标值
+function balanceToTarget(counts, target, min, max, label) {
+  let diff = target - counts.reduce((sum, value) => sum + value, 0)
+  while (diff !== 0) {
+    const step = diff > 0 ? 1 : -1
+    const movable = counts
+      .map((count, index) => ({ count, index }))
+      .filter(item => (step > 0 ? item.count < max : item.count > min))
+      .map(item => item.index)
+    if (!movable.length) {
+      throw new Error(`${label}无法配平到目标值 ${target}：所有取值都触到了 ${min}~${max} 的边界，请调整区间或目标值`)
+    }
+    counts[pickOne(movable)] += step
+    diff -= step
+  }
+  return counts
+}
 
 // ---------------------------------------------------------------------------
 // 假数据素材：地址
@@ -411,7 +471,7 @@ function createCustomers(passwordHash) {
   return seedPhones.map((phone, index) => {
     const createdAt = timeWithinDays(120)
     const info = insert.run(phone, seedUsername(index), seedEmail(index), passwordHash, seedNickname(index), createdAt, createdAt)
-    return { id: Number(info.lastInsertRowid), phone, username: seedUsername(index), nickname: seedNickname(index) }
+    return { id: Number(info.lastInsertRowid), phone, username: seedUsername(index), nickname: seedNickname(index), email: seedEmail(index) }
   })
 }
 
@@ -481,10 +541,24 @@ function buildOrderStatusPlan(total) {
   return list
 }
 
+// 每个顾客的订单条数：先给每人一个「活跃度」权重（取平方后长尾，少数重度用户明显偏高），
+// 再按权重把 ORDER_TARGET_COUNT 摊到每个人头上，最后逐条配平让总数严格等于目标值。
+// 这样 500 条订单不是平均撒胡椒面，人均恰好 5 单、重度用户 10 单上下、轻度用户被夹到 2 单。
+function planOrderCounts(customers) {
+  const weights = customers.map(() => (0.4 + random()) ** 2)
+  const weightSum = weights.reduce((sum, value) => sum + value, 0)
+  const counts = weights.map(weight => clamp(
+    Math.round(ORDER_TARGET_COUNT * weight / weightSum),
+    ORDER_MIN_PER_CUSTOMER,
+    ORDER_MAX_PER_CUSTOMER
+  ))
+  return balanceToTarget(counts, ORDER_TARGET_COUNT, ORDER_MIN_PER_CUSTOMER, ORDER_MAX_PER_CUSTOMER, '顾客订单数')
+}
+
 function createOrders(customers, products, addressesByCustomer) {
   const insertOrder = raw.prepare(`INSERT INTO customer_order
-    (order_no, customer_id, receiver_name, receiver_phone, receiver_address, total_amount, status, remark, handled_by, handled_by_name, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (order_no, customer_id, customer_username, customer_email, receiver_name, receiver_phone, receiver_address, total_amount, status, remark, handled_by, handled_by_name, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
   const insertItem = raw.prepare('INSERT INTO order_item (order_id, product_id, product_name, product_sku, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)')
   const [admin] = raw.prepare('SELECT id, real_name FROM admin ORDER BY id LIMIT 1').all()
   const statusCount = {}
@@ -492,9 +566,10 @@ function createOrders(customers, products, addressesByCustomer) {
   let sequence = 0
   let total = 0
 
-  // 先定每个顾客的订单条数，再把「按目标比例生成的订单状态池」打散后依次分配，
-  // 这样 50 条左右的订单也能稳定覆盖 5 种状态，而不是纯随机抽样导致某一状态只有个位数。
-  const plans = customers.map(customer => ({ customer, count: randomInt(2, 5) }))
+  // 先按活跃度权重定每个顾客的订单条数，再把「按目标比例生成的订单状态池」打散后依次分配，
+  // 这样 500 条订单能严格命中 5 种状态的比例，而不是纯随机抽样导致某一状态只有个位数。
+  const orderCounts = planOrderCounts(customers)
+  const plans = customers.map((customer, index) => ({ customer, count: orderCounts[index] }))
   const statusQueue = shuffle(buildOrderStatusPlan(plans.reduce((sum, plan) => sum + plan.count, 0)))
 
   plans.forEach(({ customer, count }, index) => {
@@ -513,7 +588,7 @@ function createOrders(customers, products, addressesByCustomer) {
         ? { by: null, name: null }
         : { by: admin ? admin.id : null, name: admin ? admin.real_name : null }
       const orderId = Number(insertOrder.run(
-        orderNo, customer.id, address.receiverName, customer.phone, formatAddress(address), totalAmount, status,
+        orderNo, customer.id, customer.username, customer.email, address.receiverName, customer.phone, formatAddress(address), totalAmount, status,
         index % 3 === 0 && status === 'pending' ? pickOne(['麻烦尽快发货，谢谢', '工作日白天送，谢谢', '需要开发票']) : null,
         handled.by, handled.name, createdAt, createdAt
       ).lastInsertRowid)
@@ -536,39 +611,84 @@ function createOrders(customers, products, addressesByCustomer) {
   return buyersByProduct
 }
 
+// 每个商品的评论条数：先按长尾权重抽一轮基础值，再整体缩放到 REVIEW_TARGET_COUNT，
+// 最后逐条配平，保证总数严格等于目标值（不要求每个商品条数一样，更接近真实的长尾分布）
+function planReviewCounts(productCount) {
+  const base = Array.from({ length: productCount }, () => pickWeighted(REVIEW_COUNT_WEIGHTS))
+  const baseSum = base.reduce((sum, value) => sum + value, 0)
+  const counts = base.map(value => clamp(
+    Math.round(value * REVIEW_TARGET_COUNT / baseSum),
+    REVIEW_MIN_PER_PRODUCT,
+    REVIEW_MAX_PER_PRODUCT
+  ))
+  return balanceToTarget(counts, REVIEW_TARGET_COUNT, REVIEW_MIN_PER_PRODUCT, REVIEW_MAX_PER_PRODUCT, '商品评论数')
+}
+
+// 全局评分池：按 RATING_TEMPLATE 的占比算出 5 / 4 / 3 星各能分多少条（3 星取余数，保证加起来正好等于总数），
+// 再扣掉「每个商品第一条评论固定 5 星」已经占用的名额，剩下的才是可以自由分配的池子。
+// 这样既避免单个商品出现「只有一条 3 星评论」把评分拉到 3 分的极端情况，
+// 整体 5/4/3 星的比例又严格保持模板的 4:2:1。
+function buildRatingQueue(total, guaranteedFiveStar) {
+  const templateSize = RATING_TEMPLATE.length
+  const fiveStarQuota = Math.round(total * RATING_TEMPLATE.filter(item => item === 5).length / templateSize)
+  const fourStarQuota = Math.round(total * RATING_TEMPLATE.filter(item => item === 4).length / templateSize)
+  return shuffle([
+    ...Array(Math.max(0, fiveStarQuota - guaranteedFiveStar)).fill(5),
+    ...Array(fourStarQuota).fill(4),
+    ...Array(total - fiveStarQuota - fourStarQuota).fill(3),
+  ])
+}
+
 function createReviews(customers, products, buyersByProduct) {
   // updated_at 显式写入：见 027 迁移，updated_at = created_at 表示「这条评论从未被修改过」
   const insert = raw.prepare('INSERT INTO product_review (product_id, customer_id, customer_name, rating, content, images, order_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, 1, ?, ?)')
   const updateProduct = raw.prepare('UPDATE product SET rating = ?, review_count = ? WHERE id = ?')
+  const reviewCounts = planReviewCounts(products.length)
+  // 每个商品的第一条评论固定给 5 星打底，其余名额从全局评分池里按顺序取（池子大小恰好等于剩余名额）
+  const ratingQueue = buildRatingQueue(REVIEW_TARGET_COUNT, products.length)
+  const ratingDistribution = {}
   let total = 0
 
-  for (const product of products) {
-    // 7 条评论的素材各自独立抽取，保证同一商品下 7 条内容不重复：
-    // 先放该商品类型专属的观察点（如戒指/杯壶/花盆），再用分类、通用短语补足
-    const details = [
+  products.forEach((product, productIndex) => {
+    const count = reviewCounts[productIndex]
+    // 素材各自独立抽取，尽量保证同一商品下的评论内容不重复：
+    // 先放该商品类型专属的观察点（如戒指/杯壶/花盆），再用分类、通用短语补足。
+    // 池子（专属 3~5 条 + 分类 5 条 + 通用 10 条）明显大于 REVIEW_MAX_PER_PRODUCT，
+    // 正常不会走到 fillFrom 的循环复用分支。
+    const detailPool = [
       ...shuffle(getSpecificDetails(product.name)),
       ...shuffle([...(CATEGORY_DETAILS[product.category_name] || []), ...GENERIC_DETAILS]),
-    ].slice(0, REVIEW_RATINGS.length)
-    const shippingNotes = shuffle(SHIPPING_NOTES).slice(0, REVIEW_RATINGS.length)
-    const complaints = shuffle(MINOR_COMPLAINTS)
+    ]
+    const details = fillFrom(detailPool, count)
+    const shippingNotes = fillFrom(shuffle(SHIPPING_NOTES), count)
     // 3 星那条单独用中性描述，避免出现「描述一致，没有色差」却给中评的矛盾
-    const neutralDetail = shuffle(NEUTRAL_DETAILS)[0]
+    const neutralDetails = fillFrom(shuffle(NEUTRAL_DETAILS), count)
+    const complaints = shuffle(MINOR_COMPLAINTS)
     const fiveStarTemplates = shuffle(FIVE_STAR_TEMPLATES)
+    const fourStarTemplates = shuffle(FOUR_STAR_TEMPLATES)
+    const ratings = shuffle([5, ...ratingQueue.splice(0, count - 1)])
+    let fiveStarIndex = 0
     let fourStarIndex = 0
+    let threeStarIndex = 0
 
     // 评论人：先随机错位取一轮（同一商品下不重复），再用真实买家替换前几条，形成「已购买用户评价」
-    const reviewers = Array.from({ length: REVIEW_RATINGS.length }, (_, index) => customers[index % customers.length])
-    const buyers = shuffle(buyersByProduct.get(product.id) || []).slice(0, 2)
+    const reviewers = Array.from({ length: count }, (_, index) => customers[index % customers.length])
+    const buyers = shuffle(buyersByProduct.get(product.id) || []).slice(0, Math.min(2, count))
     buyers.forEach((buyer, index) => {
       const customerIndex = reviewers.findIndex(item => item.id === buyer.customerId)
       if (customerIndex === -1) reviewers[index] = { id: buyer.customerId, nickname: buyer.nickname }
       else [reviewers[index], reviewers[customerIndex]] = [reviewers[customerIndex], reviewers[index]]
     })
 
-    REVIEW_RATINGS.forEach((rating, index) => {
-      const template = rating === 5 ? fiveStarTemplates.shift() : (rating === 4 ? FOUR_STAR_TEMPLATES[fourStarIndex++] : THREE_STAR_TEMPLATE)
+    ratings.forEach((rating, index) => {
+      // 模板条数少于该星级的评论条数时循环复用：同一模板配上不同观察点/物流短语，文案依然各不相同
+      const template = rating === 5
+        ? fiveStarTemplates[fiveStarIndex++ % fiveStarTemplates.length]
+        : rating === 4
+          ? fourStarTemplates[fourStarIndex++ % fourStarTemplates.length]
+          : THREE_STAR_TEMPLATE
       const content = buildReviewContent(template, product, {
-        detail: rating === 3 ? neutralDetail : details[index],
+        detail: rating === 3 ? neutralDetails[threeStarIndex++] : details[index],
         shipping: shippingNotes[index],
         minor: complaints[index % complaints.length],
       })
@@ -576,16 +696,18 @@ function createReviews(customers, products, buyersByProduct) {
       const reviewer = reviewers[index]
       const reviewTime = buyer ? timeAfter(buyer.orderTime, 20) : timeWithinDays(90)
       insert.run(product.id, reviewer.id, reviewer.nickname, rating, content, buyer ? buyer.orderId : null, reviewTime, reviewTime)
+      ratingDistribution[rating] = (ratingDistribution[rating] || 0) + 1
       total++
     })
 
-    // 回写商品评分（7 条评论均值，保留 1 位小数）与评论数
-    const average = REVIEW_RATINGS.reduce((sum, rating) => sum + rating, 0) / REVIEW_RATINGS.length
-    updateProduct.run(Number(average.toFixed(1)), REVIEW_RATINGS.length, product.id)
-  }
+    // 回写商品评分（该商品评论均值，保留 1 位小数）与评论数
+    const average = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+    updateProduct.run(Number(average.toFixed(1)), ratings.length, product.id)
+  })
 
   summary.created.reviews = total
   summary.created.ratedProducts = products.length
+  summary.created.ratingDistribution = ratingDistribution
 }
 
 function loadProducts() {
@@ -625,11 +747,14 @@ const statusText = Object.entries(summary.created.orderStatus || {})
 console.log(`[seed:dev] 数据库：${dbPath}`)
 console.log(`[seed:dev] 清理旧假数据：顾客 ${summary.removed.customers} / 地址 ${summary.removed.addresses} / 收藏 ${summary.removed.favorites} / 购物车 ${summary.removed.cartItems} / 订单 ${summary.removed.orders} / 评论 ${summary.removed.reviews}`)
 console.log(`[seed:dev] 生成顾客 ${summary.created.customers}、地址 ${summary.created.addresses}、收藏 ${summary.created.favorites}、购物车项 ${summary.created.cartItems}、订单 ${summary.created.orders}（${statusText}）、评论 ${summary.created.reviews}`)
-console.log(`[seed:dev] 覆盖商品 ${summary.created.ratedProducts} 个，已回写 product.rating / product.review_count`)
+console.log(`[seed:dev] 订单：目标 ${ORDER_TARGET_COUNT} 条，摊到 ${CUSTOMER_COUNT} 位顾客（人均 ${(ORDER_TARGET_COUNT / CUSTOMER_COUNT).toFixed(1)} 单，单人在 ${ORDER_MIN_PER_CUSTOMER}~${ORDER_MAX_PER_CUSTOMER} 单之间）`)
+console.log(`[seed:dev] 评论：目标 ${REVIEW_TARGET_COUNT} 条，覆盖商品 ${summary.created.ratedProducts} 个（每个 ${REVIEW_MIN_PER_PRODUCT}~${REVIEW_MAX_PER_PRODUCT} 条，长尾分布），星级分布 ${Object.entries(summary.created.ratingDistribution || {}).sort(([a], [b]) => b - a).map(([rating, count]) => `${rating} 星 ${count} 条`).join(' / ')}，已回写 product.rating / product.review_count`)
 console.log(`[seed:dev] 测试账号：用户名 ${seedUsername(0)} ~ ${seedUsername(CUSTOMER_COUNT - 1)}（手机号 ${seedPhones[0]} ~ ${seedPhones[seedPhones.length - 1]}），密码统一 ${SEED_PASSWORD}（昵称 ${seedNickname(0)} ~ ${seedNickname(CUSTOMER_COUNT - 1)}）`)
-// 提醒：迁移 006/009 每次服务启动都会清空并重建商品目录，评论(ON DELETE CASCADE)/收藏/购物车
-// 会随之被清掉。所以正确顺序是「先启动服务，再跑本脚本」，跑完不要再重启后端。
-console.log('[seed:dev] 提示：请先启动后端再执行本脚本；迁移 006/009 会在每次服务启动时重建商品目录，重启后评论/收藏/购物车会被清空')
+// 提醒：migrate.js 现在按 schema_migrations 记录表判断迁移是否已执行，
+// 006/009 这类种子脚本只在空库首次执行一次，不会再随服务重启重复重建商品目录，
+// 因此本脚本写入的评论/收藏/购物车在重启后端后不会丢失。
+console.log('[seed:dev] 提示：请先启动后端再执行本脚本（迁移需先建表）；迁移已改为一次性执行，重启后端不会再清空评论/收藏/购物车')
+console.log('[seed:dev] 提示：推荐执行顺序为 npm run db:migrate → npm run seed:products → npm run seed:dev，商品假数据由 seed:products 单独负责')
 console.log('[seed:dev] 完成')
 
 await db.end()

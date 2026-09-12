@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Goods, DataLine, Setting, Document, User, List, Avatar, Tickets } from '@element-plus/icons-vue'
+import { Goods, DataLine, Setting, Document, User, List, Avatar, Tickets, ChatDotRound } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 import api from '../../services/api'
 
@@ -63,7 +63,6 @@ watch(() => route.fullPath, () => loadMenuCategories())
           <span>商品管理</span>
         </template>
         <el-menu-item index="/admin/products">全部商品</el-menu-item>
-        <el-menu-item index="/admin/reviews">商品评论</el-menu-item>
         <el-menu-item
           v-for="category in menuCategories"
           :key="category.id"
@@ -72,6 +71,11 @@ watch(() => route.fullPath, () => loadMenuCategories())
           {{ category.name }}商品信息
         </el-menu-item>
       </el-sub-menu>
+
+      <el-menu-item index="/admin/customers">
+        <el-icon><Avatar /></el-icon>
+        <template #title>用户管理</template>
+      </el-menu-item>
 
       <el-menu-item index="/admin/categories">
         <el-icon><Document /></el-icon>
@@ -83,9 +87,10 @@ watch(() => route.fullPath, () => loadMenuCategories())
         <template #title>订单管理</template>
       </el-menu-item>
 
-      <el-menu-item index="/admin/customers">
-        <el-icon><Avatar /></el-icon>
-        <template #title>用户管理</template>
+      <!-- 商品评论：从「商品管理」的二级子菜单提升为一级菜单，紧跟订单管理 -->
+      <el-menu-item index="/admin/reviews">
+        <el-icon><ChatDotRound /></el-icon>
+        <template #title>商品评论</template>
       </el-menu-item>
 
       <el-menu-item index="/admin/logs">

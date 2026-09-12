@@ -166,14 +166,15 @@ export async function createCustomerOrder({ customer, address, items, remark = n
     }
 
     const receiverAddress = [address.province, address.city, address.district, address.detail_address].filter(Boolean).join(' ')
-    // customer_username 取昵称快照，昵称为空时退化为手机号，保证后台始终有可识别的下单人信息
+    // customer_username 为登录用户名快照（030 起 username 必填且唯一），后台按「顾客用户名」语义展示；
+    // 不再退化为昵称/手机号，避免与后台展示口径不一致。
     const [orderResult] = await connection.execute(
       `INSERT INTO customer_order (order_no, customer_id, customer_username, customer_email, receiver_name, receiver_phone, receiver_address, total_amount, status, remark)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
       [
         generateOrderNo(),
         customer.id,
-        customer.nickname || customer.phone || null,
+        customer.username,
         customer.email || null,
         address.receiver_name,
         address.receiver_phone,

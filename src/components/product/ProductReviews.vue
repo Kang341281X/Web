@@ -95,15 +95,35 @@ function isEditable(review) {
   return Date.now() - published < EDIT_WINDOW_MS
 }
 
+// 商品详情页默认只展示最新 3 条（公开评论，未登录同样可见）；
+// 点「查看全部评价」再按需补齐剩余分页，始终走同一个公开接口，不改变任何登录限制。
+const FIRST_PAGE_SIZE = 3
+const MAX_PAGE_SIZE = 50
+const expanded = ref(false)
+
+async function fetchPage(page, pageSize) {
+  // 已登录时请求会带上顾客 token，后端据此标出哪些评论是自己写的
+  const { reviews: list, summary: overview, pagination } = await fetchProductReviews(props.productId, { page, page_size: pageSize })
+  return { list, overview, pagination }
+}
+
 async function load() {
   if (!props.productId) return
   loading.value = true
   failed.value = false
   try {
-    // 已登录时请求会带上顾客 token，后端据此标出哪些评论是自己写的
-    const { reviews: list, summary: overview } = await fetchProductReviews(props.productId, { page: 1, page_size: 50 })
-    reviews.value = list
-    summary.value = overview
+    const first = await fetchPage(1, expanded.value ? MAX_PAGE_SIZE : FIRST_PAGE_SIZE)
+    reviews.value = first.list
+    summary.value = first.overview
+    // 展开态下把所有剩余分页补全，保证「查看全部评价」看到的确实是全部评论
+    const total = Number(first.pagination?.total ?? first.overview?.total ?? first.list.length)
+    let page = 2
+    while (expanded.value && reviews.value.length < total) {
+      const next = await fetchPage(page, MAX_PAGE_SIZE)
+      if (!next.list.length) break
+      reviews.value = reviews.value.concat(next.list)
+      page += 1
+    }
   } catch (error) {
     // 评价加载失败不影响商品主体展示，这里降级为空列表
     console.error('Failed to load product reviews:', error)
@@ -113,6 +133,14 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+// 评论总数超过默认展示条数时才给出「查看全部评价」入口，展开后同一位置变成「收起」
+const canCollapse = computed(() => summary.value.total > FIRST_PAGE_SIZE)
+
+async function toggleAll() {
+  expanded.value = !expanded.value
+  await load()
 }
 
 // 登录/退出后要重新拉取，否则 is_mine 状态会停留在旧的登录态上（按钮不出现或出现错人身上）
@@ -253,7 +281,8 @@ async function remove(review) {
 
 onBeforeUnmount(() => revokePreview(form.files))
 
-watch(() => props.productId, load, { immediate: true })
+// 切换商品时回到「只展示最新 3 条」的默认状态
+watch(() => props.productId, () => { expanded.value = false; load() }, { immediate: true })
 </script>
 
 <template>
@@ -366,6 +395,13 @@ watch(() => props.productId, load, { immediate: true })
     </ul>
 
     <p v-else-if="!loading" class="review-empty">{{ language.t('reviewEmpty') }}</p>
+
+    <!-- 查看全部评论：默认只展示最新 3 条，这里同样是公开入口，未登录也能展开 -->
+    <div v-if="reviews.length && canCollapse" class="review-more">
+      <button type="button" class="button review-more__button" @click="toggleAll">
+        {{ expanded ? language.t('collapseReviews') : language.t('viewAllReviews') }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -430,6 +466,9 @@ watch(() => props.productId, load, { immediate: true })
 
 .review-empty { color: var(--muted); padding: 18px 0 }
 
+.review-more { display: flex; justify-content: center; padding: 20px 0 4px }
+.review-more__button { min-width: 180px }
+
 @media (max-width: 760px) {
   .review-overview { gap: 20px }
   .review-overview__score { flex-direction: row; gap: 10px; min-width: 0 }
@@ -441,6 +480,7 @@ watch(() => props.productId, load, { immediate: true })
   .review-form__footer { flex-direction: column-reverse }
   .review-form__footer .button { width: 100% }
   .review-ops { gap: 12px }
+  .review-more__button { width: 100% }
   .review-ops .text-button { flex: 1; justify-content: center; min-height: 44px; border: 1px solid var(--line); border-radius: 99px }
   .review-ops__delete { border-color: rgba(179, 38, 30, .35) }
 }

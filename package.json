@@ -8,6 +8,7 @@
     "server": "node server/index.js",
     "db:migrate": "node server/migrate.js",
     "db:seed": "node server/seed.js",
+    "seed:products": "node server/scripts/seed-product-data.js",
     "seed:dev": "node server/scripts/seed-dev-data.js",
     "build": "vite build",
     "preview": "vite preview"
