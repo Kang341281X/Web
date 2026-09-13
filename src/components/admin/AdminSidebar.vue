@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Goods, DataLine, Setting, Document, User, List, Avatar, Tickets, ChatDotRound } from '@element-plus/icons-vue'
+import { Goods, DataLine, Setting, Document, User, List, Avatar, Tickets, ChatDotRound, Money } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 
 const props = defineProps({
@@ -62,6 +62,12 @@ const activeMenu = computed(() => route.path)
       <el-menu-item index="/admin/orders">
         <el-icon><Tickets /></el-icon>
         <template #title>订单管理</template>
+      </el-menu-item>
+
+      <!-- 收支明细：仅超级管理员可见（后端同样按 super_admin 拦截） -->
+      <el-menu-item v-if="isSuperAdmin" index="/admin/finance">
+        <el-icon><Money /></el-icon>
+        <template #title>收支明细</template>
       </el-menu-item>
 
       <!-- 商品评论：从「商品管理」的二级子菜单提升为一级菜单，紧跟订单管理 -->

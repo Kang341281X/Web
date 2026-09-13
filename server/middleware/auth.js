@@ -54,8 +54,12 @@ const LOG_MAP = {
   update_customer_status: { module: '顾客管理', type: '启用/禁用顾客' },
   reset_customer_password: { module: '顾客管理', type: '重置顾客密码' },
   update_order_status: { module: '订单管理', type: '更新订单状态' },
+  export_orders: { module: '订单管理', type: '导出' },
   update_review_status: { module: '商品评论', type: '显示/隐藏评论' },
   delete_review: { module: '商品评论', type: '删除评论' },
+  create_expense: { module: '收支明细', type: '新增支出' },
+  update_expense: { module: '收支明细', type: '编辑支出' },
+  delete_expense: { module: '收支明细', type: '删除支出' },
 }
 
 export async function writeOperationLog(adminId, action, detail, req) {

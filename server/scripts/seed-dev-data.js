@@ -10,8 +10,8 @@
  *   - 顾客 100 位（CUSTOMER_COUNT）
  *   - 订单 500 条（ORDER_TARGET_COUNT），按 pending 20% / confirmed 20% / shipped 20% /
  *     completed 30% / cancelled 10% 分布，摊到 100 位顾客后人均恰好 5 单
- *   - 评论 1000 条（REVIEW_TARGET_COUNT），在全部上架商品之间长尾分布
- *     （多数商品 1~3 条，少数热门商品 8 条以上）
+ *   - 评论总量按当前上架商品数自动推导（约「商品数 × 3」条，见 resolveReviewTarget），
+ *     在全部上架商品之间长尾分布（多数商品 1~3 条，少数热门商品 8 条以上）
  *
  * 设计要点：
  *  1. 幂等：脚本生成的数据全部带可识别标记，每次执行先按标记清理上一轮假数据再重建，
@@ -24,7 +24,8 @@
  *  2. 不扣库存：补的是历史订单，其库存扣减视为早已完成，不再回扣 product.stock，
  *     避免把当前库存拉成负数、或与真实库存对不上。
  *  3. 可复现：使用固定种子的伪随机数，同一个库重复执行得到同一批假数据，便于对比联调。
- *  4. 总量可控：订单 / 评论都按「固定目标值 + 精确配平」生成，不再跟着顾客数、商品数浮动；
+ *  4. 总量可控：订单按固定目标值生成（不跟着顾客数浮动），评论总量由当前上架商品数推导
+ *     （见 resolveReviewTarget，刻意不写死绝对值，否则商品数一变就可能配不平）；
  *     订单数的顾客分配、评论数的商品分配都用「先按权重取整、再逐条 ±1 配平」的方式，
  *     保证实际生成数量与目标值严格一致。
  */
@@ -55,8 +56,14 @@ const ORDER_TARGET_COUNT = 500
 const ORDER_MIN_PER_CUSTOMER = 2
 const ORDER_MAX_PER_CUSTOMER = 12
 
-// 评论总量固定为 1000 条，不再跟着「商品数 × 7」浮动
-const REVIEW_TARGET_COUNT = 1000
+// 评论总量刻意不写死绝对值：商品数一变，固定目标值就可能超出
+// 「商品数 × 单商品上限」而无法配平（详见 resolveReviewTarget）。
+// 这里只声明两个「意图」常量，总量由它们和商品数一起算出来：
+//   - AVERAGE 取长尾权重分布的自然均值（REVIEW_COUNT_WEIGHTS 的加权均值约 3），
+//     这样整体缩放系数接近 1，长尾形状几乎不变；
+//   - MAX_RATIO 给总量留出余量，避免商品少时所有商品都顶到上限、把长尾压成均匀分布
+const REVIEW_AVERAGE_PER_PRODUCT = 3
+const REVIEW_TARGET_MAX_RATIO = 0.6
 // 单个商品的评论条数区间与长尾权重：[条数, 权重]，条数越少越常见
 const REVIEW_MIN_PER_PRODUCT = 1
 const REVIEW_MAX_PER_PRODUCT = 12
@@ -611,17 +618,27 @@ function createOrders(customers, products, addressesByCustomer) {
   return buyersByProduct
 }
 
-// 每个商品的评论条数：先按长尾权重抽一轮基础值，再整体缩放到 REVIEW_TARGET_COUNT，
+// 由商品数推导评论总量：结果必然落在 [商品数 × 下限, 商品数 × 上限] 内，
+// 这是 balanceToTarget 能配平的充要条件——总量写死时，商品数不足 84（1000 / 12）
+// 就会因为「每个商品最多 12 条」而永远配不平，脚本直接抛错退出。
+// 取「商品数 × 平均条数」再夹到上限的 MAX_RATIO 以内：商品数怎么变都不会出现不可行值。
+function resolveReviewTarget(productCount) {
+  const minTotal = productCount * REVIEW_MIN_PER_PRODUCT
+  const maxTotal = Math.floor(productCount * REVIEW_MAX_PER_PRODUCT * REVIEW_TARGET_MAX_RATIO)
+  return clamp(Math.round(productCount * REVIEW_AVERAGE_PER_PRODUCT), minTotal, maxTotal)
+}
+
+// 每个商品的评论条数：先按长尾权重抽一轮基础值，再整体缩放到目标总量，
 // 最后逐条配平，保证总数严格等于目标值（不要求每个商品条数一样，更接近真实的长尾分布）
-function planReviewCounts(productCount) {
+function planReviewCounts(productCount, target) {
   const base = Array.from({ length: productCount }, () => pickWeighted(REVIEW_COUNT_WEIGHTS))
   const baseSum = base.reduce((sum, value) => sum + value, 0)
   const counts = base.map(value => clamp(
-    Math.round(value * REVIEW_TARGET_COUNT / baseSum),
+    Math.round(value * target / baseSum),
     REVIEW_MIN_PER_PRODUCT,
     REVIEW_MAX_PER_PRODUCT
   ))
-  return balanceToTarget(counts, REVIEW_TARGET_COUNT, REVIEW_MIN_PER_PRODUCT, REVIEW_MAX_PER_PRODUCT, '商品评论数')
+  return balanceToTarget(counts, target, REVIEW_MIN_PER_PRODUCT, REVIEW_MAX_PER_PRODUCT, '商品评论数')
 }
 
 // 全局评分池：按 RATING_TEMPLATE 的占比算出 5 / 4 / 3 星各能分多少条（3 星取余数，保证加起来正好等于总数），
@@ -644,9 +661,11 @@ function createReviews(customers, products, buyersByProduct) {
   // 同时把 updated_at 写成与 created_at 相同，让两个时间戳在展示上也自洽
   const insert = raw.prepare('INSERT INTO product_review (product_id, customer_id, customer_name, rating, content, images, order_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, 1, ?, ?)')
   const updateProduct = raw.prepare('UPDATE product SET rating = ?, review_count = ? WHERE id = ?')
-  const reviewCounts = planReviewCounts(products.length)
+  // 目标总量由商品数推导；配平后 reviewCounts 各项之和恒等于该目标值
+  const reviewTarget = resolveReviewTarget(products.length)
+  const reviewCounts = planReviewCounts(products.length, reviewTarget)
   // 每个商品的第一条评论固定给 5 星打底，其余名额从全局评分池里按顺序取（池子大小恰好等于剩余名额）
-  const ratingQueue = buildRatingQueue(REVIEW_TARGET_COUNT, products.length)
+  const ratingQueue = buildRatingQueue(reviewCounts.reduce((sum, value) => sum + value, 0), products.length)
   const ratingDistribution = {}
   let total = 0
 
@@ -707,6 +726,7 @@ function createReviews(customers, products, buyersByProduct) {
   })
 
   summary.created.reviews = total
+  summary.created.reviewTarget = reviewTarget
   summary.created.ratedProducts = products.length
   summary.created.ratingDistribution = ratingDistribution
 }
@@ -749,7 +769,7 @@ console.log(`[seed:dev] 数据库：${dbPath}`)
 console.log(`[seed:dev] 清理旧假数据：顾客 ${summary.removed.customers} / 地址 ${summary.removed.addresses} / 收藏 ${summary.removed.favorites} / 购物车 ${summary.removed.cartItems} / 订单 ${summary.removed.orders} / 评论 ${summary.removed.reviews}`)
 console.log(`[seed:dev] 生成顾客 ${summary.created.customers}、地址 ${summary.created.addresses}、收藏 ${summary.created.favorites}、购物车项 ${summary.created.cartItems}、订单 ${summary.created.orders}（${statusText}）、评论 ${summary.created.reviews}`)
 console.log(`[seed:dev] 订单：目标 ${ORDER_TARGET_COUNT} 条，摊到 ${CUSTOMER_COUNT} 位顾客（人均 ${(ORDER_TARGET_COUNT / CUSTOMER_COUNT).toFixed(1)} 单，单人在 ${ORDER_MIN_PER_CUSTOMER}~${ORDER_MAX_PER_CUSTOMER} 单之间）`)
-console.log(`[seed:dev] 评论：目标 ${REVIEW_TARGET_COUNT} 条，覆盖商品 ${summary.created.ratedProducts} 个（每个 ${REVIEW_MIN_PER_PRODUCT}~${REVIEW_MAX_PER_PRODUCT} 条，长尾分布），星级分布 ${Object.entries(summary.created.ratingDistribution || {}).sort(([a], [b]) => b - a).map(([rating, count]) => `${rating} 星 ${count} 条`).join(' / ')}，已回写 product.rating / product.review_count`)
+console.log(`[seed:dev] 评论：目标 ${summary.created.reviewTarget} 条（按上架商品数推导），覆盖商品 ${summary.created.ratedProducts} 个（每个 ${REVIEW_MIN_PER_PRODUCT}~${REVIEW_MAX_PER_PRODUCT} 条，长尾分布），星级分布 ${Object.entries(summary.created.ratingDistribution || {}).sort(([a], [b]) => b - a).map(([rating, count]) => `${rating} 星 ${count} 条`).join(' / ')}，已回写 product.rating / product.review_count`)
 console.log(`[seed:dev] 测试账号：用户名 ${seedUsername(0)} ~ ${seedUsername(CUSTOMER_COUNT - 1)}（手机号 ${seedPhones[0]} ~ ${seedPhones[seedPhones.length - 1]}），密码统一 ${SEED_PASSWORD}（昵称 ${seedNickname(0)} ~ ${seedNickname(CUSTOMER_COUNT - 1)}）`)
 // 提醒：migrate.js 现在按 schema_migrations 记录表判断迁移是否已执行，
 // 006/009 这类种子脚本只在空库首次执行一次，不会再随服务重启重复重建商品目录，

@@ -148,11 +148,11 @@ onMounted(loadDashboard)
         </div>
       </template>
       <el-table :data="recentLogs" stripe style="width:100%">
-        <el-table-column prop="admin_username" label="操作人" width="120" show-overflow-tooltip />
-        <el-table-column prop="operation_module" label="模块" width="110" />
-        <el-table-column prop="operation_type" label="类型" width="110" />
-        <el-table-column prop="operation_desc" label="描述" min-width="200" show-overflow-tooltip />
-        <el-table-column label="时间" width="170">
+        <el-table-column prop="admin_username" label="操作人" width="110" show-overflow-tooltip />
+        <el-table-column prop="operation_module" label="模块" width="88" />
+        <el-table-column prop="operation_type" label="类型" width="124" />
+        <el-table-column prop="operation_desc" label="描述" min-width="300" show-overflow-tooltip />
+        <el-table-column label="时间" width="158">
           <template #default="{ row }">{{ new Date(row.created_at).toLocaleString('zh-CN', { hour12: false }) }}</template>
         </el-table-column>
       </el-table>

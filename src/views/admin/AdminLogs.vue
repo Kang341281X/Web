@@ -55,13 +55,13 @@ onMounted(load)
       </div>
     </div>
     <el-table v-loading="loading" :data="logs" height="100%" stripe style="width:100%">
-      <el-table-column label="序号" width="70"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
-      <el-table-column prop="admin_username" label="操作人" width="120" show-overflow-tooltip />
-      <el-table-column prop="operation_module" label="模块" width="110" />
-      <el-table-column prop="operation_type" label="类型" width="110" />
-      <el-table-column prop="operation_desc" label="描述" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="ip_address" label="IP" width="130" />
-      <el-table-column label="时间" width="170"><template #default="{ row }">{{ formatTime(row) }}</template></el-table-column>
+      <el-table-column label="序号" width="56"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
+      <el-table-column prop="admin_username" label="操作人" width="110" show-overflow-tooltip />
+      <el-table-column prop="operation_module" label="模块" width="88" />
+      <el-table-column prop="operation_type" label="类型" width="124" />
+      <el-table-column prop="operation_desc" label="描述" min-width="300" show-overflow-tooltip />
+      <el-table-column prop="ip_address" label="IP" width="120" />
+      <el-table-column label="时间" width="158"><template #default="{ row }">{{ formatTime(row) }}</template></el-table-column>
     </el-table>
     <div class="pagination">
       <el-pagination v-model:current-page="query.page" v-model:page-size="query.page_size" :total="total" :page-sizes="[20, 50, 100]" layout="total, sizes, prev, pager, next, jumper" @current-change="load" @size-change="query.page = 1; load()" />

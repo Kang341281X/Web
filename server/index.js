@@ -12,6 +12,8 @@ import adminOrdersRouter from './routes/orders.js'
 import categoriesRouter from './routes/categories.js'
 import productsRouter from './routes/products.js'
 import importsRouter, { startImportCleanupTask } from './routes/imports.js'
+// 收支明细：仅超级管理员，挂在 /api/admin/finance（见 routes/finance.js）
+import financeRouter from './routes/finance.js'
 import logsRouter from './routes/logs.js'
 import settingsRouter from './routes/settings.js'
 import publicRouter from './routes/public.js'
@@ -77,6 +79,7 @@ app.use('/api/logs', logsRouter)
 app.use('/api/settings', settingsRouter)
 app.use('/api/admin/exchange-rates', adminExchangeRatesRouter)
 app.use('/api/admin/shipping-rates', adminShippingRatesRouter)
+app.use('/api/admin/finance', financeRouter)
 app.use('/api/public', publicRouter)
 app.use('/api/public/exchange-rates', publicExchangeRatesRouter)
 app.use('/api/public/shipping-rates', publicShippingRatesRouter)

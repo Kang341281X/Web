@@ -43,13 +43,13 @@ onMounted(load)
     <template #header><div class="page-header"><span>管理员信息</span><el-button type="primary" @click="openCreate">新增管理员</el-button></div></template>
     <div class="list-toolbar"><el-input v-model="keyword" clearable placeholder="搜索账号、姓名、电话或邮箱" style="max-width: 320px" @keyup.enter="page = 1; load()" @clear="page = 1; load()" /><el-button @click="page = 1; load()">搜索</el-button></div>
     <el-table v-loading="loading" :data="list" height="100%" stripe style="width: 100%">
-      <el-table-column label="管理员" min-width="170"><template #default="{ row }"><div class="user-cell"><el-avatar :src="resolve(row.avatar_url)"><template #default>{{ (row.real_name || row.username || '?').slice(0, 1) }}</template></el-avatar><span>{{ row.username }}</span></div></template></el-table-column>
-      <el-table-column prop="real_name" label="姓名" min-width="110" />
-      <el-table-column prop="phone" label="电话" min-width="130" />
-      <el-table-column prop="email" label="邮箱" min-width="180" />
-      <el-table-column label="角色" width="110"><template #default="{ row }"><el-tag :type="row.role === 'super_admin' ? 'danger' : 'info'">{{ row.role === 'super_admin' ? '超级管理员' : '管理员' }}</el-tag></template></el-table-column>
-      <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
-      <el-table-column label="操作" width="210" fixed="right"><template #default="{ row }"><template v-if="row.role !== 'super_admin'"><el-button link type="primary" @click="openEdit(row)">编辑</el-button><el-button link type="warning" @click="resetPassword(row)">重置密码</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template><span v-else class="muted">受保护</span></template></el-table-column>
+      <el-table-column label="管理员" min-width="160"><template #default="{ row }"><div class="user-cell"><el-avatar :src="resolve(row.avatar_url)"><template #default>{{ (row.real_name || row.username || '?').slice(0, 1) }}</template></el-avatar><span>{{ row.username }}</span></div></template></el-table-column>
+      <el-table-column prop="real_name" label="姓名" width="100" />
+      <el-table-column prop="phone" label="电话" width="120" />
+      <el-table-column prop="email" label="邮箱" width="180" />
+      <el-table-column label="角色" width="116"><template #default="{ row }"><el-tag :type="row.role === 'super_admin' ? 'danger' : 'info'">{{ row.role === 'super_admin' ? '超级管理员' : '管理员' }}</el-tag></template></el-table-column>
+      <el-table-column label="状态" width="84"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
+      <el-table-column label="操作" width="214" fixed="right"><template #default="{ row }"><template v-if="row.role !== 'super_admin'"><el-button link type="primary" @click="openEdit(row)">编辑</el-button><el-button link type="warning" @click="resetPassword(row)">重置密码</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template><span v-else class="muted">受保护</span></template></el-table-column>
     </el-table>
     <div class="pagination"><el-pagination v-model:current-page="page" :page-size="10" :total="total" layout="total, prev, pager, next" @current-change="load" /></div>
   </el-card>

@@ -312,19 +312,21 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
           </template>
         </el-alert>
 
-        <el-table :data="rates" v-loading="ratesLoading" style="max-width: 780px">
+        <el-table :data="rates" v-loading="ratesLoading" style="width: 100%">
           <el-table-column prop="locale" label="语言" width="110" />
-          <el-table-column prop="currency_code" label="币种" width="100" />
-          <el-table-column prop="currency_symbol" label="符号" width="90" />
-          <el-table-column label="汇率（1 人民币 =）" width="220">
+          <el-table-column prop="currency_code" label="币种" width="90" />
+          <el-table-column prop="currency_symbol" label="符号" width="84" />
+          <!-- 汇率输入框为主内容列（min-width 吸收多余宽度），其余列固定宽度 -->
+          <el-table-column label="汇率（1 人民币 =）" min-width="300">
             <template #default="{ row }">
-              <el-input v-model="rateDrafts[row.locale]" type="number" min="0" step="0.01">
+              <!-- 主内容列会吸收多余宽度，这里限制输入框自身宽度，避免在 2K/4K 屏上被拉成一条超长输入框 -->
+              <el-input v-model="rateDrafts[row.locale]" type="number" min="0" step="0.01" style="max-width: 320px">
                 <template #append>{{ row.currency_code }}</template>
               </el-input>
             </template>
           </el-table-column>
-          <el-table-column prop="updated_at" label="更新时间" min-width="180" />
-          <el-table-column label="操作" width="100">
+          <el-table-column prop="updated_at" label="更新时间" width="172" />
+          <el-table-column label="操作" width="96">
             <template #default="{ row }">
               <el-button type="primary" link :loading="savingLocale === row.locale" :disabled="!isRateDirty(row)" @click="saveRate(row)">保存</el-button>
             </template>
@@ -339,21 +341,22 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
           </template>
         </el-alert>
 
-        <el-table :data="shippingRates" v-loading="shippingLoading" style="max-width: 860px">
+        <el-table :data="shippingRates" v-loading="shippingLoading" style="width: 100%">
           <el-table-column label="区域" width="150">
             <template #default="{ row }">{{ REGION_LABELS[row.region_key] || row.region_key }}</template>
           </el-table-column>
-          <el-table-column prop="locale" label="语言" width="110" />
-          <el-table-column label="预估运费（人民币）" width="230">
+          <el-table-column prop="locale" label="语言" width="100" />
+          <!-- 运费输入框为主内容列（min-width 吸收多余宽度），其余列固定宽度 -->
+          <el-table-column label="预估运费（人民币）" min-width="280">
             <template #default="{ row }">
-              <el-input v-model="shippingDrafts[row.region_key]" type="number" min="0" step="1">
+              <el-input v-model="shippingDrafts[row.region_key]" type="number" min="0" step="1" style="max-width: 320px">
                 <template #append>¥</template>
               </el-input>
             </template>
           </el-table-column>
-          <el-table-column prop="note" label="说明" min-width="180" />
-          <el-table-column prop="updated_at" label="更新时间" min-width="170" />
-          <el-table-column label="操作" width="100">
+          <el-table-column prop="note" label="说明" width="220" show-overflow-tooltip />
+          <el-table-column prop="updated_at" label="更新时间" width="172" />
+          <el-table-column label="操作" width="96">
             <template #default="{ row }">
               <el-button type="primary" link :loading="savingRegion === row.region_key" :disabled="!isShippingDirty(row)" @click="saveShippingRate(row)">保存</el-button>
             </template>

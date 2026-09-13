@@ -42,6 +42,7 @@ const breadcrumb = computed(() => {
   if (route.path === '/admin/settings') return ['首页', '其他设置']
   if (route.path === '/admin/logs') return ['首页', '操作日志']
   if (route.path === '/admin/admins') return ['首页', '管理员信息']
+  if (route.path === '/admin/finance') return ['首页', '收支明细']
   if (route.path === '/admin/profile') return ['个人中心']
   return ['首页']
 })

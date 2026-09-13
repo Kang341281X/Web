@@ -83,6 +83,12 @@ const router = createRouter({
           component: () => import('../views/admin/AdminUsers.vue'),
           meta: { requiresSuperAdmin: true },
         },
+        // 收支明细：仅超级管理员，与后端 /api/admin/finance 的 requireSuperAdmin 对应
+        {
+          path: 'finance',
+          component: () => import('../views/admin/AdminFinance.vue'),
+          meta: { requiresSuperAdmin: true },
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', component: NotFound },

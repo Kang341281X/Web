@@ -22,6 +22,8 @@ const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detail = ref(null)
 const statusSaving = ref(false)
+// 勾选导出的订单集合（与商品管理一致，供导出下拉的「导出勾选项」使用）
+const selected = ref([])
 
 // 与后端状态机一致的可用操作：发货之后不再允许取消（售后另走流程）
 const CANCEL_ACTION = { status: 'cancelled', label: '取消订单', type: 'danger' }
@@ -55,6 +57,8 @@ async function load() {
     const { data } = await api.get('/admin-orders', { params: query })
     list.value = data.data
     total.value = data.pagination.total
+    // 列表数据整体刷新后，之前的勾选已失效，清空以避免导出到不在当前列表里的订单
+    selected.value = []
   } catch (error) {
     ElMessage.error(error.response?.data?.message || '订单列表加载失败')
   } finally {
@@ -66,6 +70,29 @@ function search() { query.page = 1; load() }
 function resetFilter() { query.keyword = ''; query.status = ''; search() }
 function pageIndex(index) { return (query.page - 1) * query.page_size + index + 1 }
 function formatTime(value) { return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-' }
+
+function handleSelection(rows) { selected.value = rows }
+
+// 导出订单（与商品管理同一套交互）：filter=当前筛选结果，selected=勾选项。
+// 后端用 exceljs 生成 xlsx 并冻结首行，一单多商品会按明细展开、订单级字段纵向合并。
+async function exportOrders(mode) {
+  try {
+    const { data } = await api.post('/admin-orders/export', {
+      mode,
+      keyword: query.keyword,
+      status: query.status,
+      ids: selected.value.map(item => item.id),
+    }, { responseType: 'blob' })
+    const url = URL.createObjectURL(data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = '订单数据.xlsx'
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '导出失败')
+  }
+}
 
 async function openDetail(row) {
   detail.value = row
@@ -134,12 +161,25 @@ onMounted(() => {
       </el-radio-group>
       <el-button type="primary" @click="search">搜索</el-button>
       <el-button @click="resetFilter">重置</el-button>
+      <div class="list-toolbar__actions">
+        <el-dropdown @command="exportOrders">
+          <el-button>导出<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="filter">导出筛选结果</el-dropdown-item>
+              <el-dropdown-item command="selected" :disabled="!selected.length">导出勾选项</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
     </div>
 
-    <el-table v-loading="loading" :data="list" height="100%" stripe style="width: 100%">
-      <el-table-column label="序号" width="70"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
-      <el-table-column prop="order_no" label="订单号" min-width="180" show-overflow-tooltip />
-      <el-table-column label="顾客" min-width="150">
+    <!-- 列宽：订单号为主内容列（min-width 吸收多余宽度），其余列固定宽度，避免所有列一起被拉伸 -->
+    <el-table v-loading="loading" :data="list" height="100%" stripe style="width: 100%" @selection-change="handleSelection">
+      <el-table-column type="selection" width="46" />
+      <el-table-column label="序号" width="52"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
+      <el-table-column prop="order_no" label="订单号" min-width="185" show-overflow-tooltip />
+      <el-table-column label="顾客" width="118">
         <template #default="{ row }">
           <div v-if="row.customer_phone">
             <div>{{ row.customer_nickname || '未设置昵称' }}</div>
@@ -148,23 +188,23 @@ onMounted(() => {
           <span v-else class="muted">游客订单</span>
         </template>
       </el-table-column>
-      <el-table-column label="收货人" min-width="140">
+      <el-table-column label="收货人" width="106">
         <template #default="{ row }">
           <div>{{ row.receiver_name }}</div>
           <small>{{ row.receiver_phone }}</small>
         </template>
       </el-table-column>
       <!-- 账号快照：下单时写入，顾客改资料或注销后依然保留（见 026 迁移） -->
-      <el-table-column label="账号快照" min-width="170">
+      <el-table-column label="账号快照" width="164">
         <template #default="{ row }">
           <div>{{ row.customer_username || '未记录' }}</div>
           <small>{{ row.customer_email || '未留邮箱' }}</small>
         </template>
       </el-table-column>
-      <el-table-column label="订单金额" width="110"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
-      <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)">{{ row.status_label }}</el-tag></template></el-table-column>
-      <el-table-column label="下单时间" width="170"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-      <el-table-column label="操作" width="90" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row)">详情</el-button></template></el-table-column>
+      <el-table-column label="订单金额" width="88"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
+      <el-table-column label="状态" width="84"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)">{{ row.status_label }}</el-tag></template></el-table-column>
+      <el-table-column label="下单时间" width="156"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+      <el-table-column label="操作" width="72" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row)">详情</el-button></template></el-table-column>
     </el-table>
 
     <div class="pagination">
@@ -196,12 +236,12 @@ onMounted(() => {
       <div class="detail-block">
         <div class="detail-section__title">商品明细</div>
         <el-table :data="detail?.items || []" size="small" border empty-text="该订单没有商品明细">
-          <el-table-column type="index" label="序号" width="60" align="center" />
+          <el-table-column type="index" label="序号" width="56" align="center" />
           <el-table-column prop="product_name" label="商品名称" min-width="200" show-overflow-tooltip />
-          <el-table-column label="商品编号（SKU）" min-width="140"><template #default="{ row }">{{ row.product_sku || '-' }}</template></el-table-column>
-          <el-table-column label="单价" width="100"><template #default="{ row }">{{ formatAmount(row.price) }}</template></el-table-column>
-          <el-table-column prop="quantity" label="数量" width="80" align="center" />
-          <el-table-column label="小计" width="110"><template #default="{ row }">{{ formatAmount(row.subtotal) }}</template></el-table-column>
+          <el-table-column label="商品编号（SKU）" width="130" show-overflow-tooltip><template #default="{ row }">{{ row.product_sku || '-' }}</template></el-table-column>
+          <el-table-column label="单价" width="88"><template #default="{ row }">{{ formatAmount(row.price) }}</template></el-table-column>
+          <el-table-column prop="quantity" label="数量" width="72" align="center" />
+          <el-table-column label="小计" width="96"><template #default="{ row }">{{ formatAmount(row.subtotal) }}</template></el-table-column>
         </el-table>
         <div class="detail-total">合计：<strong>{{ formatAmount(detail?.total_amount) }}</strong></div>
       </div>
@@ -217,6 +257,7 @@ onMounted(() => {
 <style scoped>
 .page-header { display: flex; align-items: center; justify-content: space-between; font-size: 18px; font-weight: 600 }
 .list-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap }
+.list-toolbar__actions { margin-left: auto }
 .pagination { display: flex; justify-content: flex-end; margin-top: 18px }
 .muted { color: #909399; font-size: 13px }
 .order-detail small { color: #909399 }
