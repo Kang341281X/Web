@@ -39,7 +39,7 @@ import {
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requirePasswordChanged)
 
-const adminFields = `r.id, r.product_id, p.name AS product_name, r.customer_id, r.customer_name, cu.phone AS customer_phone, cu.avatar AS customer_avatar, r.rating, r.content, r.images, r.order_id, o.order_no, r.status, r.created_at, r.updated_at`
+const adminFields = `r.id, r.product_id, p.name AS product_name, r.customer_id, r.customer_name, cu.phone AS customer_phone, cu.avatar AS customer_avatar, r.rating, r.content, r.images, r.order_id, o.order_no, r.status, r.is_edited, r.created_at, r.updated_at`
 const adminFrom = `FROM product_review r
   LEFT JOIN product p ON p.id = r.product_id
   LEFT JOIN customer cu ON cu.id = r.customer_id
@@ -51,8 +51,8 @@ function adminReviewRow(review) {
     images: parseImages(review.images),
     customer_avatar_url: storageService.getUrl(review.customer_avatar),
     is_purchased: Boolean(review.order_id),
-    // 顾客在 24 小时内改过评价时，updated_at 会晚于 created_at
-    edited: Boolean(review.updated_at && review.updated_at !== review.created_at),
+    // 与顾客端口径保持一致：读显式字段 is_edited，不再比较 created_at / updated_at（见 032 迁移）
+    edited: Boolean(review.is_edited),
   }
 }
 
@@ -217,7 +217,7 @@ publicRouter.get('/products/:id/reviews', optionalCustomerAuth, async (req, res,
       `SELECT r.id, r.product_id, r.customer_name, cu.avatar AS customer_avatar, r.rating, r.content, r.images, r.order_id,
               (r.customer_id = ?) AS is_mine,
               ${reviewEditExpiredSql('r.')} AS edit_expired,
-              r.created_at, r.updated_at
+              r.is_edited, r.created_at, r.updated_at
        FROM product_review r LEFT JOIN customer cu ON cu.id = r.customer_id
        ${where} ORDER BY r.created_at DESC, r.id DESC LIMIT ? OFFSET ?`,
       [customerId, ...params, pageSize, (page - 1) * pageSize]

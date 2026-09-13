@@ -13,6 +13,7 @@ const dialogVisible = ref(props.visible)
 const step = ref(1) // 1=上传, 2=预览结果
 const uploading = ref(false)
 const confirming = ref(false)
+const downloadingTemplate = ref(false)
 const excelFile = ref(null)
 const zipFile = ref(null)
 const previewResult = ref(null)
@@ -52,11 +53,44 @@ const failRows = computed(() => {
 })
 
 // ── 模板下载 ──────────────────────────────────────────
+// 统一走后端 GET /api/products/import-template（而不是直接下载 public 下的静态文件）：
+// 模板以后更新只需替换后端一份文件，前端不必跟着发版；api 实例会自动携带管理员 token。
+// 从 Content-Disposition 中解析后端给定的文件名，解析失败时回退到默认名
+function resolveTemplateFileName(headers) {
+  const disposition = headers?.['content-disposition'] || ''
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(disposition)
+  if (utf8Match) {
+    try { return decodeURIComponent(utf8Match[1]) } catch { /* 解析失败则用下面的回退逻辑 */ }
+  }
+  return /filename="?([^";]+)"?/i.exec(disposition)?.[1] || 'Products.xlsx'
+}
+
 async function downloadTemplate() {
-  const link = document.createElement('a')
-  link.href = '/assets/Products.xlsx'
-  link.download = 'Products.xlsx'
-  link.click()
+  if (downloadingTemplate.value) return
+  downloadingTemplate.value = true
+  try {
+    const response = await api.get('/products/import-template', { responseType: 'blob', timeout: 60000 })
+    const url = URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = resolveTemplateFileName(response.headers)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    // responseType 为 blob 时，后端返回的 JSON 错误也会被包成 Blob，需读出来才能显示真实提示
+    let message = '模板下载失败，请稍后重试'
+    const data = error.response?.data
+    if (data instanceof Blob) {
+      try { message = JSON.parse(await data.text())?.message || message } catch { /* 保持默认提示 */ }
+    } else if (data?.message) {
+      message = data.message
+    }
+    ElMessage.error(message)
+  } finally {
+    downloadingTemplate.value = false
+  }
 }
 
 // ── 文件选择 ──────────────────────────────────────────
@@ -427,7 +461,7 @@ onBeforeRouteLeave(() => {
       </el-alert>
 
       <div class="template-download">
-        <el-button type="primary" :icon="Download" @click="downloadTemplate">下载导入模板</el-button>
+        <el-button type="primary" :icon="Download" :loading="downloadingTemplate" @click="downloadTemplate">下载导入模板</el-button>
         <span class="hint">模板文件名：Products.xlsx</span>
       </div>
 

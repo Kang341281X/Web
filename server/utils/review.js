@@ -12,7 +12,8 @@ import storageService from '../services/storageService.js'
  *   - status：1 显示 / 0 隐藏，前台只读 1；
  *   - customer_name：评论时的昵称快照，账号被删（customer_id 置 NULL）也能正常展示；
  *   - created_at：发布时间，也是 24 小时可修改窗口的计算依据，任何修改都不得改写它；
- *   - updated_at：最后一次修改时间，仅用于展示「已编辑」。
+ *   - updated_at：最后一次修改时间，仅用于展示；
+ *   - is_edited：是否被编辑过（0/1），「已编辑」标记的唯一依据（见 032_product_review_is_edited.sql）。
  */
 
 export const REVIEW_VISIBLE = 1
@@ -114,7 +115,9 @@ export function publicReview(review) {
     is_purchased: Boolean(review.order_id),
     is_mine: isMine,
     can_edit: isMine && !Boolean(review.edit_expired),
-    edited: Boolean(review.updated_at && review.updated_at !== review.created_at),
+    // 「已编辑」取显式字段，不再比较时间戳：datetime('now') 精度只到秒，
+    // 发布后 1 秒内修改会让 updated_at === created_at，从而漏判（见 032 迁移）。
+    edited: Boolean(review.is_edited),
     created_at: review.created_at,
     updated_at: review.updated_at || review.created_at,
   }

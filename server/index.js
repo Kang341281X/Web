@@ -66,8 +66,13 @@ app.use('/api/admin-customers', adminCustomersRouter)
 app.use('/api/admin-orders', adminOrdersRouter)
 app.use('/api/admin-reviews', adminReviewsRouter)
 app.use('/api/categories', categoriesRouter)
-app.use('/api/products', productsRouter)
+// 注意：productsRouter 与 importsRouter 共用 /api/products 前缀，Express 按注册顺序匹配。
+// importsRouter 的 GET /import-template 必须注册在 productsRouter 的 GET /:id 之前，
+// 否则 "import-template" 会被当作商品 id 命中 /:id，模板下载永远返回 404「商品不存在」。
+// 两个 router 内部都是 router.use(requireAuth, requirePasswordChanged)，
+// 交换顺序不改变鉴权行为：未匹配到的请求会继续 next() 到后一个 router。
 app.use('/api/products', importsRouter)
+app.use('/api/products', productsRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/settings', settingsRouter)
 app.use('/api/admin/exchange-rates', adminExchangeRatesRouter)

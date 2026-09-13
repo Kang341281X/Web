@@ -640,7 +640,8 @@ function buildRatingQueue(total, guaranteedFiveStar) {
 }
 
 function createReviews(customers, products, buyersByProduct) {
-  // updated_at 显式写入：见 027 迁移，updated_at = created_at 表示「这条评论从未被修改过」
+  // 种子评论一律是「未编辑」状态：is_edited 走列默认值 0（见 032 迁移，它才是「已编辑」的唯一依据），
+  // 同时把 updated_at 写成与 created_at 相同，让两个时间戳在展示上也自洽
   const insert = raw.prepare('INSERT INTO product_review (product_id, customer_id, customer_name, rating, content, images, order_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, 1, ?, ?)')
   const updateProduct = raw.prepare('UPDATE product SET rating = ?, review_count = ? WHERE id = ?')
   const reviewCounts = planReviewCounts(products.length)

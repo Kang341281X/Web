@@ -37,7 +37,7 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024, files: REVIEW_MAX_IMAGES },
 })
 
-const reviewFields = 'r.id, r.product_id, r.customer_id, r.customer_name, r.rating, r.content, r.images, r.order_id, r.status, r.created_at, r.updated_at'
+const reviewFields = 'r.id, r.product_id, r.customer_id, r.customer_name, r.rating, r.content, r.images, r.order_id, r.status, r.is_edited, r.created_at, r.updated_at'
 
 // 读取单条评论，并带上「是否本人」「是否超出可修改窗口」：接口要据此告诉前端按钮该不该显示
 async function loadReview(id, customerId) {
@@ -180,7 +180,9 @@ router.put('/reviews/:id', upload.array('images', REVIEW_MAX_IMAGES), async (req
     }
     if (!updates.length) return res.status(400).json({ success: false, message: '没有可保存的更改' })
 
-    updates.push("updated_at = datetime('now')")
+    // updated_at 记录最后修改时间；is_edited 显式置 1——「已编辑」标记不再依赖时间戳比较：
+    // datetime('now') 精度只到秒，发布后 1 秒内修改会让 updated_at 与 created_at 相同（见 032 迁移）
+    updates.push("updated_at = datetime('now')", 'is_edited = 1')
     values.push(id)
     await db.execute(`UPDATE product_review SET ${updates.join(', ')} WHERE id = ?`, values)
     // 更新已落库：新图片从这一刻起被评论引用（见下方注释，报错时不能再删）
