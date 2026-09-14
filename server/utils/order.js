@@ -33,10 +33,16 @@ export function canTransitOrderStatus(from, to) {
   return Boolean(STATUS_FLOW[from]?.includes(to))
 }
 
-// 对外输出：金额转数值 + 补状态中文名，前端可直接展示
+// 对外输出：金额转数值 + 补状态中文名，前端可直接展示。
+// shipping_fee 是下单时快照的运费（来自 shipping_rate.fee_cny），保留两位小数便于后台拆分展示。
 export function publicOrder(order) {
   if (!order) return null
-  return { ...order, total_amount: Number(order.total_amount), status_label: orderStatusLabel(order.status) }
+  return {
+    ...order,
+    total_amount: Number(order.total_amount),
+    shipping_fee: order.shipping_fee == null ? 0 : Number(order.shipping_fee),
+    status_label: orderStatusLabel(order.status),
+  }
 }
 
 export function publicOrderItem(item) {
@@ -48,7 +54,7 @@ export function publicOrderItem(item) {
 // customer_username / customer_email 是下单时的账号快照（见 026 迁移），不随账号资料变更。
 export async function findOrderDetail(orderId, connection = db) {
   const [rows] = await connection.execute(
-    `SELECT o.id, o.order_no, o.customer_id, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.status, o.remark, o.handled_by, o.handled_by_name, o.created_at, o.updated_at, cu.phone AS customer_phone, cu.nickname AS customer_nickname FROM customer_order o LEFT JOIN customer cu ON cu.id = o.customer_id WHERE o.id = ?`,
+    `SELECT o.id, o.order_no, o.customer_id, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.shipping_fee, o.status, o.remark, o.handled_by, o.handled_by_name, o.created_at, o.updated_at, cu.phone AS customer_phone, cu.nickname AS customer_nickname FROM customer_order o LEFT JOIN customer cu ON cu.id = o.customer_id WHERE o.id = ?`,
     [orderId]
   )
   const order = rows[0]
@@ -128,8 +134,19 @@ function generateOrderNo() {
 //
 // 不修改 product.sales：与 restoreOrderStock 的口径保持一致（销量按历史累计售出统计，取消不回滚），
 // 故下单/取消都只操作 stock，取消时能精确回补下单扣掉的数量。
-export async function createCustomerOrder({ customer, address, items, remark = null }) {
+//
+// shippingFee：来自前端按当前语言对应的 shipping_rate.fee_cny，作为订单级费用快照进 customer_order。
+// 后端不二次查询 shipping_rate，避免被后台调价后的视图与下单快照错位；传入值必须 >= 0 否则直接拒绝。
+// 取消订单不退回运费（运费是物流服务费用而非商品款项），故 restoreOrderStock 不触碰该列。
+export async function createCustomerOrder({ customer, address, items, remark = null, shippingFee = 0 }) {
   if (!address) throw Object.assign(new Error('请先选择收货地址'), { status: 400 })
+
+  const shipping = Number(shippingFee)
+  if (!Number.isFinite(shipping) || shipping < 0) {
+    throw Object.assign(new Error('运费不正确'), { status: 400 })
+  }
+  // 与金额一致保留两位小数，避免前端展示出现 25.00000000003 等浮点尾数
+  const shippingFeeNormalized = Math.round(shipping * 100) / 100
 
   // 归并重复商品，并按商品 id 升序处理，保证同一事务内扣减顺序稳定、减少并发写同表时的冲突几率
   const merged = new Map()
@@ -146,7 +163,7 @@ export async function createCustomerOrder({ customer, address, items, remark = n
   try {
     await connection.beginTransaction()
     const lines = []
-    let totalAmount = 0
+    let goodsAmount = 0
 
     for (const [productId, quantity] of [...merged].sort((a, b) => a[0] - b[0])) {
       const product = await findProduct(productId, connection)
@@ -161,16 +178,18 @@ export async function createCustomerOrder({ customer, address, items, remark = n
 
       const price = Number(product.price)
       const subtotal = Math.round(price * quantity * 100) / 100
-      totalAmount = Math.round((totalAmount + subtotal) * 100) / 100
+      goodsAmount = Math.round((goodsAmount + subtotal) * 100) / 100
       lines.push({ product_id: productId, product_name: product.name, product_sku: product.sku, price, quantity, subtotal })
     }
 
+    // total_amount = 商品小计 + 运费，便于后台「订单金额」一眼看到最终应付；明细拆分靠 shipping_fee 拆分
+    const totalAmount = Math.round((goodsAmount + shippingFeeNormalized) * 100) / 100
     const receiverAddress = [address.province, address.city, address.district, address.detail_address].filter(Boolean).join(' ')
     // customer_username 为登录用户名快照（030 起 username 必填且唯一），后台按「顾客用户名」语义展示；
     // 不再退化为昵称/手机号，避免与后台展示口径不一致。
     const [orderResult] = await connection.execute(
-      `INSERT INTO customer_order (order_no, customer_id, customer_username, customer_email, receiver_name, receiver_phone, receiver_address, total_amount, status, remark)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      `INSERT INTO customer_order (order_no, customer_id, customer_username, customer_email, receiver_name, receiver_phone, receiver_address, total_amount, shipping_fee, status, remark)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
       [
         generateOrderNo(),
         customer.id,
@@ -180,6 +199,7 @@ export async function createCustomerOrder({ customer, address, items, remark = n
         address.receiver_phone,
         receiverAddress,
         totalAmount,
+        shippingFeeNormalized,
         remark,
       ]
     )

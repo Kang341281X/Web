@@ -20,7 +20,12 @@ import AppImage from '../common/AppImage.vue'
  *  2) 下载结算清单（Excel）：无需登录，导出后可与客服核对再下单。
  * 本站不涉及任何在线支付。
  */
-const props = defineProps({ visible: Boolean })
+const props = defineProps({
+  visible: Boolean,
+  // 由 Cart.vue 传入：当前语言对应的 shipping_rate.fee_cny，作为订单运费快照传给后端；
+  // 0 表示包邮。未传时兜底 0（理论上 Cart.vue 一定会传，但留默认值便于单元测试与未来复用）。
+  shippingFee: { type: Number, default: 0 },
+})
 const emit = defineEmits(['update:visible'])
 
 const router = useRouter()
@@ -39,6 +44,10 @@ const downloading = ref(false)
 const submitting = ref(false)
 const selectedAddressId = ref(null)
 const remark = ref('')
+
+// 与 Cart.vue 保持一致：feeCny <= 0 视为包邮，提示文案相应切换
+const shippingFree = computed(() => (Number(props.shippingFee) || 0) <= 0)
+const shippingFee = computed(() => Number(props.shippingFee) || 0)
 
 watch(() => props.visible, val => {
   dialogVisible.value = val
@@ -68,9 +77,9 @@ const tableRows = computed(() =>
   }))
 )
 
-// 合计金额
+// 合计金额 = 商品小计 + 运费（与后端 customer_order.total_amount 口径一致）
 const totalAmount = computed(() =>
-  tableRows.value.reduce((sum, row) => sum + row.subtotal, 0)
+  tableRows.value.reduce((sum, row) => sum + row.subtotal, 0) + shippingFee.value
 )
 
 const canSubmit = computed(() => customer.isLoggedIn && !!selectedAddressId.value && tableRows.value.length > 0)
@@ -129,6 +138,7 @@ async function handleDownload() {
         subtotal: row.subtotal,
       })),
       totalAmount: totalAmount.value,
+      shippingFee: shippingFee.value,
     }
     saveIntentOrder(payload).catch(err => {
       console.error('Failed to save intent order:', err)
@@ -159,6 +169,8 @@ async function handleSubmit() {
     const result = await orderStore.createOrder({
       address_id: selectedAddressId.value,
       remark: remark.value.trim(),
+      // 运费快照：后端 createCustomerOrder 会再次校验 >= 0 并四舍五入到 2 位小数
+      shipping_fee: shippingFee.value,
       items: tableRows.value.map(row => ({ product_id: row.product.id, quantity: row.quantity })),
     })
     if (!result.success) return ElMessage.error(result.message)
@@ -223,7 +235,16 @@ async function handleSubmit() {
     </el-table>
 
     <div class="checkout-total">
-      <span>合计</span>
+      <span>{{ language.t('subtotal') }}</span>
+      <b>¥{{ tableRows.reduce((s, r) => s + r.subtotal, 0).toFixed(2) }}</b>
+    </div>
+    <div class="checkout-total checkout-total--shipping">
+      <span>{{ language.t('shippingEstimate') }}</span>
+      <b>{{ shippingFree ? language.t('shippingFree') : `¥${shippingFee.toFixed(2)}` }}</b>
+    </div>
+    <p v-if="!shippingFree" class="checkout-shipping-hint">{{ language.t('shippingEstimateHint') }}</p>
+    <div class="checkout-total checkout-total--grand">
+      <span>{{ language.t('total') }}</span>
       <strong>¥{{ totalAmount.toFixed(2) }}</strong>
     </div>
 
@@ -303,15 +324,29 @@ async function handleSubmit() {
 
 .checkout-total {
   display: flex;
-  justify-content: flex-end;
-  align-items: center;
+  justify-content: space-between;
+  align-items: baseline;
   gap: 14px;
-  padding: 16px 0;
-  font-size: 1rem;
+  padding: 4px 0;
+  font-size: .92rem;
+  color: #55504a;
 }
 .checkout-total strong {
   font-size: 1.35rem;
   color: var(--clay, #c75f3e);
+}
+.checkout-total--shipping { color: var(--muted, #746f68) }
+.checkout-total--grand {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line, #e7e0d6);
+  font-size: 1rem;
+}
+.checkout-shipping-hint {
+  margin: -2px 0 8px;
+  font-size: 12px;
+  color: #909399;
+  text-align: right;
 }
 
 .checkout-section { margin-bottom: 16px }

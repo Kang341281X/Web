@@ -135,6 +135,12 @@ router.post('/intent-orders', async (req, res, next) => {
     const body = req.body || {}
     const items = Array.isArray(body.items) ? body.items : null
     const totalAmount = Number(body.totalAmount)
+    // 运费：与 customer_order 同口径，前端按当前语言对应 shipping_rate.fee_cny 传入，
+    // 快照进 items JSON 便于客服后续核对；空值兜底 0。
+    const shippingFeeRaw = Number(body.shippingFee)
+    const shippingFee = Number.isFinite(shippingFeeRaw) && shippingFeeRaw >= 0
+      ? Math.round(shippingFeeRaw * 100) / 100
+      : 0
 
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: '商品列表不能为空' })
@@ -151,6 +157,8 @@ router.post('/intent-orders', async (req, res, next) => {
       quantity: Math.max(1, Number(item.quantity) || 1),
       subtotal: Number(item.subtotal) || 0,
     }))
+    // 顶层加 shipping_fee 便于客服一眼区分「商品金额 / 运费」，与 customer_order 拆分展示口径一致
+    const payload = { shipping_fee: shippingFee, items: snapshot }
 
     // 生成订单编号：IO + 时间戳 + 4位随机数
     const now = Date.now()
@@ -159,7 +167,7 @@ router.post('/intent-orders', async (req, res, next) => {
 
     await db.execute(
       'INSERT INTO intent_order (order_no, items, total_amount) VALUES (?, ?, ?)',
-      [orderNo, JSON.stringify(snapshot), totalAmount.toFixed(2)]
+      [orderNo, JSON.stringify(payload), totalAmount.toFixed(2)]
     )
 
     res.json({ success: true, data: { order_no: orderNo } })

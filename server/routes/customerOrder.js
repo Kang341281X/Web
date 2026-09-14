@@ -65,7 +65,10 @@ router.post('/', async (req, res, next) => {
     if (!items.length) return res.status(400).json({ success: false, message: '请先选择要购买的商品' })
 
     const remark = optionalText(body.remark, 200)
-    const order = await createCustomerOrder({ customer: req.customer, address, items, remark })
+    // 运费由前端按当前语言对应的 shipping_rate.fee_cny 计算后传入；
+    // 不二次查 shipping_rate，避免后台调价后视图与下单快照错位；空值兜底为 0。
+    const shippingFee = Number(body.shipping_fee)
+    const order = await createCustomerOrder({ customer: req.customer, address, items, remark, shippingFee: Number.isFinite(shippingFee) ? shippingFee : 0 })
     res.status(201).json({ success: true, message: '订单已提交，我们会尽快与您确认', data: order })
   } catch (error) { next(error) }
 })

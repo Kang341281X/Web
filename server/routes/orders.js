@@ -9,7 +9,7 @@ import { ORDER_STATUSES, isValidOrderStatus, orderStatusLabel, findOrderDetail, 
 const router = Router()
 router.use(requireAuth, requirePasswordChanged)
 
-const orderFields = `o.id, o.order_no, o.customer_id, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.status, o.remark, o.handled_by, o.handled_by_name, o.created_at, o.updated_at, cu.phone AS customer_phone, cu.nickname AS customer_nickname`
+const orderFields = `o.id, o.order_no, o.customer_id, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.shipping_fee, o.status, o.remark, o.handled_by, o.handled_by_name, o.created_at, o.updated_at, cu.phone AS customer_phone, cu.nickname AS customer_nickname`
 // 列表与导出共用同一张 from：customer 用 LEFT JOIN，兼容 customer_id 为空的历史订单
 const orderFrom = 'FROM customer_order o LEFT JOIN customer cu ON cu.id = o.customer_id'
 
@@ -19,7 +19,13 @@ function parseId(value) {
 }
 
 function publicOrderRow(order) {
-  return { ...order, total_amount: Number(order.total_amount), status_label: orderStatusLabel(order.status) }
+  return {
+    ...order,
+    total_amount: Number(order.total_amount),
+    // 历史订单在 034 迁移前没有 shipping_fee 列，统一兜底 0 以便前后端拆分展示
+    shipping_fee: order.shipping_fee == null ? 0 : Number(order.shipping_fee),
+    status_label: orderStatusLabel(order.status),
+  }
 }
 
 // 列表与导出共用的筛选条件：状态 / 订单号 / 顾客手机号 / 关键词（订单号或手机号的合并搜索）/ 勾选的订单 id。
@@ -173,7 +179,7 @@ router.post('/export', async (req, res, next) => {
 
     // 主表 LEFT JOIN 明细：一个订单多个商品会展开成多行，导出时再按订单合并订单级单元格
     const [rows] = await db.execute(
-      `SELECT o.id, o.order_no, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.status, o.remark, o.created_at, o.updated_at,
+      `SELECT o.id, o.order_no, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.shipping_fee, o.status, o.remark, o.created_at, o.updated_at,
               oi.product_name, oi.product_sku, oi.price, oi.quantity, oi.subtotal
        ${orderFrom} LEFT JOIN order_item oi ON oi.order_id = o.id
        ${where.sql} ORDER BY o.created_at DESC, o.id DESC, oi.id`,
@@ -188,9 +194,9 @@ router.post('/export', async (req, res, next) => {
       if (row.product_name !== null) order.items.push(row)
     }
 
-    const headers = ['序号', '订单号', '顾客账号', '收货人', '联系电话', '收货地址', '商品名称', '商品SKU', '单价', '数量', '小计', '订单金额', '状态', '下单时间', '最近更新时间', '备注']
+    const headers = ['序号', '订单号', '顾客账号', '收货人', '联系电话', '收货地址', '商品名称', '商品SKU', '单价', '数量', '小计', '运费', '订单金额', '状态', '下单时间', '最近更新时间', '备注']
     // 订单级列（1 基）在同一个订单的多行明细间纵向合并，避免同一信息重复铺满多行
-    const orderLevelColumns = [2, 3, 4, 5, 6, 12, 13, 14, 15, 16]
+    const orderLevelColumns = [2, 3, 4, 5, 6, 12, 13, 14, 15, 16, 17]
     const workbook = new ExcelJS.Workbook()
     // ySplit: 1 → 冻结第一行表头
     const sheet = workbook.addWorksheet('订单数据', { views: [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2', activeCell: 'A2' }] })
@@ -204,6 +210,8 @@ router.post('/export', async (req, res, next) => {
       // 无明细时用一行占位，保证订单主表信息仍然出现在导出文件里
       const items = order.items.length ? order.items : [null]
       const startRow = addedRows + 2
+      // 历史订单在 034 迁移前没有 shipping_fee 列，统一兜底 0
+      const shippingFee = row.shipping_fee == null ? 0 : Number(row.shipping_fee)
       for (const item of items) {
         sequence++
         addedRows++
@@ -219,6 +227,7 @@ router.post('/export', async (req, res, next) => {
           item ? Number(item.price) : '',
           item ? item.quantity : '',
           item ? Number(item.subtotal) : '',
+          shippingFee,
           Number(row.total_amount),
           orderStatusLabel(row.status),
           row.created_at || '',
@@ -233,14 +242,14 @@ router.post('/export', async (req, res, next) => {
     }
 
     // 列宽与对齐：金额/数量等窄列收紧，地址与备注留宽，整表垂直居中便于阅读
-    const widths = [6, 22, 14, 10, 14, 34, 22, 12, 10, 8, 10, 12, 10, 20, 20, 20]
+    const widths = [6, 22, 14, 10, 14, 34, 22, 12, 10, 8, 10, 10, 12, 10, 20, 20, 20]
     widths.forEach((width, index) => { sheet.getColumn(index + 1).width = width })
     sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       if (rowNumber === 1) return
       row.alignment = { vertical: 'middle', wrapText: false }
     })
     sheet.getColumn(6).alignment = { vertical: 'middle', wrapText: true }
-    sheet.getColumn(16).alignment = { vertical: 'middle', wrapText: true }
+    sheet.getColumn(17).alignment = { vertical: 'middle', wrapText: true }
 
     const buffer = await workbook.xlsx.writeBuffer()
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

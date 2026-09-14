@@ -1,1 +1,0 @@
-[Config] 未设置 CUSTOMER_JWT_SECRET，正在使用仅限本地开发的临时密钥；部署前必须配置 .env.production。

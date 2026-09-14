@@ -51,6 +51,14 @@ const customerText = computed(() => {
   return nickname ? `${nickname}（${phone}）` : phone
 })
 
+// 订单详情内商品金额合计：从明细累加得到，与 customer_order.total_amount 拆分展示
+// total_amount = goodsSubtotal + shipping_fee，运费的快照值由后端在 createCustomerOrder 写入
+const detailGoodsSubtotal = computed(() => {
+  const items = detail.value?.items
+  if (!Array.isArray(items)) return 0
+  return items.reduce((sum, item) => sum + Number(item.subtotal || 0), 0)
+})
+
 async function load() {
   loading.value = true
   try {
@@ -201,7 +209,9 @@ onMounted(() => {
           <small>{{ row.customer_email || '未留邮箱' }}</small>
         </template>
       </el-table-column>
-      <el-table-column label="订单金额" width="88"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
+      <el-table-column label="商品金额" width="88" align="right"><template #default="{ row }">{{ formatAmount((row.total_amount || 0) - (row.shipping_fee || 0)) }}</template></el-table-column>
+      <el-table-column label="运费" width="76" align="right"><template #default="{ row }">{{ Number(row.shipping_fee) > 0 ? formatAmount(row.shipping_fee) : '包邮' }}</template></el-table-column>
+      <el-table-column label="订单金额" width="92" align="right"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
       <el-table-column label="状态" width="84"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)">{{ row.status_label }}</el-tag></template></el-table-column>
       <el-table-column label="下单时间" width="156"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
       <el-table-column label="操作" width="72" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row)">详情</el-button></template></el-table-column>
@@ -227,6 +237,13 @@ onMounted(() => {
         <el-descriptions-item label="买家备注" :span="3">{{ detail?.remark || '无' }}</el-descriptions-item>
       </el-descriptions>
 
+      <!-- 金额拆分：商品金额 / 运费 / 订单金额，便于后台一眼看清 -->
+      <el-descriptions title="金额拆分" :column="3" border size="small" class="detail-block">
+        <el-descriptions-item label="商品金额">{{ formatAmount(detailGoodsSubtotal) }}</el-descriptions-item>
+        <el-descriptions-item label="运费">{{ Number(detail?.shipping_fee) > 0 ? formatAmount(detail.shipping_fee) : '包邮' }}</el-descriptions-item>
+        <el-descriptions-item label="订单金额"><strong>{{ formatAmount(detail?.total_amount) }}</strong></el-descriptions-item>
+      </el-descriptions>
+
       <el-descriptions title="收货信息" :column="3" border size="small" class="detail-block">
         <el-descriptions-item label="收货人">{{ detail?.receiver_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="联系电话">{{ detail?.receiver_phone || '-' }}</el-descriptions-item>
@@ -243,7 +260,11 @@ onMounted(() => {
           <el-table-column prop="quantity" label="数量" width="72" align="center" />
           <el-table-column label="小计" width="96"><template #default="{ row }">{{ formatAmount(row.subtotal) }}</template></el-table-column>
         </el-table>
-        <div class="detail-total">合计：<strong>{{ formatAmount(detail?.total_amount) }}</strong></div>
+        <div class="detail-total">
+          <div><span>商品金额</span><b>{{ formatAmount(detailGoodsSubtotal) }}</b></div>
+          <div><span>运费</span><b>{{ Number(detail?.shipping_fee) > 0 ? formatAmount(detail.shipping_fee) : '包邮' }}</b></div>
+          <div class="detail-total__grand"><span>合计</span><strong>{{ formatAmount(detail?.total_amount) }}</strong></div>
+        </div>
       </div>
     </div>
 
@@ -263,7 +284,9 @@ onMounted(() => {
 .order-detail small { color: #909399 }
 .detail-block { margin-top: 18px }
 .detail-section__title { font-size: 14px; font-weight: 600; color: #303133; margin-bottom: 10px }
-.detail-total { margin-top: 10px; text-align: right; font-size: 14px; color: #606266 }
+.detail-total { margin-top: 10px; text-align: right; font-size: 14px; color: #606266; display: flex; flex-direction: column; align-items: flex-end; gap: 4px }
+.detail-total > div { display: flex; gap: 16px; align-items: baseline }
+.detail-total__grand { padding-top: 6px; border-top: 1px solid #ebeef5; margin-top: 4px }
 .detail-total strong { font-size: 16px; color: #f56c6c }
 @media (max-width: 600px) {
   .list-toolbar { align-items: stretch; flex-direction: column }

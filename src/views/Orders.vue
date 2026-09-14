@@ -32,6 +32,14 @@ const pageSize = 10
 const statusLabel = value => language.t(`orderStatus_${value}`) || value
 const canCancel = computed(() => ['pending', 'confirmed'].includes(detail.value?.status))
 
+// 订单详情内商品金额合计：明细每行已快照 subtotal，独立累加展示「商品金额」，
+// 与数据库里 customer_order.total_amount（= 商品金额 + shipping_fee）口径对应拆分
+const goodsSubtotal = computed(() => {
+  const items = detail.value?.items
+  if (!Array.isArray(items)) return 0
+  return items.reduce((sum, item) => sum + Number(item.subtotal || 0), 0)
+})
+
 const pages = computed(() => Math.max(Math.ceil(orders.total / pageSize), 1))
 
 function formatTime(value) {
@@ -181,7 +189,14 @@ onMounted(() => {
                   <strong>{{ formatAmount(item.subtotal) }}</strong>
                 </li>
               </ul>
-              <p class="order-modal__total">{{ language.t('total') }}：<strong>{{ formatAmount(detail.total_amount) }}</strong></p>
+              <div class="order-modal__breakdown">
+                <p><span>{{ language.t('orderGoodsAmount') }}</span><b>{{ formatAmount(goodsSubtotal) }}</b></p>
+                <p>
+                  <span>{{ language.t('orderShipping') }}</span>
+                  <b>{{ Number(detail.shipping_fee) > 0 ? formatAmount(detail.shipping_fee) : language.t('shippingFree') }}</b>
+                </p>
+                <p class="order-modal__total">{{ language.t('total') }}：<strong>{{ formatAmount(detail.total_amount) }}</strong></p>
+              </div>
             </div>
 
             <div v-if="confirmingCancel" class="order-modal__confirm">
@@ -252,6 +267,18 @@ onMounted(() => {
 .order-item__qty { color: var(--muted); white-space: nowrap }
 .order-modal__total { text-align: right; font-size: .88rem }
 .order-modal__total strong { font-size: 1.15rem; color: var(--clay) }
+
+/* 订单金额拆为「商品金额 + 运费 + 合计」三行展示，明细下方、合计上方 */
+.order-modal__breakdown { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line) }
+.order-modal__breakdown p {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0 0 6px;
+  font-size: .82rem;
+  color: var(--muted);
+}
+.order-modal__breakdown p b { color: #292622; font-weight: 600 }
 .order-modal__confirm { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding: 10px 12px; background: rgba(179, 38, 30, .06); color: #b3261e; font-size: .78rem; line-height: 1.5 }
 .order-modal__confirm .text-button { color: #b3261e }
 .order-modal__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; flex-wrap: wrap }
