@@ -110,18 +110,22 @@ onMounted(async () => {
         @keydown.space.prevent="select(item)"
       >
         <span v-if="isSelect" class="address-radio" aria-hidden="true"></span>
-        <div class="address-head">
-          <span class="address-name">{{ item.receiver_name }}</span>
-          <span class="address-phone">{{ item.receiver_phone }}</span>
-          <span v-if="item.is_default" class="address-badge">{{ language.t('defaultAddress') }}</span>
+        <div class="address-info">
+          <div class="address-head">
+            <span class="address-name">{{ item.receiver_name }}</span>
+            <span v-if="item.is_default" class="address-badge">{{ language.t('defaultAddress') }}</span>
+            <span class="address-phone">{{ item.receiver_phone }}</span>
+          </div>
+          <p class="address-line">
+            <span v-if="regionText(item)" class="address-region">{{ regionText(item) }}</span>
+            <span class="address-detail">{{ item.detail_address }}</span>
+          </p>
         </div>
-        <span v-if="regionText(item)" class="address-region">{{ regionText(item) }}</span>
-        <p class="address-detail">{{ item.detail_address }}</p>
 
         <div v-if="pendingDeleteId !== item.id" class="address-actions">
           <button v-if="!isSelect && !item.is_default" type="button" class="text-button" @click.stop="toggleDefault(item)">{{ language.t('setAsDefault') }}</button>
           <button type="button" class="text-button" @click.stop="openEdit(item)">{{ language.t('edit') }}</button>
-          <button v-if="!isSelect" type="button" class="text-button" @click.stop="pendingDeleteId = item.id">{{ language.t('delete') }}</button>
+          <button v-if="!isSelect" type="button" class="text-button danger" @click.stop="pendingDeleteId = item.id">{{ language.t('delete') }}</button>
         </div>
         <div v-else class="address-confirm">
           <span>{{ language.t('deleteAddressConfirm') }}</span>

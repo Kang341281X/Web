@@ -9,7 +9,7 @@ import { ORDER_STATUSES, isValidOrderStatus, orderStatusLabel, findOrderDetail, 
 const router = Router()
 router.use(requireAuth, requirePasswordChanged)
 
-const orderFields = `o.id, o.order_no, o.customer_id, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.shipping_fee, o.status, o.remark, o.handled_by, o.handled_by_name, o.created_at, o.updated_at, cu.phone AS customer_phone, cu.nickname AS customer_nickname`
+const orderFields = `o.id, o.order_no, o.customer_id, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.shipping_fee, o.status, o.remark, o.handled_by, o.handled_by_name, o.created_at, o.updated_at, cu.phone AS customer_phone`
 // 列表与导出共用同一张 from：customer 用 LEFT JOIN，兼容 customer_id 为空的历史订单
 const orderFrom = 'FROM customer_order o LEFT JOIN customer cu ON cu.id = o.customer_id'
 

@@ -994,8 +994,9 @@ router.post('/import/:batchId/create-category', async (req, res, next) => {
   }
 })
 
-// ── 为单行生成商品编号 ──────────────────────────────────
+// ── 为单行生成 / 手动修改商品编号 ────────────────────────
 // 参数 row 为 Excel 行号（preview_data 里的 row 字段，不是数组下标）
+// body 携带非空 sku 时按管理员提交值保存（所见即所存）；否则按同一算法重新生成
 router.put('/import/:batchId/rows/:row/sku', async (req, res, next) => {
   try {
     const { batchId } = req.params
@@ -1004,8 +1005,8 @@ router.put('/import/:batchId/rows/:row/sku', async (req, res, next) => {
     const row = previewData.find(r => r.row === rowNum)
     if (!row) return res.status(404).json({ success: false, message: '未找到对应的商品行' })
 
-    // 所见即所存：重新生成即按同一算法生成新编号并回写预览，确认导入时原样落库
-    row.sku = generateSkuCode(req.admin.username)
+    const manual = String(req.body?.sku || '').trim().slice(0, 64)
+    row.sku = manual || generateSkuCode(req.admin.username)
 
     const result = await saveBatchPreview(batchId, previewData)
     res.json({ success: true, data: { row: rowNum, sku: row.sku, ...result } })
@@ -1029,6 +1030,25 @@ router.post('/import/:batchId/generate-skus', async (req, res, next) => {
 
     const result = await saveBatchPreview(batchId, previewData)
     res.json({ success: true, data: { generated, ...result } })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// ── 删除预览中的某一行 ──────────────────────────────────
+// 管理员在确认导入前剔除不需要的记录：从 preview_data 移除并重算成功/失败数。
+// 行对应的临时图片不单独清理（保留在临时目录，批次结束时随目录一并清理）。
+router.delete('/import/:batchId/rows/:row', async (req, res, next) => {
+  try {
+    const { batchId } = req.params
+    const { previewData } = await getPendingBatchPreview(batchId)
+    const rowNum = Number(req.params.row)
+    const index = previewData.findIndex(r => r.row === rowNum)
+    if (index === -1) return res.status(404).json({ success: false, message: '未找到对应的商品行' })
+
+    previewData.splice(index, 1)
+    const result = await saveBatchPreview(batchId, previewData)
+    res.json({ success: true, data: { row: rowNum, ...result } })
   } catch (error) {
     next(error)
   }

@@ -45,10 +45,10 @@ const STATUS_CONFIRM = {
 }
 
 const customerText = computed(() => {
-  const nickname = detail.value?.customer_nickname
+  const username = detail.value?.customer_username
   const phone = detail.value?.customer_phone
   if (!phone) return '游客订单（无绑定账号）'
-  return nickname ? `${nickname}（${phone}）` : phone
+  return username ? `${username}（${phone}）` : phone
 })
 
 // 订单详情内商品金额合计：从明细累加得到，与 customer_order.total_amount 拆分展示
@@ -190,7 +190,7 @@ onMounted(() => {
       <el-table-column label="顾客" width="118">
         <template #default="{ row }">
           <div v-if="row.customer_phone">
-            <div>{{ row.customer_nickname || '未设置昵称' }}</div>
+            <div>{{ row.customer_username || '未记录' }}</div>
             <small>{{ row.customer_phone }}</small>
           </div>
           <span v-else class="muted">游客订单</span>
@@ -232,7 +232,6 @@ onMounted(() => {
         <el-descriptions-item label="最近更新">{{ formatTime(detail?.updated_at) }}</el-descriptions-item>
         <el-descriptions-item label="处理人">{{ detail?.handled_by_name || '未处理' }}</el-descriptions-item>
         <el-descriptions-item label="顾客账号">{{ customerText }}</el-descriptions-item>
-        <el-descriptions-item label="顾客用户名（快照）">{{ detail?.customer_username || '未记录' }}</el-descriptions-item>
         <el-descriptions-item label="顾客邮箱（快照）">{{ detail?.customer_email || '未留邮箱' }}</el-descriptions-item>
         <el-descriptions-item label="买家备注" :span="3">{{ detail?.remark || '无' }}</el-descriptions-item>
       </el-descriptions>

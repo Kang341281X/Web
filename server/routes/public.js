@@ -31,7 +31,7 @@ router.get('/categories', async (_req, res, next) => {
 router.get('/products', async (req, res, next) => {
   try {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
-    const pageSize = Math.min(Math.max(Number.parseInt(req.query.page_size, 10) || 20, 1), 100)
+    const pageSize = Math.min(Math.max(Number.parseInt(req.query.page_size, 10) || 20, 1), 60)
     const keyword = String(req.query.keyword || '').trim()
     const categoryId = req.query.category_id ? Number(req.query.category_id) : null
     const sort = String(req.query.sort || 'recommended')

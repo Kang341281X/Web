@@ -12,7 +12,7 @@ const language = useLanguageStore()
 // 未登录时复用前台登录弹窗（与 Header 上的入口一致），不再另做一套登录页
 const user = useUserStore()
 
-const form = reactive({ username: '', nickname: '', email: '' })
+const form = reactive({ phone: '', email: '' })
 const password = reactive({ current: '', next: '', confirm: '' })
 const notes = reactive({ profile: null, password: null })
 const saving = reactive({ profile: false, password: false, avatar: false })
@@ -20,13 +20,12 @@ const saving = reactive({ profile: false, password: false, avatar: false })
 const avatarPreview = computed(() => resolve(customer.avatarUrl))
 
 // 与后端 server/utils/customer.js 的规则保持一致
-const USERNAME_PATTERN = /^[A-Za-z0-9_]{4,20}$/
+const PHONE_PATTERN = /^1[3-9]\d{9}$/
 const EMAIL_PATTERN = /^\S+@\S+\.\S+$/
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024
 
 const syncForm = () => {
-  form.username = customer.profile?.username || ''
-  form.nickname = customer.profile?.nickname || ''
+  form.phone = customer.profile?.phone || ''
   form.email = customer.profile?.email || ''
 }
 
@@ -52,15 +51,17 @@ onMounted(async () => {
 })
 
 const saveProfile = async () => {
-  const username = form.username.trim()
-  const nickname = form.nickname.trim()
   const email = form.email.trim()
-  if (!USERNAME_PATTERN.test(username)) return setNote('profile', 'error', language.t('usernameInvalid'))
-  if (nickname.length > 50) return setNote('profile', 'error', language.t('nicknameTooLong'))
+  const phoneInput = form.phone.trim()
+  const currentPhone = customer.profile?.phone || ''
+  // 与当前手机号相同（或留空）视为未修改，不提交 phone 字段；
+  // 真要修改就必须输入完整的 11 位手机号
+  const phoneChanged = !!phoneInput && phoneInput !== currentPhone
+  if (phoneChanged && !PHONE_PATTERN.test(phoneInput)) return setNote('profile', 'error', language.t('phoneInvalid'))
   if (email && !EMAIL_PATTERN.test(email)) return setNote('profile', 'error', language.t('emailInvalid'))
 
   saving.profile = true
-  const result = await customer.updateProfile({ username, nickname, email })
+  const result = await customer.updateProfile({ email, ...(phoneChanged ? { phone: phoneInput } : {}) })
   saving.profile = false
 
   if (!result.success) return setNote('profile', 'error', result.message)
@@ -102,12 +103,6 @@ const onAvatarPick = async event => {
 </script>
 <template>
   <section v-if="customer.isLoggedIn" class="container page account-page">
-    <div class="page-intro">
-      <span class="eyebrow">{{ language.t('account') }}</span>
-      <h1>{{ language.t('profile') }}</h1>
-      <p>{{ language.t('profileText') }}</p>
-    </div>
-
     <div class="account-layout">
       <article class="account-card account-identity">
         <img class="account-avatar-lg" :src="avatarPreview" :alt="customer.displayName" />
@@ -121,8 +116,8 @@ const onAvatarPick = async event => {
       <article class="account-card">
         <h2>{{ language.t('profileInfo') }}</h2>
         <form class="account-form" @submit.prevent="saveProfile">
-          <label>{{ language.t('username') }}<input v-model="form.username" type="text" maxlength="20" autocomplete="username" autocapitalize="off" spellcheck="false" :placeholder="language.t('usernamePlaceholder')" /><small class="account-field-hint">{{ language.t('usernameNote') }}</small></label>
-          <label>{{ language.t('nickname') }}<input v-model="form.nickname" type="text" maxlength="50" autocomplete="nickname" :placeholder="language.t('nicknamePlaceholder')" /></label>
+          <!-- 用户名是登录凭证，注册后不可修改，只在左侧身份卡展示 -->
+          <label>{{ language.t('phone') }}<input v-model="form.phone" type="tel" maxlength="11" inputmode="numeric" autocomplete="tel" :placeholder="language.t('phonePlaceholder')" /></label>
           <label>{{ language.t('email') }}<input v-model="form.email" type="email" autocomplete="email" :placeholder="language.t('emailPlaceholder')" /></label>
           <p v-if="notes.profile" class="account-note" :class="notes.profile.type" role="status">{{ notes.profile.text }}</p>
           <button class="button primary" type="submit" :disabled="saving.profile">{{ saving.profile ? language.t('submitting') : language.t('saveChanges') }}</button>
@@ -132,7 +127,7 @@ const onAvatarPick = async event => {
       <article class="account-card">
         <h2>{{ language.t('security') }}</h2>
         <form class="account-form" @submit.prevent="changePassword">
-          <label>{{ language.t('currentPassword') }}<input v-model="password.current" type="password" maxlength="128" autocomplete="current-password" /></label>
+          <label>{{ language.t('currentPassword') }}<span class="account-label-hint">{{ language.t('forgotPasswordHint') }}</span><input v-model="password.current" type="password" maxlength="128" autocomplete="current-password" /></label>
           <label>{{ language.t('newPassword') }}<input v-model="password.next" type="password" maxlength="128" autocomplete="new-password" :placeholder="language.t('passwordHint')" /></label>
           <label>{{ language.t('confirmPassword') }}<input v-model="password.confirm" type="password" maxlength="128" autocomplete="new-password" /></label>
           <p v-if="notes.password" class="account-note" :class="notes.password.type" role="status">{{ notes.password.text }}</p>
@@ -140,16 +135,11 @@ const onAvatarPick = async event => {
         </form>
       </article>
 
-      <!-- 收货地址是列表 + 弹窗的重内容模块，单独一页承载（/account/addresses） -->
-      <RouterLink class="account-card account-address" to="/account/addresses">
-        <h2>{{ language.t('addressList') }}</h2>
-        <p>{{ language.t('addressEntryText') }}</p>
-        <span class="button">{{ language.t('manageAddress') }}</span>
-      </RouterLink>
     </div>
   </section>
 </template>
 
 <style scoped>
 .account-field-hint { display: block; margin-top: 4px; font-size: 12px; color: #909399 }
+.account-label-hint { margin-left: 4px; font-size: 12px; color: #909399 }
 </style>

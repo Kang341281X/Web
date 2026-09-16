@@ -6,8 +6,8 @@ import ProductGrid from '../components/product/ProductGrid.vue'
 import CategoryCarousel from '../components/category/CategoryCarousel.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
-// 后端 page_size 上限为 100：每页拉满，首页直接承载完整商品列表，靠分页器继续往后翻
-const PAGE_SIZE = 100
+// 每页显示 60 个商品，超出部分自动分到后续页
+const PAGE_SIZE = 60
 
 const language = useLanguageStore()
 const products = ref([])

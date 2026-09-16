@@ -232,7 +232,7 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
                 <el-input v-model="form.sku" readonly class="sku-input" :class="{ 'is-locked': editing }" placeholder="系统自动生成" />
                 <el-button v-if="!editing" type="primary" plain @click="regenerateSku"><el-icon><Refresh /></el-icon>重新生成</el-button>
               </div>
-              <div class="sku-immutable-tip">{{ editing ? '商品编号在创建后不可修改，如需更换请删除该商品后重新新增' : '商品编号由系统按规则自动生成：前 3 位取当前管理员用户名、后 7 位取生成时间，共 10 位，不支持手动输入；预览即落库，保存后与此处展示的编号完全一致' }}</div>
+              <div v-if="editing" class="sku-immutable-tip">商品编号在创建后不可修改，如需更换请删除该商品后重新新增</div>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12" :lg="8">

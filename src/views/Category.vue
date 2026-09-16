@@ -6,8 +6,8 @@ import { fetchProducts, fetchCategories } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
-// 后端 page_size 上限为 100：每页拉满，超过 100 件的分类靠分页器继续往后翻
-const PAGE_SIZE = 100
+// 每页显示 60 个商品，超出部分自动分到后续页
+const PAGE_SIZE = 60
 
 const route = useRoute(), language = useLanguageStore()
 const categoryName = computed(() => route.params.category)

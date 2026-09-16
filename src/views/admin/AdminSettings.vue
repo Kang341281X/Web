@@ -124,7 +124,7 @@ async function removeSocial(row) {
     return
   }
   try {
-    await ElMessageBox.confirm(`确认删除「${row.name}」及其二维码图片吗？删除后需点击「保存修改」生效。`, '删除确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认删除「${row.name}」及其二维码图片吗？删除后需点击右上角「保存设置」生效。`, '删除确认', { type: 'warning' })
   } catch (error) { return }
   clearDraft(row)
   row.removed = true
@@ -179,6 +179,8 @@ function isRateDirty(row) {
   return Number(rateDrafts[row.locale]) !== Number(row.rate_from_cny)
 }
 
+const hasRateChanges = computed(() => rates.value.some(isRateDirty))
+
 async function loadRates() {
   ratesLoading.value = true
   try {
@@ -188,15 +190,22 @@ async function loadRates() {
   } catch (error) { ElMessage.error(error.response?.data?.message || '汇率加载失败') } finally { ratesLoading.value = false }
 }
 
-async function saveRate(row) {
-  const value = Number(rateDrafts[row.locale])
-  if (!Number.isFinite(value) || value <= 0) { ElMessage.error('汇率必须是大于 0 的数字'); return }
-  savingLocale.value = row.locale
+// 批量保存全部有改动的汇率（逐行调用单条接口）
+async function saveAllRates() {
+  const dirty = rates.value.filter(isRateDirty)
+  if (!dirty.length) return
+  for (const row of dirty) {
+    const value = Number(rateDrafts[row.locale])
+    if (!Number.isFinite(value) || value <= 0) { ElMessage.error(`「${row.locale}」的汇率必须是大于 0 的数字`); return }
+  }
+  savingLocale.value = 'all'
   try {
-    const { data } = await api.put(`/admin/exchange-rates/${row.locale}`, { rate_from_cny: value })
-    const index = rates.value.findIndex(item => item.locale === row.locale)
-    if (index !== -1) rates.value[index] = data.data
-    rateDrafts[row.locale] = String(data.data.rate_from_cny)
+    for (const row of dirty) {
+      const { data } = await api.put(`/admin/exchange-rates/${row.locale}`, { rate_from_cny: Number(rateDrafts[row.locale]) })
+      const index = rates.value.findIndex(item => item.locale === row.locale)
+      if (index !== -1) rates.value[index] = data.data
+      rateDrafts[row.locale] = String(data.data.rate_from_cny)
+    }
     ElMessage.success('汇率已保存')
   } catch (error) { ElMessage.error(error.response?.data?.message || '保存失败') } finally { savingLocale.value = null }
 }
@@ -204,6 +213,8 @@ async function saveRate(row) {
 function isShippingDirty(row) {
   return Number(shippingDrafts[row.region_key]) !== Number(row.fee_cny)
 }
+
+const hasShippingChanges = computed(() => shippingRates.value.some(isShippingDirty))
 
 async function loadShippingRates() {
   shippingLoading.value = true
@@ -214,16 +225,38 @@ async function loadShippingRates() {
   } catch (error) { ElMessage.error(error.response?.data?.message || '运费加载失败') } finally { shippingLoading.value = false }
 }
 
-async function saveShippingRate(row) {
-  const value = Number(shippingDrafts[row.region_key])
-  if (!Number.isFinite(value) || value < 0) { ElMessage.error('运费必须是大于或等于 0 的数字'); return }
-  savingRegion.value = row.region_key
+// 批量保存全部有改动的运费（接口本身支持数组）
+async function saveAllShippingRates() {
+  const dirty = shippingRates.value.filter(isShippingDirty)
+  if (!dirty.length) return
+  for (const row of dirty) {
+    const value = Number(shippingDrafts[row.region_key])
+    if (!Number.isFinite(value) || value < 0) { ElMessage.error('运费必须是大于或等于 0 的数字'); return }
+  }
+  savingRegion.value = 'all'
   try {
-    const { data } = await api.put('/admin/shipping-rates', { rates: [{ region_key: row.region_key, fee_cny: value }] })
+    const { data } = await api.put('/admin/shipping-rates', { rates: dirty.map(r => ({ region_key: r.region_key, fee_cny: Number(shippingDrafts[r.region_key]) })) })
     shippingRates.value = data.data
     for (const item of data.data) shippingDrafts[item.region_key] = String(item.fee_cny)
     ElMessage.success('运费已保存')
   } catch (error) { ElMessage.error(error.response?.data?.message || '保存失败') } finally { savingRegion.value = null }
+}
+
+// ── 右上角统一的「保存设置」按钮：按当前标签页分发保存 ──
+const tabSaving = computed(() => saving.value || savingSocial.value || savingLocale.value !== null || savingRegion.value !== null)
+const tabDisabled = computed(() => {
+  if (tabSaving.value) return true
+  if (activeTab.value === 'socials') return !hasChanges.value
+  if (activeTab.value === 'rates') return !hasRateChanges.value
+  if (activeTab.value === 'shipping') return !hasShippingChanges.value
+  return false
+})
+
+function saveCurrentTab() {
+  if (activeTab.value === 'socials') return saveSocial()
+  if (activeTab.value === 'rates') return saveAllRates()
+  if (activeTab.value === 'shipping') return saveAllShippingRates()
+  return save()
 }
 
 onMounted(() => { load(); loadSocials(); loadRates(); loadShippingRates() })
@@ -235,82 +268,67 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
     <template #header>
       <div class="page-header">
         <span>其他设置</span>
-        <el-button v-if="activeTab === 'general'" type="primary" :loading="saving" @click="save">保存设置</el-button>
+        <el-button type="primary" :loading="tabSaving" :disabled="tabDisabled" @click="saveCurrentTab">保存设置</el-button>
       </div>
     </template>
 
     <el-tabs v-model="activeTab">
-      <el-tab-pane label="联系方式与社交媒体" name="general">
-    <el-alert type="info" :closable="false" show-icon style="margin-bottom: 20px">
-      <template #title>
-        这些联系方式将显示在购物网站底部，上线前请替换为真实数据。
-      </template>
-    </el-alert>
-
+      <el-tab-pane label="联系方式" name="general">
     <el-form ref="formRef" :model="form" label-width="120px" style="max-width: 600px">
       <el-form-item v-for="(label, key) in labels" :key="key" :label="label">
         <el-input v-model="form[key]" :placeholder="`请输入${label}`" maxlength="500" show-word-limit />
       </el-form-item>
-      <el-form-item>
-        <el-button type="primary" :loading="saving" @click="save">保存设置</el-button>
-      </el-form-item>
     </el-form>
+      </el-tab-pane>
 
-    <el-divider content-position="left">社交媒体</el-divider>
-
-    <div class="social-section" v-loading="socialLoading">
-      <div v-for="row in socials" :key="row.key" class="social-item" :class="{ 'is-removed': row.removed }">
-        <div class="social-info">
-          <div class="social-name-line">
-            <el-input
-              v-model="row.name"
-              maxlength="30"
-              class="social-name-input"
-              :disabled="row.removed"
-              placeholder="平台名称"
-            />
-            <el-tag v-if="row.removed" type="danger" size="small" effect="light">将删除</el-tag>
-            <el-tag v-else-if="isRowDirty(row)" type="warning" size="small" effect="light">未保存</el-tag>
-          </div>
-          <div class="social-hint">显示在二维码图片下方的名称</div>
-        </div>
-        <div class="qr-preview">
+      <el-tab-pane label="社交媒体" name="socials">
+    <el-table :data="socials" v-loading="socialLoading" style="width: 100%" empty-text="尚未添加社交媒体，请点击下方按钮新增">
+      <el-table-column label="平台名称" min-width="260">
+        <template #default="{ row }">
+          <el-input v-model="row.name" maxlength="30" :disabled="row.removed" placeholder="平台名称" style="max-width: 240px" />
+        </template>
+      </el-table-column>
+      <el-table-column label="状态" width="100" align="center">
+        <template #default="{ row }">
+          <el-tag v-if="row.removed" type="danger" size="small" effect="light">将删除</el-tag>
+          <el-tag v-else-if="isRowDirty(row)" type="warning" size="small" effect="light">未保存</el-tag>
+          <el-tag v-else type="info" size="small" effect="light">已保存</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="二维码" width="120" align="center">
+        <template #default="{ row }">
           <el-image :src="resolve(displayImage(row))" fit="cover" class="qr-image"><template #error><img class="image-fallback" :src="IMG_FALLBACK" alt="" /></template></el-image>
-        </div>
-        <div class="qr-actions">
-          <template v-if="!row.removed">
-            <el-upload :show-file-list="false" :auto-upload="false" accept=".jpg,.jpeg,.png,.bmp,.webp" :on-change="file => pickImage(row, file)">
-              <el-button size="small">
-                <template v-if="row.pendingImage">重新选择</template>
-                <template v-else>{{ row.image_url ? '更换二维码' : '上传二维码' }}</template>
-              </el-button>
-            </el-upload>
-            <el-button size="small" type="danger" plain @click="removeSocial(row)">删除</el-button>
-          </template>
-          <el-button v-else size="small" type="primary" plain @click="row.removed = false">撤销删除</el-button>
-        </div>
-      </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="240">
+        <template #default="{ row }">
+          <div class="social-actions">
+            <template v-if="!row.removed">
+              <el-upload :show-file-list="false" :auto-upload="false" accept=".jpg,.jpeg,.png,.bmp,.webp" :on-change="file => pickImage(row, file)">
+                <el-button size="small">
+                  <template v-if="row.pendingImage">重新选择</template>
+                  <template v-else>{{ row.image_url ? '更换二维码' : '上传二维码' }}</template>
+                </el-button>
+              </el-upload>
+              <el-button size="small" type="danger" plain @click="removeSocial(row)">删除</el-button>
+            </template>
+            <el-button v-else size="small" type="primary" plain @click="row.removed = false">撤销删除</el-button>
+          </div>
+        </template>
+      </el-table-column>
+    </el-table>
 
-      <div class="social-empty" v-if="!socials.length">尚未添加社交媒体，请点击下方按钮新增。</div>
-
-      <div class="social-bar">
-        <span class="social-bar-hint" :class="{ 'is-active': hasChanges }">
-          {{ hasChanges ? `有 ${pendingCount} 项修改待保存` : '暂无未保存的修改' }}
-        </span>
-        <div class="social-bar-btns">
-          <el-button type="primary" :loading="savingSocial" :disabled="!hasChanges" @click="saveSocial">保存修改</el-button>
-          <el-button type="primary" plain @click="addSocial">＋ 新增社交媒体</el-button>
-        </div>
+    <div class="social-bar">
+      <span class="social-bar-hint" :class="{ 'is-active': hasChanges }">
+        {{ hasChanges ? `有 ${pendingCount} 项修改待保存` : '暂无未保存的修改' }}
+      </span>
+      <div class="social-bar-btns">
+        <el-button type="primary" plain @click="addSocial">＋ 新增社交媒体</el-button>
       </div>
     </div>
       </el-tab-pane>
 
       <el-tab-pane label="汇率设置" name="rates">
-        <el-alert type="info" :closable="false" show-icon style="margin-bottom: 20px">
-          <template #title>
-            价格以人民币为基准存储；下面设置的是「1 人民币可兑换的目标货币数量」，前台按当前语言实时换算展示。
-          </template>
-        </el-alert>
 
         <el-table :data="rates" v-loading="ratesLoading" style="width: 100%">
           <el-table-column prop="locale" label="语言" width="110" />
@@ -326,21 +344,10 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
             </template>
           </el-table-column>
           <el-table-column prop="updated_at" label="更新时间" width="172" />
-          <el-table-column label="操作" width="96">
-            <template #default="{ row }">
-              <el-button type="primary" link :loading="savingLocale === row.locale" :disabled="!isRateDirty(row)" @click="saveRate(row)">保存</el-button>
-            </template>
-          </el-table-column>
         </el-table>
       </el-tab-pane>
 
       <el-tab-pane label="运费设置" name="shipping">
-        <el-alert type="info" :closable="false" show-icon style="margin-bottom: 20px">
-          <template #title>
-            本站只按界面语言区分用户、不采集具体收货国家，运费按「语言分组」做近似估算；填 0 表示包邮。前台会注明「预估运费，实际以物流商核算为准」。
-          </template>
-        </el-alert>
-
         <el-table :data="shippingRates" v-loading="shippingLoading" style="width: 100%">
           <el-table-column label="区域" width="150">
             <template #default="{ row }">{{ REGION_LABELS[row.region_key] || row.region_key }}</template>
@@ -356,11 +363,6 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
           </el-table-column>
           <el-table-column prop="note" label="说明" width="220" show-overflow-tooltip />
           <el-table-column prop="updated_at" label="更新时间" width="172" />
-          <el-table-column label="操作" width="96">
-            <template #default="{ row }">
-              <el-button type="primary" link :loading="savingRegion === row.region_key" :disabled="!isShippingDirty(row)" @click="saveShippingRate(row)">保存</el-button>
-            </template>
-          </el-table-column>
         </el-table>
         <p class="shipping-tip">提示：未单独列出的国家和地区，统一使用「其他海外地区」这一行估算运费。</p>
       </el-tab-pane>
@@ -370,20 +372,10 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
 
 <style scoped>
 .page-header { display: flex; align-items: center; justify-content: space-between; font-size: 18px; font-weight: 600 }
-.social-section { display: flex; flex-direction: column; gap: 14px; max-width: 640px; min-height: 60px }
-.social-item { display: flex; align-items: center; gap: 16px; border: 1px solid #ebeef5; border-radius: 8px; padding: 12px 16px; transition: opacity 0.2s }
-.social-item.is-removed { opacity: 0.55 }
-.social-info { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px }
-.social-name-line { display: flex; align-items: center; gap: 8px; width: 100% }
-.social-name-input { max-width: 240px }
-.social-hint { font-size: 12px; color: #909399 }
-.social-empty { color: #909399; font-size: 13px }
-.qr-preview { width: 88px; height: 88px; border: 1px dashed #dcdfe6; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0 }
-.qr-image { width: 100%; height: 100% }
+.social-actions { display: flex; align-items: center; gap: 10px }
+.qr-image { width: 64px; height: 64px; border-radius: 6px; overflow: hidden }
 .image-fallback { width: 100%; height: 100%; object-fit: cover; display: block }
-.qr-placeholder { font-size: 12px; color: #909399 }
-.qr-actions { display: flex; gap: 8px; flex-shrink: 0 }
-.social-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px }
+.social-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px }
 .social-bar-hint { font-size: 12px; color: #909399 }
 .social-bar-hint.is-active { color: #e6a23c }
 .social-bar-btns { display: flex; gap: 10px }

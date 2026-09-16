@@ -8,6 +8,7 @@ import { useLanguageStore } from '../stores/language'
 import { useUserStore } from '../stores/user'
 import EmptyState from '../components/common/EmptyState.vue'
 import { formatAmount } from '../utils/order'
+import { resolve as resolveImage, onImgError } from '../utils/image'
 
 /**
  * 顾客端「我的订单」：列表 + 详情 + 取消。
@@ -21,6 +22,8 @@ const language = useLanguageStore()
 const user = useUserStore()
 
 const STATUS_FILTERS = ['', 'pending', 'confirmed', 'shipped', 'completed', 'cancelled']
+// 详情弹窗进度条的主线结点；cancelled 是旁路终态，不参与主线（stepIndex 为 -1，全部结点置灰）
+const ORDER_FLOW = ['pending', 'confirmed', 'shipped', 'completed']
 const status = ref('')
 const detail = ref(null)
 const detailLoading = ref(false)
@@ -31,6 +34,7 @@ const pageSize = 10
 
 const statusLabel = value => language.t(`orderStatus_${value}`) || value
 const canCancel = computed(() => ['pending', 'confirmed'].includes(detail.value?.status))
+const stepIndex = computed(() => ORDER_FLOW.indexOf(detail.value?.status))
 
 // 订单详情内商品金额合计：明细每行已快照 subtotal，独立累加展示「商品金额」，
 // 与数据库里 customer_order.total_amount（= 商品金额 + shipping_fee）口径对应拆分
@@ -100,12 +104,6 @@ onMounted(() => {
 
 <template>
   <section v-if="customer.isLoggedIn" class="container page orders-page">
-    <div class="page-intro">
-      <span class="eyebrow">{{ language.t('account') }}</span>
-      <h1>{{ language.t('myOrders') }}</h1>
-      <p>{{ language.t('ordersText') }}</p>
-    </div>
-
     <div class="orders-filters" role="tablist">
       <button
         v-for="value in STATUS_FILTERS"
@@ -167,6 +165,14 @@ onMounted(() => {
             <span>{{ formatTime(detail.created_at) }}</span>
           </p>
 
+          <!-- 订单状态进度条：主线四个结点，已走过的结点高亮；已取消时全部置灰 -->
+          <ol class="order-progress" aria-label="order status">
+            <li v-for="(step, index) in ORDER_FLOW" :key="step" :class="{ done: stepIndex >= index }">
+              <span class="order-progress__dot"></span>
+              <span class="order-progress__label">{{ statusLabel(step) }}</span>
+            </li>
+          </ol>
+
           <div v-if="detailLoading" class="orders-hint">{{ language.t('loading') }}</div>
 
           <template v-else>
@@ -181,6 +187,13 @@ onMounted(() => {
               <h3>{{ language.t('orderItems') }}</h3>
               <ul class="order-items">
                 <li v-for="item in detail.items" :key="item.id">
+                  <img
+                    class="order-item__thumb"
+                    :src="resolveImage(item.product_image)"
+                    :alt="item.product_name"
+                    loading="lazy"
+                    @error="onImgError"
+                  >
                   <span class="order-item__name">
                     {{ item.product_name }}
                     <small v-if="item.product_sku">{{ item.product_sku }}</small>
@@ -256,12 +269,24 @@ onMounted(() => {
 .order-modal { position: relative; width: min(560px, calc(100% - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; background: var(--paper); padding: 30px; box-shadow: var(--shadow) }
 .order-modal h2 { font: 600 1.6rem 'Playfair Display', serif; letter-spacing: -.03em; margin: 14px 0 8px; word-break: break-all }
 .order-modal__status { display: flex; align-items: center; gap: 12px; margin: 0 0 6px; font-size: .78rem; color: var(--muted) }
+
+/* 订单状态进度条：圆点在连线上、标签在下方；已走过的结点用 clay 高亮 */
+.order-progress { display: flex; list-style: none; margin: 14px 0 4px; padding: 0 }
+.order-progress li { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: .72rem; color: var(--muted) }
+.order-progress li::before { content: ''; position: absolute; top: 5px; right: 50%; width: 100%; height: 2px; background: var(--line) }
+.order-progress li:first-child::before { display: none }
+.order-progress li.done::before { background: var(--clay) }
+.order-progress__dot { position: relative; z-index: 1; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); background: var(--paper) }
+.order-progress li.done .order-progress__dot { border-color: var(--clay); background: var(--clay) }
+.order-progress li.done .order-progress__label { color: var(--clay); font-weight: 600 }
+
 .order-modal__section { margin-top: 20px }
 .order-modal__section h3 { font-size: .82rem; font-weight: 700; margin: 0 0 10px }
 .order-modal__section p { margin: 0 0 6px; font-size: .84rem; line-height: 1.6; color: #55504a }
 .order-modal__remark { color: var(--muted) }
 .order-items { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line) }
-.order-items li { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: .84rem }
+.order-items li { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: .84rem }
+.order-item__thumb { width: 52px; height: 52px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--cream) }
 .order-item__name { display: flex; flex-direction: column; gap: 3px; word-break: break-word }
 .order-item__name small { color: var(--muted); font-size: .72rem }
 .order-item__qty { color: var(--muted); white-space: nowrap }
@@ -289,8 +314,10 @@ onMounted(() => {
   .order-card__amount { font-size: 1rem }
   .order-modal { padding: 22px; width: calc(100% - 24px); max-height: calc(100vh - 24px) }
   .order-modal__actions .button { flex: 1 }
-  .order-items li { grid-template-columns: 1fr auto; row-gap: 4px }
-  .order-item__qty { grid-column: 1 }
-  .order-items li strong { grid-row: 1 / span 2; grid-column: 2 }
+  .order-items li { grid-template-columns: auto 1fr auto; row-gap: 4px }
+  .order-item__thumb { grid-row: 1 / span 2 }
+  .order-item__qty { grid-column: 2 }
+  .order-items li strong { grid-row: 1 / span 2; grid-column: 3; align-self: center }
+  .order-progress li { font-size: .66rem }
 }
 </style>

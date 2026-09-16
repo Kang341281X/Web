@@ -14,7 +14,7 @@ import AppImage from '../common/AppImage.vue'
  *
  * 数据来自 /api/public/products/:id/reviews（对应 product_review 表）：
  *   - 只展示 status = 1 的评论，隐藏/删除由后台「商品管理 → 商品评论」控制；
- *   - customer_name 为评论时的昵称快照，顾客注销后依旧能正常展示；
+ *   - customer_name 为评论时的用户名快照，顾客注销后依旧能正常展示；
  *   - is_purchased 表示该评论绑定了订单（本期顾客端入口产生的评价恒为 false）；
  *   - 登录后接口会额外返回 is_mine / can_edit，用来决定「编辑 / 删除」按钮是否展示。
  *

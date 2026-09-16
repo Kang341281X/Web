@@ -41,7 +41,7 @@ const onCategoryChange = value => {
 }
 
 const clear = () => {
-  filters.value = { category: null, minPriceInput: '', maxPriceInput: '', sale: false, isNew: false }
+  filters.value = { category: null, minPriceInput: '', maxPriceInput: '' }
   priceError.value = ''
   emit('applyPrice', { min: null, max: null })
   emit('selectCategory', null)
@@ -119,7 +119,5 @@ const applyPrice = () => {
       <button class="price-confirm-button" type="button" @click="applyPrice">{{ language.t('confirmPrice') }}</button>
       <p v-if="priceError" class="price-error">{{ priceError }}</p>
     </div>
-    <label class="check-label"><input v-model="filters.sale" type="checkbox" /> {{ language.t('discount') }}</label>
-    <label class="check-label"><input v-model="filters.isNew" type="checkbox" /> {{ language.t('newOnly') }}</label>
   </aside>
 </template>

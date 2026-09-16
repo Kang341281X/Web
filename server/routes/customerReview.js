@@ -114,7 +114,7 @@ router.post('/products/:productId/reviews', upload.array('images', REVIEW_MAX_IM
     const content = requiredText(body.content, '评价内容', { min: 1, max: 500 })
     const images = await saveImages(req.files)
 
-    // customer_name 取昵称快照，昵称为空时退化为脱敏手机号：
+    // customer_name 取用户名快照（昵称已并入用户名），用户名为空时退化为脱敏手机号：
     // 评论列表是公开的，不能把完整手机号暴露出去（与 utils/customer.js 的脱敏口径一致）
     const [result] = await db.execute(
       `INSERT INTO product_review (product_id, customer_id, customer_name, rating, content, images, created_at, updated_at)
@@ -122,7 +122,7 @@ router.post('/products/:productId/reviews', upload.array('images', REVIEW_MAX_IM
       [
         productId,
         req.customer.id,
-        req.customer.nickname || maskPhone(req.customer.phone),
+        req.customer.username || maskPhone(req.customer.phone),
         rating,
         content,
         images.length ? JSON.stringify(images) : null,

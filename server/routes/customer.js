@@ -10,18 +10,17 @@ import { publicCustomer, requiredPhone, requiredUsername, requiredPassword, norm
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } })
-const fields = 'id, phone, username, email, nickname, avatar, status, last_login_time, created_at, updated_at'
+const fields = 'id, phone, username, email, avatar, status, last_login_time, created_at, updated_at'
 
-// 注册：用户名 + 手机号 + 密码（+ 可选昵称/邮箱）
-// 用户名是登录凭证（唯一），手机号仍是内部唯一标识 —— 两者各自校验、各自报错，互不混用。
+// 注册：用户名 + 手机号 + 密码（+ 可选邮箱）
+// 用户名是登录凭证（唯一）兼展示名（昵称），手机号仍是内部唯一标识 —— 两者各自校验、各自报错，互不混用。
+// 注册不需要验证码（人机校验只用于登录）；注册成功直接签发 token，注册完即是登录态。
 router.post('/register', async (req, res, next) => {
   try {
     const username = requiredUsername(req.body.username)
     const phone = requiredPhone(req.body.phone)
     const password = requiredPassword(req.body.password)
     const email = normalizeEmail(req.body.email)
-    const nickname = String(req.body.nickname || '').trim()
-    if (nickname.length > 50) throw Object.assign(new Error('昵称长度不能超过 50 个字符'), { status: 400 })
 
     const [sameUsername] = await db.execute('SELECT id FROM customer WHERE username = ?', [username])
     if (sameUsername[0]) return res.status(409).json({ success: false, message: '用户名已被占用' })
@@ -32,11 +31,16 @@ router.post('/register', async (req, res, next) => {
     const hashed = await bcrypt.hash(password, 12)
     try {
       const [result] = await db.execute(
-        'INSERT INTO customer (phone, username, email, password, nickname) VALUES (?, ?, ?, ?, ?)',
-        [phone, username, email, hashed, nickname || null]
+        'INSERT INTO customer (phone, username, email, password) VALUES (?, ?, ?, ?)',
+        [phone, username, email, hashed]
       )
       const [rows] = await db.execute(`SELECT ${fields} FROM customer WHERE id = ?`, [result.insertId])
-      res.status(201).json({ success: true, message: '注册成功', user: publicCustomer(rows[0]) })
+      // 注册即登录：与登录接口同口径记录登录时间并签发 token，前端无需再走一次带验证码的登录
+      await db.execute("UPDATE customer SET last_login_time = datetime('now') WHERE id = ?", [result.insertId])
+      const token = jwt.sign({ customerId: result.insertId }, process.env.CUSTOMER_JWT_SECRET, {
+        expiresIn: process.env.CUSTOMER_JWT_EXPIRES_IN || '7d',
+      })
+      res.status(201).json({ success: true, message: '注册成功', token, user: publicCustomer(rows[0]) })
     } catch (error) {
       // 并发注册时可能同时通过上面的存在性检查，最终由唯一索引兜底。
       // username 与 phone 各有一个唯一索引，按报错信息区分到底撞的是哪一个。
@@ -80,7 +84,7 @@ router.post('/login', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
-// 个人信息：昵称、头像、脱敏手机号、邮箱
+// 个人信息：用户名、头像、完整手机号、邮箱
 router.get('/profile', requireCustomerAuth, async (req, res, next) => {
   try {
     const [rows] = await db.execute(`SELECT ${fields} FROM customer WHERE id = ?`, [req.customer.id])
@@ -88,7 +92,7 @@ router.get('/profile', requireCustomerAuth, async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
-// 修改个人信息：昵称 / 用户名 / 邮箱 / 头像（multipart）
+// 修改个人信息：手机号 / 邮箱 / 头像（multipart）。用户名是登录凭证，注册后不可再改
 router.put('/profile', requireCustomerAuth, upload.single('avatar'), async (req, res, next) => {
   let newAvatar = null
   try {
@@ -98,22 +102,17 @@ router.put('/profile', requireCustomerAuth, upload.single('avatar'), async (req,
 
     const updates = []
     const values = []
-    if (Object.hasOwn(req.body, 'nickname')) {
-      const nickname = String(req.body.nickname || '').trim()
-      if (nickname.length > 50) throw Object.assign(new Error('昵称长度不能超过 50 个字符'), { status: 400 })
-      updates.push('nickname = ?'); values.push(nickname || null)
-    }
     if (Object.hasOwn(req.body, 'email')) {
       updates.push('email = ?'); values.push(normalizeEmail(req.body.email))
     }
-    if (Object.hasOwn(req.body, 'username')) {
-      const username = requiredUsername(req.body.username)
-      // 只有真的改了才查重，否则「原样提交」会被自己占用而误报「已被占用」
-      if (username !== current.username) {
-        const [others] = await db.execute('SELECT id FROM customer WHERE username = ? AND id <> ?', [username, current.id])
-        if (others[0]) return res.status(409).json({ success: false, message: '用户名已被占用' })
+    if (Object.hasOwn(req.body, 'phone')) {
+      const phone = requiredPhone(req.body.phone)
+      // 只有真的改了才查重，否则「原样提交」会被自己占用而误报「已被使用」
+      if (phone !== current.phone) {
+        const [others] = await db.execute('SELECT id FROM customer WHERE phone = ? AND id <> ?', [phone, current.id])
+        if (others[0]) return res.status(409).json({ success: false, message: '该手机号已被其他账号使用' })
       }
-      updates.push('username = ?'); values.push(username)
+      updates.push('phone = ?'); values.push(phone)
     }
     if (req.file) {
       newAvatar = await storageService.save(req.file, 'avatars')
@@ -126,10 +125,10 @@ router.put('/profile', requireCustomerAuth, upload.single('avatar'), async (req,
     try {
       await db.execute(`UPDATE customer SET ${updates.join(', ')} WHERE id = ?`, values)
     } catch (error) {
-      // 并发改名时上面的查重可能失效，最终由唯一索引兜底
+      // 并发修改时上面的查重可能失效，最终由唯一索引兜底（手机号/用户名各自有唯一索引）
       if (isUniqueViolation(error)) {
         if (newAvatar) await storageService.delete(newAvatar)
-        return res.status(409).json({ success: false, message: '用户名已被占用' })
+        return res.status(409).json({ success: false, message: /phone/i.test(error.message || '') ? '该手机号已被其他账号使用' : '用户名已被占用' })
       }
       throw error
     }

@@ -9,7 +9,7 @@ import storageService from '../services/storageService.js'
 const router = Router()
 router.use(requireAuth, requirePasswordChanged)
 
-const fields = 'id, phone, username, email, nickname, avatar, status, last_login_time, created_at, updated_at'
+const fields = 'id, phone, username, email, avatar, status, last_login_time, created_at, updated_at'
 const addressFields = 'id, customer_id, receiver_name, receiver_phone, province, city, district, detail_address, is_default, created_at, updated_at'
 
 // 管理端不复用顾客端的 publicCustomer：那边会把手机号脱敏成 138****1234，
@@ -24,7 +24,7 @@ function parseId(value) {
   return Number.isInteger(id) && id > 0 ? id : null
 }
 
-// 顾客列表：分页 + 关键词（用户名 / 手机号 / 昵称 / 邮箱模糊匹配）
+// 顾客列表：分页 + 关键词（用户名 / 手机号 / 邮箱模糊匹配）
 router.get('/', async (req, res, next) => {
   try {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
@@ -36,8 +36,8 @@ router.get('/', async (req, res, next) => {
     const params = []
     if (keyword) {
       const like = `%${keyword}%`
-      clauses.push('(username LIKE ? OR phone LIKE ? OR nickname LIKE ? OR email LIKE ?)')
-      params.push(like, like, like, like)
+      clauses.push('(username LIKE ? OR phone LIKE ? OR email LIKE ?)')
+      params.push(like, like, like)
     }
     // 可选的状态筛选，仅接受 0/1，便于后台单独查看被禁用的账号
     if (status === '0' || status === '1') { clauses.push('status = ?'); params.push(Number(status)) }
@@ -120,7 +120,7 @@ router.put('/:id/status', async (req, res, next) => {
       : [0, '0', false, 'false'].includes(req.body.status) ? 0 : null
     if (status === null) return res.status(400).json({ success: false, message: '状态参数不正确' })
 
-    const [rows] = await db.execute('SELECT id, phone, nickname, status FROM customer WHERE id = ?', [id])
+    const [rows] = await db.execute('SELECT id, phone, username, status FROM customer WHERE id = ?', [id])
     const customer = rows[0]
     if (!customer) return res.status(404).json({ success: false, message: '顾客不存在' })
 
@@ -148,6 +148,27 @@ router.put('/:id/status', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+// 删除顾客账号（不可恢复）。
+// 外键行为（见 019/020/021/022/025 迁移）已保证数据安全：
+//   - 收货地址 / 收藏 / 购物车随账号级联删除；
+//   - 历史订单、商品评论保留（customer_id 置 NULL，展示靠下单快照 / 评论昵称快照）。
+// 因此删除前先查一次订单数，写进操作日志便于事后追溯。
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id)
+    if (!id) return res.status(404).json({ success: false, message: '顾客不存在' })
+    const [rows] = await db.execute('SELECT id, phone, username FROM customer WHERE id = ?', [id])
+    const customer = rows[0]
+    if (!customer) return res.status(404).json({ success: false, message: '顾客不存在' })
+
+    const [[{ order_count }]] = await db.execute('SELECT COUNT(*) AS order_count FROM customer_order WHERE customer_id = ?', [id])
+    await db.execute('DELETE FROM customer WHERE id = ?', [id])
+    await writeOperationLog(req.admin.id, 'delete_customer', `${customer.phone}（用户名：${customer.username || '未记录'}，历史订单 ${order_count} 笔）`, req)
+
+    res.json({ success: true, message: `已删除顾客「${customer.username || customer.phone}」` })
+  } catch (error) { next(error) }
+})
+
 // 一键重置顾客登录密码：仅超级管理员可用，新密码固定为该顾客的手机号。
 // 顾客登录用的是 username + password（见 routes/customer.js 的 POST /login），
 // 这里只覆盖 password，不改动账号本身；顾客端没有强制改密流程，故不设 must_change_password。
@@ -156,7 +177,7 @@ router.post('/:id/reset-password', requireSuperAdmin, async (req, res, next) => 
     const id = parseId(req.params.id)
     if (!id) return res.status(404).json({ success: false, message: '顾客不存在' })
 
-    const [rows] = await db.execute('SELECT id, phone, nickname FROM customer WHERE id = ?', [id])
+    const [rows] = await db.execute('SELECT id, phone, username FROM customer WHERE id = ?', [id])
     const customer = rows[0]
     if (!customer) return res.status(404).json({ success: false, message: '顾客不存在' })
 
@@ -172,7 +193,7 @@ router.post('/:id/reset-password', requireSuperAdmin, async (req, res, next) => 
     const [updated] = await db.execute(`SELECT ${fields} FROM customer WHERE id = ?`, [id])
     res.json({
       success: true,
-      message: `已将「${customer.nickname || phone}」的登录密码重置为手机号`,
+      message: `已将「${customer.username || phone}」的登录密码重置为手机号`,
       data: publicCustomerRow(updated[0]),
     })
   } catch (error) { next(error) }

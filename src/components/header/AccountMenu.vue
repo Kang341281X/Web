@@ -33,6 +33,8 @@ const signOut = () => {
         </li>
         <li><RouterLink to="/account" role="menuitem" @click="close">{{ language.t('profile') }}</RouterLink></li>
         <li><RouterLink to="/orders" role="menuitem" @click="close">{{ language.t('myOrders') }}</RouterLink></li>
+        <!-- 收货地址已从个人中心抽出为独立页面，入口紧随「我的订单」 -->
+        <li><RouterLink to="/account/addresses" role="menuitem" @click="close">{{ language.t('addressList') }}</RouterLink></li>
         <li><button type="button" role="menuitem" @click="signOut">{{ language.t('logout') }}</button></li>
       </ul>
     </Transition>

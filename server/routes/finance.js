@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import ExcelJS from 'exceljs'
 import db from '../config/db.js'
 import { requireAuth, requirePasswordChanged, requireSuperAdmin, writeOperationLog } from '../middleware/auth.js'
 import { requiredText } from '../utils/admin.js'
@@ -185,7 +186,7 @@ router.get('/income', async (req, res, next) => {
     const [rows] = await db.execute(
       `SELECT o.id, o.order_no, o.total_amount, o.status, o.created_at,
               o.customer_username, o.customer_email,
-              cu.nickname AS customer_nickname, cu.phone AS customer_phone
+              cu.phone AS customer_phone
          ${from} ${where}
         ORDER BY o.created_at DESC, o.id DESC LIMIT ? OFFSET ?`,
       [...params, pageSize, (page - 1) * pageSize]
@@ -227,6 +228,85 @@ router.get('/expenses', async (req, res, next) => {
       data: rows.map(row => ({ ...row, amount: Number(row.amount) })),
       pagination: { page, page_size: pageSize, total: Number(total) },
     })
+  } catch (error) { next(error) }
+})
+
+/**
+ * POST /export
+ * 导出收支明细（exceljs 生成 xlsx，冻结首行），与订单导出同一套交互：
+ *  - type：income（收入明细，来自订单聚合）/ expense（支出明细，手工登记）；
+ *  - mode：filter（按当前筛选区间导出全部命中记录）/ selected（按勾选的记录 id 导出）；
+ *  - 收入支持 keyword，支出支持 category，与对应列表接口的筛选条件保持一致。
+ */
+router.post('/export', async (req, res, next) => {
+  try {
+    const type = req.body.type === 'expense' ? 'expense' : 'income'
+    const mode = req.body.mode
+    const ids = mode === 'selected' ? (Array.isArray(req.body.ids) ? req.body.ids.map(Number).filter(Number.isInteger) : []) : null
+    if (!['filter', 'selected'].includes(mode)) return res.status(400).json({ success: false, message: '导出模式不正确' })
+    if (mode === 'selected' && !ids.length) return res.status(400).json({ success: false, message: '请先勾选要导出的记录' })
+
+    const { start, end } = resolveRange(req.body)
+    let rows
+    let headers
+    let sheetName
+    let fileName
+    let widths
+
+    if (type === 'expense') {
+      const clauses = ['expense_date >= ?', 'expense_date <= ?']
+      const params = [start, end]
+      const category = String(req.body.category || '').trim()
+      if (category) { clauses.push('category = ?'); params.push(category) }
+      if (mode === 'selected') { clauses.push(`id IN (${ids.map(() => '?').join(',')})`); params.push(...ids) }
+      ;[rows] = await db.execute(
+        `SELECT id, amount, category, note, expense_date, created_by_name, created_at
+           FROM finance_expense WHERE ${clauses.join(' AND ')}
+          ORDER BY expense_date DESC, id DESC`,
+        params
+      )
+      headers = ['序号', '发生日期', '支出类别', '金额', '登记人', '备注', '登记时间']
+      sheetName = '支出明细'
+      fileName = '支出明细.xlsx'
+      widths = [6, 14, 14, 12, 12, 40, 20]
+    } else {
+      const clauses = [INCOME_WHERE, 'o.created_at >= ?', 'o.created_at <= ?']
+      const params = [start, `${end} 23:59:59`]
+      const keyword = String(req.body.keyword || '').trim()
+      if (keyword) { clauses.push('(o.order_no LIKE ? OR cu.phone LIKE ?)'); params.push(`%${keyword}%`, `%${keyword}%`) }
+      if (mode === 'selected') { clauses.push(`o.id IN (${ids.map(() => '?').join(',')})`); params.push(...ids) }
+      ;[rows] = await db.execute(
+        `SELECT o.id, o.order_no, o.total_amount, o.status, o.created_at, o.customer_username, cu.phone AS customer_phone
+           FROM customer_order o LEFT JOIN customer cu ON cu.id = o.customer_id
+          WHERE ${clauses.join(' AND ')}
+          ORDER BY o.created_at DESC, o.id DESC`,
+        params
+      )
+      headers = ['序号', '订单号', '顾客账号', '顾客手机号', '订单金额', '状态', '下单时间']
+      sheetName = '收入明细'
+      fileName = '收入明细.xlsx'
+      widths = [6, 22, 14, 14, 12, 10, 20]
+    }
+
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet(sheetName, { views: [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2', activeCell: 'A2' }] })
+    sheet.addRow(headers)
+    sheet.getRow(1).font = { bold: true }
+    rows.forEach((row, index) => {
+      sheet.addRow(type === 'expense'
+        ? [index + 1, row.expense_date, row.category, Number(row.amount), row.created_by_name || '', row.note || '', row.created_at || '']
+        : [index + 1, row.order_no, row.customer_username || '未记录', row.customer_phone || '', Number(row.total_amount), orderStatusLabel(row.status), row.created_at || ''])
+    })
+    widths.forEach((width, index) => { sheet.getColumn(index + 1).width = width })
+    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber > 1) row.alignment = { vertical: 'middle' }
+    })
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+    res.send(Buffer.from(buffer))
+    await writeOperationLog(req.admin.id, 'export_finance', `导出${sheetName}：${mode === 'selected' ? `${ids.length}条` : `${rows.length}条（${start} ~ ${end}）`}`, req)
   } catch (error) { next(error) }
 })
 

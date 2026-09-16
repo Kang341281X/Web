@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Coin, Wallet, TrendCharts } from '@element-plus/icons-vue'
+import { Coin, Wallet, TrendCharts, ArrowDown } from '@element-plus/icons-vue'
 import api from '../../services/api'
 import { formatAmount, orderStatusTag } from '../../utils/order'
 
@@ -129,6 +129,42 @@ function resetFilter() {
 }
 
 function pageIndex(list, index) { return (list.page - 1) * list.page_size + index + 1 }
+
+// ---------- 导出（全部 / 勾选项） ----------
+// 勾选集合：列表数据刷新后 el-table 会清空勾选并回抛 selection-change，与订单管理一致
+const selectedIncome = ref([])
+const selectedExpense = ref([])
+const exporting = ref(false)
+
+function handleIncomeSelection(rows) { selectedIncome.value = rows }
+function handleExpenseSelection(rows) { selectedExpense.value = rows }
+
+// 导出收支明细（后端 exceljs 生成 xlsx）：filter=当前筛选区间内的全部记录，selected=勾选项
+async function exportFinance(type, mode) {
+  exporting.value = true
+  try {
+    const [start, end] = Object.values(rangeParams())
+    const { data } = await api.post('/admin/finance/export', {
+      type,
+      mode,
+      start_date: start,
+      end_date: end,
+      keyword: type === 'income' ? income.keyword : undefined,
+      category: type === 'expense' ? expense.category : undefined,
+      ids: (type === 'income' ? selectedIncome.value : selectedExpense.value).map(item => item.id),
+    }, { responseType: 'blob' })
+    const url = URL.createObjectURL(data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = type === 'income' ? '收入明细.xlsx' : '支出明细.xlsx'
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
 
 // ---------- 支出登记 / 编辑 / 删除 ----------
 const dialogVisible = ref(false)
@@ -273,16 +309,26 @@ onBeforeUnmount(() => {
         <div class="list-toolbar">
           <el-input v-model="income.keyword" clearable placeholder="搜索订单号或顾客手机号" style="max-width: 280px" @keyup.enter="income.page = 1; loadIncome()" @clear="income.page = 1; loadIncome()" />
           <el-button type="primary" @click="income.page = 1; loadIncome()">搜索</el-button>
+          <el-dropdown :disabled="exporting" @command="mode => exportFinance('income', mode)">
+            <el-button :loading="exporting">导出<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="filter">全部导出</el-dropdown-item>
+                <el-dropdown-item command="selected" :disabled="!selectedIncome.length">导出选中（{{ selectedIncome.length }}）</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <span class="muted">收入口径与订单统计一致：已取消订单不计入</span>
         </div>
         <!-- 列宽：订单号为主内容列（min-width 吸收多余宽度），其余列固定宽度 -->
-        <el-table v-loading="income.loading" :data="income.list" stripe style="width: 100%">
+        <el-table v-loading="income.loading" :data="income.list" stripe style="width: 100%" @selection-change="handleIncomeSelection">
+          <el-table-column type="selection" width="46" />
           <el-table-column label="序号" width="56"><template #default="{ $index }">{{ pageIndex(income, $index) }}</template></el-table-column>
           <el-table-column prop="order_no" label="订单号" min-width="185" show-overflow-tooltip />
           <el-table-column label="顾客" width="150">
             <template #default="{ row }">
               <div v-if="row.customer_phone">
-                <div>{{ row.customer_nickname || '未设置昵称' }}</div>
+                <div>{{ row.customer_username || '未记录' }}</div>
                 <small>{{ row.customer_phone }}</small>
               </div>
               <span v-else class="muted">游客订单</span>
@@ -302,10 +348,20 @@ onBeforeUnmount(() => {
           <el-select v-model="expense.category" clearable placeholder="全部支出类别" style="width: 180px" @change="expense.page = 1; loadExpenses()">
             <el-option v-for="item in EXPENSE_CATEGORIES" :key="item" :label="item" :value="item" />
           </el-select>
+          <el-dropdown :disabled="exporting" @command="mode => exportFinance('expense', mode)">
+            <el-button :loading="exporting">导出<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="filter">全部导出</el-dropdown-item>
+                <el-dropdown-item command="selected" :disabled="!selectedExpense.length">导出选中（{{ selectedExpense.length }}）</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <span class="muted">支出为手工登记，可编辑或删除</span>
         </div>
         <!-- 列宽：备注为主内容列（min-width 吸收多余宽度），其余列固定宽度 -->
-        <el-table v-loading="expense.loading" :data="expense.list" stripe style="width: 100%">
+        <el-table v-loading="expense.loading" :data="expense.list" stripe style="width: 100%" @selection-change="handleExpenseSelection">
+          <el-table-column type="selection" width="46" />
           <el-table-column label="序号" width="56"><template #default="{ $index }">{{ pageIndex(expense, $index) }}</template></el-table-column>
           <el-table-column prop="expense_date" label="发生日期" width="120" />
           <el-table-column prop="category" label="支出类别" width="130" show-overflow-tooltip />

@@ -8,11 +8,11 @@ import FilterPanel from '../components/product/FilterPanel.vue'
 import SortSelect from '../components/product/SortSelect.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
-// 与分类页 / 搜索页保持一致：后端 page_size 上限为 100，每页拉满，靠分页器继续往后翻
-const PAGE_SIZE = 100
+// 每页显示 60 个商品，超出部分自动分到后续页
+const PAGE_SIZE = 60
 
 const language = useLanguageStore()
-const filters = ref({ category: null, minPriceInput: '', maxPriceInput: '', sale: false, isNew: false })
+const filters = ref({ category: null, minPriceInput: '', maxPriceInput: '' })
 const sort = ref('recommended')
 const appliedPrice = ref({ min: null, max: null })
 const selectedCategory = ref(null)
@@ -45,10 +45,7 @@ async function load() {
     if (maxCny != null) params.max_price = maxCny
     const { products: list, pagination } = await fetchProducts(params)
     total.value = pagination.total
-    // 客户端折扣筛选（后端无此字段筛选）
-    let filtered = list
-    if (filters.value.sale) filtered = filtered.filter(p => p.originalPrice > p.price)
-    products.value = filtered
+    products.value = list
   } catch (error) {
     console.error('Failed to load products:', error)
     products.value = []

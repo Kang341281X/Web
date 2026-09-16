@@ -230,12 +230,6 @@ function handleClosed() { reset() }
     destroy-on-close
     @closed="handleClosed"
   >
-    <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
-      <template #title>
-        直接在下方表格逐行录入商品信息，提交时后端会先整体校验、全部通过后再事务写入；商品编号由系统按规则自动生成（可点「重新生成」更换），不支持手动输入；状态统一按「上架」创建。分类可选已有分类，也可输入新分类名称后点击「添加」确认，新分类会在提交成功时自动创建。
-      </template>
-    </el-alert>
-
     <div class="online-toolbar">
       <el-button type="primary" plain @click="addRow"><el-icon><Plus /></el-icon>新增一行</el-button>
       <el-button plain @click="checkAllRows"><el-icon><Check /></el-icon>全部校验</el-button>

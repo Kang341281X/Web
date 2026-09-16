@@ -12,7 +12,7 @@ import db from '../config/db.js'
 async function resolveCustomer(token) {
   const payload = jwt.verify(token, process.env.CUSTOMER_JWT_SECRET)
   if (!payload.customerId) return null
-  const [rows] = await db.execute('SELECT id, phone, username, email, nickname, avatar, status FROM customer WHERE id = ?', [payload.customerId])
+  const [rows] = await db.execute('SELECT id, phone, username, email, avatar, status FROM customer WHERE id = ?', [payload.customerId])
   const customer = rows[0]
   return customer && customer.status ? customer : null
 }

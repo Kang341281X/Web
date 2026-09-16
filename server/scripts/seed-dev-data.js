@@ -18,9 +18,9 @@
  *     重复执行不会重复插入，也不会误删真实数据。标记如下：
  *       - customer.phone          13800000001 ~ 13800000100
  *       - customer.email          seed_XXX@example.com
- *       - customer.nickname       测试用户XXX
+ *       - customer.username       seeduserXXX
  *       - customer_order.order_no 以 SD 开头（真实下单为 CO 开头）
- *       - product_review.customer_name 以「测试用户」开头（昵称快照，账号被删也认得出）
+ *       - product_review.customer_name 以「seeduser」开头（用户名快照，账号被删也认得出）
  *  2. 不扣库存：补的是历史订单，其库存扣减视为早已完成，不再回扣 product.stock，
  *     避免把当前库存拉成负数、或与真实库存对不上。
  *  3. 可复现：使用固定种子的伪随机数，同一个库重复执行得到同一批假数据，便于对比联调。
@@ -45,7 +45,6 @@ const CUSTOMER_COUNT = 100
 const SEED_PASSWORD = '123456'
 const SEED_PHONE_PREFIX = '13800000'
 const SEED_EMAIL_PREFIX = 'seed_'
-const SEED_NICKNAME_PREFIX = '测试用户'
 const SEED_USERNAME_PREFIX = 'seeduser'
 const SEED_ORDER_PREFIX = 'SD'
 
@@ -70,9 +69,8 @@ const REVIEW_MAX_PER_PRODUCT = 12
 const REVIEW_COUNT_WEIGHTS = [[1, 26], [2, 24], [3, 18], [4, 12], [5, 8], [6, 5], [7, 3], [8, 2], [9, 1], [10, 1]]
 
 const seedPhones = Array.from({ length: CUSTOMER_COUNT }, (_, index) => `${SEED_PHONE_PREFIX}${String(index + 1).padStart(3, '0')}`)
-// 序号统一补到 3 位（seed_001 / 测试用户001 / seeduser001），避免 100 个账号出现「01 和 100 混排」的宽度不一致
+// 序号统一补到 3 位（seed_001 / seeduser001），避免 100 个账号出现「01 和 100 混排」的宽度不一致
 const seedEmail = (index) => `${SEED_EMAIL_PREFIX}${String(index + 1).padStart(3, '0')}@example.com`
-const seedNickname = (index) => `${SEED_NICKNAME_PREFIX}${String(index + 1).padStart(3, '0')}`
 const seedUsername = (index) => `${SEED_USERNAME_PREFIX}${String(index + 1).padStart(3, '0')}`
 
 // 订单状态目标分布：pending 20% / confirmed 20% / shipped 20% / completed 30% / cancelled 10%
@@ -461,7 +459,7 @@ function cleanup() {
       WHERE customer_name LIKE ?
          OR customer_id IN (${inClause(seedCustomerIds)})
          OR order_id IN (${inClause(seedOrderIds)})`
-  ).run(`${SEED_NICKNAME_PREFIX}%`, ...seedCustomerIds, ...seedOrderIds).changes
+  ).run(`${SEED_USERNAME_PREFIX}%`, ...seedCustomerIds, ...seedOrderIds).changes
 
   // order_item 由外键 ON DELETE CASCADE 一并清理
   summary.removed.orders = raw.prepare(
@@ -474,11 +472,11 @@ function cleanup() {
 }
 
 function createCustomers(passwordHash) {
-  const insert = raw.prepare('INSERT INTO customer (phone, username, email, password, nickname, avatar, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?)')
+  const insert = raw.prepare('INSERT INTO customer (phone, username, email, password, avatar, status, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, 1, ?, ?)')
   return seedPhones.map((phone, index) => {
     const createdAt = timeWithinDays(120)
-    const info = insert.run(phone, seedUsername(index), seedEmail(index), passwordHash, seedNickname(index), createdAt, createdAt)
-    return { id: Number(info.lastInsertRowid), phone, username: seedUsername(index), nickname: seedNickname(index), email: seedEmail(index) }
+    const info = insert.run(phone, seedUsername(index), seedEmail(index), passwordHash, createdAt, createdAt)
+    return { id: Number(info.lastInsertRowid), phone, username: seedUsername(index), email: seedEmail(index) }
   })
 }
 
@@ -605,7 +603,7 @@ function createOrders(customers, products, addressesByCustomer) {
         // 记录「已成交」的购买关系，供评论关联真实订单用
         if (status === 'completed') {
           if (!buyersByProduct.has(item.product.id)) buyersByProduct.set(item.product.id, [])
-          buyersByProduct.get(item.product.id).push({ customerId: customer.id, nickname: customer.nickname, orderId, orderTime: createdAt })
+          buyersByProduct.get(item.product.id).push({ customerId: customer.id, username: customer.username, orderId, orderTime: createdAt })
         }
       }
       statusCount[status] = (statusCount[status] || 0) + 1
@@ -696,7 +694,7 @@ function createReviews(customers, products, buyersByProduct) {
     const buyers = shuffle(buyersByProduct.get(product.id) || []).slice(0, Math.min(2, count))
     buyers.forEach((buyer, index) => {
       const customerIndex = reviewers.findIndex(item => item.id === buyer.customerId)
-      if (customerIndex === -1) reviewers[index] = { id: buyer.customerId, nickname: buyer.nickname }
+      if (customerIndex === -1) reviewers[index] = { id: buyer.customerId, username: buyer.username }
       else [reviewers[index], reviewers[customerIndex]] = [reviewers[customerIndex], reviewers[index]]
     })
 
@@ -715,7 +713,7 @@ function createReviews(customers, products, buyersByProduct) {
       const buyer = buyers[index]
       const reviewer = reviewers[index]
       const reviewTime = buyer ? timeAfter(buyer.orderTime, 20) : timeWithinDays(90)
-      insert.run(product.id, reviewer.id, reviewer.nickname, rating, content, buyer ? buyer.orderId : null, reviewTime, reviewTime)
+      insert.run(product.id, reviewer.id, reviewer.username, rating, content, buyer ? buyer.orderId : null, reviewTime, reviewTime)
       ratingDistribution[rating] = (ratingDistribution[rating] || 0) + 1
       total++
     })
@@ -770,7 +768,7 @@ console.log(`[seed:dev] 清理旧假数据：顾客 ${summary.removed.customers}
 console.log(`[seed:dev] 生成顾客 ${summary.created.customers}、地址 ${summary.created.addresses}、收藏 ${summary.created.favorites}、购物车项 ${summary.created.cartItems}、订单 ${summary.created.orders}（${statusText}）、评论 ${summary.created.reviews}`)
 console.log(`[seed:dev] 订单：目标 ${ORDER_TARGET_COUNT} 条，摊到 ${CUSTOMER_COUNT} 位顾客（人均 ${(ORDER_TARGET_COUNT / CUSTOMER_COUNT).toFixed(1)} 单，单人在 ${ORDER_MIN_PER_CUSTOMER}~${ORDER_MAX_PER_CUSTOMER} 单之间）`)
 console.log(`[seed:dev] 评论：目标 ${summary.created.reviewTarget} 条（按上架商品数推导），覆盖商品 ${summary.created.ratedProducts} 个（每个 ${REVIEW_MIN_PER_PRODUCT}~${REVIEW_MAX_PER_PRODUCT} 条，长尾分布），星级分布 ${Object.entries(summary.created.ratingDistribution || {}).sort(([a], [b]) => b - a).map(([rating, count]) => `${rating} 星 ${count} 条`).join(' / ')}，已回写 product.rating / product.review_count`)
-console.log(`[seed:dev] 测试账号：用户名 ${seedUsername(0)} ~ ${seedUsername(CUSTOMER_COUNT - 1)}（手机号 ${seedPhones[0]} ~ ${seedPhones[seedPhones.length - 1]}），密码统一 ${SEED_PASSWORD}（昵称 ${seedNickname(0)} ~ ${seedNickname(CUSTOMER_COUNT - 1)}）`)
+console.log(`[seed:dev] 测试账号：用户名 ${seedUsername(0)} ~ ${seedUsername(CUSTOMER_COUNT - 1)}（手机号 ${seedPhones[0]} ~ ${seedPhones[seedPhones.length - 1]}），密码统一 ${SEED_PASSWORD}`)
 // 提醒：migrate.js 现在按 schema_migrations 记录表判断迁移是否已执行，
 // 006/009 这类种子脚本只在空库首次执行一次，不会再随服务重启重复重建商品目录，
 // 因此本脚本写入的评论/收藏/购物车在重启后端后不会丢失。

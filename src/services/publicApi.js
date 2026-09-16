@@ -84,7 +84,7 @@ export async function fetchProduct(id) {
 }
 
 // 商品详情页「买家评价」：返回已显示的评论列表 + 评分概览（平均分 / 各星级条数）。
-// 后端只返回 status = 1 的评论，顾客注销后仍以昵称快照展示。
+// 后端只返回 status = 1 的评论，顾客注销后仍以用户名快照展示。
 // 已登录时会带上 is_mine / can_edit，供页面展示「编辑 / 删除」入口。
 export async function fetchProductReviews(productId, params = {}) {
   const { data } = await publicApi.get(`/products/${productId}/reviews`, { params })

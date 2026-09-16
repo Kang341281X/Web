@@ -11,7 +11,7 @@ import api from '../../services/api'
  *   - product_review.status 决定评论是否在前台展示（1 显示 / 0 隐藏）；
  *   - 隐藏或删除后，后端会按「可见评论」重算 product.rating 与 product.review_count，
  *     因此这两个操作都属于会影响前台展示的操作，必须二次确认。
- *   - customer_name 是评论时的昵称快照，顾客注销后依旧可正常展示。
+ *   - customer_name 是评论时的用户名快照，顾客注销后依旧可正常展示。
  *   - 关键词支持评价人手机号，输入手机号即可列出该评价人的全部评价。
  */
 const route = useRoute()
@@ -120,7 +120,7 @@ onMounted(() => {
     <template #header><div class="page-header"><span>商品评论</span></div></template>
 
     <div class="list-toolbar">
-      <el-input v-model="query.keyword" clearable placeholder="搜索商品名称、评价人昵称/手机号或评论内容" style="max-width: 340px" @keyup.enter="search" @clear="search" />
+      <el-input v-model="query.keyword" clearable placeholder="搜索商品名称、评价人/手机号或评论内容" style="max-width: 340px" @keyup.enter="search" @clear="search" />
       <el-select v-model="query.rating" clearable placeholder="全部评分" style="width: 130px" @change="search">
         <el-option v-for="item in RATING_OPTIONS" :key="item" :label="`${item} 星`" :value="item" />
       </el-select>

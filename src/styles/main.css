@@ -124,33 +124,35 @@
 @media(max-width:1000px){.account-layout{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}}
 @media(max-width:760px){.account-layout{grid-template-columns:1fr;gap:16px}.account-identity{grid-row:auto}.account-card{padding:20px}.account-hint{max-width:none}}
 
-/* Account entry card for the address book (same card look as the account page). */
-.account-address{grid-column:1/-1;display:flex;flex-direction:column;align-items:flex-start;gap:4px;transition:background .2s}
-.account-address:hover{background:#eee7df}
-.account-address h2{margin:0 0 2px}
-.account-address p{margin:0 0 14px;font-size:.82rem;color:var(--muted);line-height:1.6}
-
 /* Customer address book: cards, default badge, select mode (reused by checkout in stage 11) and the add/edit modal. */
 .address-toolbar{display:flex;align-items:center;gap:16px;margin-bottom:18px}
 .address-toolbar p{margin:0;font-size:.82rem;color:var(--muted)}
 .address-toolbar .button{margin-left:auto}
-.address-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px}
-.address-card{position:relative;display:flex;flex-direction:column;gap:8px;background:var(--cream);border:1px solid transparent;padding:20px}
+/* 与订单记录（.orders-list / .order-card）同宽的单列布局 */
+.address-grid{display:flex;flex-direction:column;gap:14px}
+/* 全宽卡片按行排布：左侧信息区（姓名行 + 地址行），右侧放大的操作按钮 */
+.address-card{position:relative;display:flex;flex-direction:row;align-items:center;gap:16px;background:var(--cream);border:1px solid var(--line);padding:16px 18px}
+.address-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
 .address-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .address-name{font-weight:700;font-size:.95rem}
 .address-phone{font-size:.82rem;color:var(--muted)}
 .address-badge{font-size:.65rem;font-weight:700;letter-spacing:.04em;color:var(--clay);background:rgba(199,95,62,.12);border-radius:99px;padding:3px 9px}
+.address-line{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0;font-size:.86rem;line-height:1.6;color:#55504a}
 .address-region{font-size:.75rem;color:var(--muted)}
-.address-detail{margin:0;font-size:.86rem;line-height:1.65;word-break:break-word}
-.address-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:auto;padding-top:8px}
+.address-detail{word-break:break-word}
+/* 操作按钮放大为胶囊描边按钮（比全局 .text-button 的点击区域大） */
+.address-actions{display:flex;align-items:center;gap:10px;flex:none}
+.address-actions .text-button{min-height:38px;padding:8px 16px;border:1px solid var(--line);border-radius:99px;background:var(--paper);font-size:.8rem;color:#574d43;transition:border-color .18s,color .18s,background .18s}
+.address-actions .text-button:hover{border-color:var(--clay);color:var(--clay)}
+.address-actions .text-button.danger{color:#a4443b;border-color:rgba(179,38,30,.35)}
+.address-actions .text-button.danger:hover{border-color:#a4443b;background:rgba(179,38,30,.05)}
 .address-card.selectable{cursor:pointer;transition:border-color .18s,box-shadow .18s}
-.address-card.selectable:hover{border-color:var(--line)}
+.address-card.selectable:hover{border-color:var(--clay)}
 .address-card.selected{border-color:var(--clay);box-shadow:0 0 0 2px rgba(199,95,62,.14)}
-.address-radio{position:absolute;top:22px;right:18px;width:16px;height:16px;border:1px solid var(--line);border-radius:50%;background:var(--paper)}
+.address-radio{flex:none;width:18px;height:18px;border:1px solid var(--line);border-radius:50%;background:var(--paper)}
 .address-card.selected .address-radio{border-color:var(--clay);background:radial-gradient(circle,var(--clay) 0 45%,transparent 46%)}
-.address-confirm{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:auto;padding:10px 12px;background:rgba(179,38,30,.06);color:#b3261e;font-size:.78rem;line-height:1.5}
+.address-confirm{flex:1;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:10px 12px;background:rgba(179,38,30,.06);color:#b3261e;font-size:.78rem;line-height:1.5;border-radius:4px}
 .address-card .address-confirm .text-button{color:#b3261e}
-.address-back{margin:30px 0 0;text-align:center}
 .address-modal{position:relative;width:min(560px,calc(100% - 32px));max-height:calc(100vh - 48px);overflow-y:auto;background:var(--paper);padding:34px;box-shadow:var(--shadow)}
 .address-modal h2{font:600 1.9rem 'Playfair Display',serif;letter-spacing:-.03em;margin:15px 0 4px}
 .address-modal label{display:block;font-size:.78rem;font-weight:600;margin:13px 0}
@@ -161,7 +163,7 @@
 .address-modal .address-check{display:flex;align-items:center;gap:9px;margin:18px 0 0}
 .address-modal .address-check input{width:16px;height:16px;padding:0;margin:0;accent-color:var(--clay)}
 .address-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
-@media(max-width:760px){.address-grid{grid-template-columns:1fr}.address-fields-3{grid-template-columns:1fr}.address-modal{padding:24px}.address-toolbar{flex-direction:column;align-items:stretch}.address-toolbar .button{margin-left:0}}
+@media(max-width:760px){.address-card{flex-wrap:wrap}.address-actions,.address-confirm{flex-basis:100%}.address-actions{justify-content:flex-end}.address-fields-3{grid-template-columns:1fr}.address-modal{padding:24px}.address-toolbar{flex-direction:column;align-items:stretch}.address-toolbar .button{margin-left:0}}
 
 /* Front catalog pagination (category page / search results): compact on desktop, comfortably tappable on mobile. */
 .catalog-pagination{display:flex;flex-direction:column;align-items:center;gap:14px;margin:38px 0 4px}

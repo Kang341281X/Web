@@ -25,8 +25,8 @@ export const useCustomerStore = defineStore('customer', {
   }),
   getters: {
     isLoggedIn: state => !!state.token,
-    // 优先昵称，其次用户名，最后手机号（后端返回的 phone 已脱敏）
-    displayName: state => state.profile?.nickname || state.profile?.username || state.profile?.phone || '',
+    // 展示名即用户名，其次手机号
+    displayName: state => state.profile?.username || state.profile?.phone || '',
     avatarUrl: state => state.profile?.avatar_url || '',
   },
   actions: {
@@ -59,16 +59,21 @@ export const useCustomerStore = defineStore('customer', {
       return error.response?.data?.code || ''
     },
 
-    // 注册：用户名 + 手机号 + 密码（后端只返回顾客资料，不签发 token，需要登录态时请再调用 login）
-    async register({ username, phone, password, nickname }) {
+    // 注册：用户名 + 手机号 + 密码（+ 可选邮箱）。注册不需要验证码；
+    // 后端注册即登录（直接签发 token），游客购物车/收藏的合并口径与登录一致
+    async register({ username, phone, password, email }) {
       this.loading = true
       try {
         const { data } = await customerApi.post('/register', {
           username,
           phone,
           password,
-          nickname: nickname || '',
+          ...(email ? { email } : {}),
         })
+        this.applySession(data.token, data.user)
+        // 把游客购物车/收藏合并到服务端，合并结果覆盖本地状态；
+        // 两个同步动作内部已各自兜底错误，不影响注册结果
+        await Promise.all([useCartStore().syncAfterLogin(), useFavoritesStore().syncAfterLogin()])
         return { success: true, message: data.message || '注册成功', user: data.user }
       } catch (error) {
         return { success: false, message: this.errorMessage(error, '注册失败，请稍后重试') }
@@ -120,12 +125,11 @@ export const useCustomerStore = defineStore('customer', {
       }
     },
 
-    // payload 支持 nickname / username / email；带 avatar(File) 时走 multipart 上传
+    // payload 支持 phone / email；带 avatar(File) 时走 multipart 上传
     async updateProfile(payload = {}) {
       try {
         const form = new FormData()
-        if (payload.nickname !== undefined) form.append('nickname', payload.nickname ?? '')
-        if (payload.username !== undefined) form.append('username', payload.username ?? '')
+        if (payload.phone !== undefined) form.append('phone', payload.phone ?? '')
         if (payload.email !== undefined) form.append('email', payload.email ?? '')
         if (payload.avatar) form.append('avatar', payload.avatar)
         const { data } = await customerApi.put('/profile', form)

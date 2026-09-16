@@ -61,13 +61,12 @@ export function maskPhone(phone) {
   return value.length === 11 ? `${value.slice(0, 3)}****${value.slice(7)}` : value
 }
 
-// 对外输出顾客信息：剔除密码、脱敏手机号、补全头像完整地址
+// 对外输出顾客信息：剔除密码、返回完整手机号、补全头像完整地址
 export function publicCustomer(customer) {
   if (!customer) return null
   const { password, ...safe } = customer
   return {
     ...safe,
-    phone: maskPhone(safe.phone),
     avatar_url: storageService.getUrl(customer.avatar),
   }
 }

@@ -21,7 +21,6 @@ const total = computed(() => cart.subtotal + shippingFee.value)
 <template>
   <section class="container page cart-page">
     <div class="page-intro">
-      <span class="eyebrow">{{ language.t('yourSelection') }}</span>
       <h1>{{ language.t('cart') }}</h1>
     </div>
     <EmptyState

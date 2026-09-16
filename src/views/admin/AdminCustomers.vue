@@ -51,7 +51,7 @@ function search() { query.page = 1; load() }
 function resetFilter() { query.keyword = ''; query.status = ''; search() }
 function pageIndex(index) { return (query.page - 1) * query.page_size + index + 1 }
 function formatTime(value) { return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-' }
-function displayName(customer) { return customer?.nickname || '未设置昵称' }
+function displayName(customer) { return customer?.username || '未记录' }
 
 async function openDetail(row) {
   detail.value = row
@@ -95,7 +95,7 @@ function viewAllOrders() {
 async function toggleStatus(customer) {
   if (!customer) return
   const disabling = Boolean(customer.status)
-  const name = customer.nickname || customer.phone || '该顾客'
+  const name = customer.username || customer.phone || '该顾客'
   try {
     await ElMessageBox.confirm(
       disabling
@@ -121,6 +121,32 @@ async function toggleStatus(customer) {
 }
 
 /**
+ * 删除顾客账号（不可恢复）。
+ * 收货地址、收藏、购物车会随账号一并删除；历史订单和评论会保留但变为匿名记录，
+ * 因此必须二次确认，删除后同步刷新列表并关闭对应的详情弹窗。
+ */
+async function removeCustomer(customer) {
+  if (!customer) return
+  const name = customer.username || customer.phone || '该顾客'
+  try {
+    await ElMessageBox.confirm(
+      `删除后「${name}」的收货地址、收藏与购物车将被清除，历史订单和评论会保留（变为匿名记录）。此操作不可恢复，确认删除吗？`,
+      '删除顾客',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+    )
+  } catch { return }
+
+  try {
+    const { data } = await api.delete(`/admin-customers/${customer.id}`)
+    ElMessage.success(data.message || '已删除该顾客')
+    if (detail.value?.id === customer.id) detailVisible.value = false
+    await load()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '删除失败')
+  }
+}
+
+/**
  * 一键重置顾客登录密码为手机号（仅超级管理员）。
  * 新密码就是明文手机号，等于把账号交回给掌握该手机号的人，所以同样必须二次确认。
  */
@@ -128,7 +154,7 @@ async function resetPassword(customer) {
   if (!customer) return
   const phone = String(customer.phone || '').trim()
   if (!phone) return ElMessage.warning('该顾客未登记手机号，无法重置为手机号')
-  const name = customer.nickname || phone
+  const name = customer.username || phone
   try {
     await ElMessageBox.confirm(
       `将把「${name}」的登录密码重置为手机号 ${phone}。重置后请提醒对方使用该手机号作为新密码登录，确认重置吗？`,
@@ -156,7 +182,7 @@ onMounted(load)
     <template #header><div class="page-header"><span>用户管理</span></div></template>
 
     <div class="list-toolbar">
-      <el-input v-model="query.keyword" clearable placeholder="搜索手机号、昵称或邮箱" style="max-width: 320px" @keyup.enter="search" @clear="search" />
+      <el-input v-model="query.keyword" clearable placeholder="搜索用户名、手机号或邮箱" style="max-width: 320px" @keyup.enter="search" @clear="search" />
       <el-select v-model="query.status" clearable placeholder="全部状态" style="width: 140px" @change="search">
         <el-option label="启用" value="1" />
         <el-option label="禁用" value="0" />
@@ -165,25 +191,23 @@ onMounted(load)
       <el-button @click="resetFilter">重置</el-button>
     </div>
 
-    <!-- 列宽：邮箱为主内容列（min-width 吸收多余宽度），其余列固定宽度，避免所有列一起被拉伸 -->
+    <!-- 列宽：短内容列（序号/手机号/状态/时间/操作）用固定像素，长内容列（顾客/邮箱）只设 min-width，
+         剩余宽度由 el-table 按比例自动分给弹性列，列间距随容器伸缩而非写死 -->
     <el-table v-loading="loading" :data="list" height="100%" stripe style="width: 100%">
-      <el-table-column label="序号" width="56" align="center"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
-      <el-table-column label="顾客" width="160">
+      <el-table-column label="序号" width="64" align="center"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
+      <el-table-column label="顾客" min-width="160">
         <template #default="{ row }">
           <div class="user-cell">
             <el-avatar :src="resolve(row.avatar_url)"><template #default>{{ displayName(row).slice(0, 1) }}</template></el-avatar>
-            <div>
-              <div>{{ displayName(row) }}</div>
-              <small>{{ row.username || '-' }}</small>
-            </div>
+            <div>{{ displayName(row) }}</div>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="手机号" width="124" align="center"><template #default="{ row }">{{ row.phone || '-' }}</template></el-table-column>
-      <el-table-column label="邮箱" min-width="196" show-overflow-tooltip><template #default="{ row }">{{ row.email || '-' }}</template></el-table-column>
-      <el-table-column label="状态" width="76" align="center"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'danger'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
-      <el-table-column label="注册时间" width="158" align="center"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-      <el-table-column label="操作" width="84" align="center" fixed="right">
+      <el-table-column label="手机号" width="130" align="center"><template #default="{ row }">{{ row.phone || '-' }}</template></el-table-column>
+      <el-table-column label="邮箱" min-width="200" show-overflow-tooltip><template #default="{ row }">{{ row.email || '-' }}</template></el-table-column>
+      <el-table-column label="状态" width="90" align="center"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'danger'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
+      <el-table-column label="注册时间" width="170" align="center"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+      <el-table-column label="操作" width="80" align="center">
         <template #default="{ row }">
           <el-button link type="primary" @click="openDetail(row)">查看</el-button>
         </template>
@@ -198,7 +222,6 @@ onMounted(load)
   <el-dialog v-model="detailVisible" title="顾客详情" width="min(900px, calc(100% - 24px))" top="5vh">
     <div v-loading="detailLoading" class="customer-detail">
       <el-descriptions :column="3" border size="small">
-        <el-descriptions-item label="昵称">{{ displayName(detail) }}</el-descriptions-item>
         <el-descriptions-item label="用户名">{{ detail?.username || '-' }}</el-descriptions-item>
         <el-descriptions-item label="手机号">{{ detail?.phone || '-' }}</el-descriptions-item>
         <el-descriptions-item label="邮箱">{{ detail?.email || '-' }}</el-descriptions-item>
@@ -237,10 +260,12 @@ onMounted(load)
     </div>
 
     <template #footer>
-      <el-button @click="detailVisible = false">关闭</el-button>
-      <!-- 启用/禁用是破坏性操作，沿用二次确认；重置密码入口仅超级管理员可见 -->
+      <!-- 启用/禁用是破坏性操作，沿用二次确认；重置密码入口仅超级管理员可见；
+           删除顾客入口放在详情弹窗里，避免列表行误触 -->
+      <el-button type="danger" plain @click="removeCustomer(detail)">删除该顾客</el-button>
       <el-button :type="detail?.status ? 'danger' : 'success'" :loading="statusSaving" @click="toggleStatus(detail)">{{ detail?.status ? '禁用该账号' : '启用该账号' }}</el-button>
       <el-button v-if="isSuperAdmin" type="primary" plain :loading="resetSaving" @click="resetPassword(detail)">重置密码为手机号</el-button>
+      <el-button @click="detailVisible = false">关闭</el-button>
     </template>
   </el-dialog>
 </template>

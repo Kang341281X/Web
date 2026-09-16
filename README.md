@@ -2,26 +2,35 @@
 
 ## 首次启动
 
-1. 安装依赖：执行 `npm install`。
-   > 若因默认镜像源返回 **403**（或下载失败），请先切换到官方源后重试：
-   > ```
-   > npm config set registry https://registry.npmjs.org/
-   > npm install
-   > ```
-2. 环境变量：建议将 `.env.development.example` 复制为 `.env.development`，按需修改 `JWT_SECRET` 等；数据库为 SQLite，无需单独配置 MySQL，`DB_PATH` 默认指向 `./server/data.db`。生产环境请使用 `.env.production`（可参考 `.env.production.example`），生产环境缺少 JWT 密钥时会拒绝启动。
-3. 初始化数据库：执行 `npm run db:migrate`，自动按 `server/sql/` 下的迁移脚本创建表结构（脚本幂等，可重复执行；`npm run server` 启动时也会自动跑一遍迁移）。新增迁移脚本请按现有编号递增，不要修改历史文件。
-4. 写入种子数据：执行 `npm run db:seed`，创建 `superadmin`、`admin`、`admin01`、`admin02` 四个初始账号，密码均为 `123456`，且 `must_change_password = 1`，首次登录后必须在“个人中心”修改密码。
-5. 分别运行 `npm run server` 与 `npm run dev`，访问后台 `http://localhost:5173/admin/login`。
-6. 可选：写入开发联调用的大批量假数据（都带可识别标记，重复执行会先清理上一轮再重建），按下面顺序执行：
-   - `npm run seed:products`：写入 400 条商品假数据，按权重分布在现有 7 个分类下，图片统一复用 `/assets/images/placeholders/product-placeholder.svg`。SKU 统一使用保留前缀 `ZZZ` + 7 位数字作为清理标记（后台是只读字段，改名或改描述都不影响识别），因此脚本只删除上一轮由它自己创建的商品，不会影响管理后台手工新增的商品，也不会影响 `006` / `009` 的 40 条历史演示商品。脚本跑完会把 `006_seed_catalog.sql`、`009_reseed_catalog.sql` 写入 `schema_migrations` 标记为已执行，避免后续迁移重跑它们（它们是「整表清空 + 重建 40 条」的破坏性写法）把商品目录清空。
-   - `npm run seed:dev`：在现有商品之上写入 100 位测试顾客（`seeduser001` ~ `seeduser100`，密码 `123456`）、500 条订单（pending / confirmed / shipped / completed / cancelled = 20% / 20% / 20% / 30% / 10%）与 1000 条商品评论（长尾分布），并回写 `product.rating` / `product.review_count`。
-   > 完整顺序：`npm run db:migrate` → `npm run db:seed` → `npm run seed:products` → `npm run seed:dev`。
-   >
-   > 注意：`seed:products` 重跑会把这 400 条假商品连同它们的评论 / 收藏 / 购物车一起删掉重建（历史订单明细只解绑商品关联，商品名/SKU/单价快照仍保留），所以重跑它之后需要再执行一次 `npm run seed:dev` 补回评论。
+```
+# 0. 前置：装好 Node.js（建议 LTS，比如 18 或 20；better-sqlite3 是原生模块，版本差太多可能装不上)
+git clone https://github.com/Kang341281X/Web.git
+cd Web
 
-数据库中只保存相对图片路径，`PUBLIC_BASE_URL` 负责生成可访问图片地址。
+# 1. 装依赖
+npm install
+# 如果这一步报 403 或下载失败（国内常见），先换源再重试：
+# npm config set registry https://registry.npmjs.org/
+# npm install
 
-`node_modules`、`dist`、`uploads`（用户上传内容）与本地数据库 `server/data.db*`、`server/tmp*.db`（含 WAL / SHM）都不入库，由 `npm install` / `npm run build` / 启动脚本在本地生成；`uploads` 仅保留 `.gitkeep` 占位。
+# 2. 配置环境变量（开发用这份）
+cp .env.development.example .env.development
+# 打开改一下 JWT_SECRET / CUSTOMER_JWT_SECRET（随便填够 32 位的随机字符串即可，开发环境不严格也能跑）
+
+# 3. 初始化数据库表结构（脚本幂等，重复跑也没事）
+npm run db:migrate
+
+# 4. 写入种子账号
+npm run db:seed
+# 会建 superadmin / admin / admin01 / admin02 四个账号，密码都是 123456
+# 且首次登录会强制要求改密码
+
+# 5. 分别起两个进程（要开两个终端窗口）
+npm run server   # 后端 Express，默认 3001
+npm run dev      # 前端 Vite，默认 5173
+```
+
+
 
 ## 顾客下单 → 后台人工发货
 
@@ -204,3 +213,70 @@ git add .
 git commit -m ""
 git push origin main
 ```
+
+
+
+# 上传到服务器
+
+这一步比本地运行多不少东西，核心是"从两个开发进程"变成"一套能长期稳定运行、能被外网安全访问的服务"：
+
+**1. 服务器基础环境**
+ 一台 Linux 云主机，装好同版本的 Node.js，把代码传上去（git clone 或 CI 打包上传）。
+
+**2. 前端要打包成静态文件，而不是继续跑 `npm run dev`**
+
+```bash
+npm run build   # 生成 dist/ 静态文件
+```
+
+生产环境不用 Vite 开发服务器，`dist/` 交给 Nginx 或者 Express 的静态托管来发。
+
+**3. 配置生产环境变量**
+
+```bash
+cp .env.production.example .env.production
+```
+
+然后把里面几个值全部换成真实的：
+
+- `JWT_SECRET` / `CUSTOMER_JWT_SECRET`：换成真正随机、足够长、互不相同的字符串——README 特别提到**生产环境缺少这两个密钥会直接拒绝启动**
+- `PUBLIC_BASE_URL`：改成后端真实可访问的域名，比如 `https://api.yourshop.com`（决定图片上传后返回的地址对不对）
+- `CORS_ORIGIN`：改成前端真实域名，比如 `https://yourshop.com`，不然前端调接口会被浏览器 CORS 挡掉
+- `DB_PATH`、`UPLOAD_DIR`：改成服务器上一个会持久化、会被备份的绝对路径，别放在会被重新部署清空的目录里
+
+**4. 在服务器上跑一次初始化**
+
+```bash
+npm run db:migrate
+npm run db:seed
+```
+
+种子密码同样是 `123456`——**这个千万不能带着默认密码就对外网开放**，登录后立刻改掉，或者干脆自己写个种子脚本改成强密码后再上线。
+
+**5. 让后端进程"常驻"，而不是前台跑一下就没了**
+ SSH 断开、终端关掉，`npm run server` 就会跟着退出。需要进程守护，比如：
+
+```bash
+npm install -g pm2
+pm2 start server/index.js --name shop-api
+pm2 save
+pm2 startup   # 让它开机自启
+```
+
+**6. 前面挡一层反向代理 + HTTPS**
+ 后端 Express 只监听 `127.0.0.1:3001`，不直接对公网暴露；用 Nginx（或 Caddy）做：
+
+- 静态文件 `dist/` 直接由 Nginx 托管
+- `/api/...` 之类的请求反向代理到 `127.0.0.1:3001`
+- 用 certbot / Let's Encrypt 签发免费 HTTPS 证书
+
+**7. 防火墙 / 安全组**
+ 只放行 80、443（和你需要的 22 端口做 SSH），**3001 端口不要对公网开放**。
+
+**8. 域名解析**
+ 把域名的 DNS A 记录指向服务器公网 IP。
+
+**9. 数据备份**
+ SQLite 是单文件数据库，定期备份 `data.db` 和 `uploads/` 目录就行。如果以后访问量变大想换真正的数据库，`package.json` 里其实已经装了 `mysql2` 依赖，说明作者本来就留了迁移空间。
+
+有一点我没能确认：`server/index.js` 里后端是否已经顺手把 `dist/` 静态文件也托管了（如果是，部署会更简单——一个 Node 进程 + Nginx 只做 HTTPS 终端和反代就够了，不用额外配 Nginx 托管静态文件那一段）。建议你打开这个文件看一眼有没有 `express.static(...)` 之类的代码，如果没有，就按上面第 6 步"Nginx 托管 dist + 反代 API"这套来做。

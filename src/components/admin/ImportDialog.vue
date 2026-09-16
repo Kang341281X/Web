@@ -24,8 +24,10 @@ const renaming = ref(false)
 const creatingCategory = ref({}) // category_name -> boolean
 const generatingSku = ref({}) // row -> boolean
 const generatingAll = ref(false)
+const deletingRow = ref({}) // row -> boolean
 const foldersData = ref([])
 const currentFolder = ref(null) // 当前进入的顶层文件夹对象（null = 显示顶层列表）
+const savedSkuMap = ref({}) // row -> 最近一次服务端保存的编号，输入非法时用于恢复输入框
 
 watch(() => props.visible, val => { dialogVisible.value = val })
 watch(dialogVisible, val => { emit('update:visible', val) })
@@ -41,7 +43,7 @@ const successRows = computed(() => {
   return previewResult.value.preview.filter(r => r.success)
 })
 
-// 尚未生成商品编号的行（Excel 模板已去掉 SKU 列，需管理员在预览页主动生成）
+// 尚未生成商品编号的行（上传后已自动生成，正常情况下为空；仅供一键补齐入口判断）
 const rowsNeedingSku = computed(() => {
   if (!previewResult.value?.preview) return []
   return previewResult.value.preview.filter(r => !r.sku)
@@ -161,8 +163,12 @@ async function handlePreview() {
     foldersData.value = data.data.folders || []
     currentFolder.value = null
     step.value = 2
+    syncSkuMap(data.data.preview)
 
-    if (data.data.fail_count > 0) {
+    // 上传后立即为全部行生成商品编号，管理员可在预览表格中直接修改
+    await generateAllSkus()
+
+    if (previewResult.value.fail_count > 0) {
       ElMessage.warning(`校验完成，有 ${data.data.fail_count} 行失败，请修正后重新上传`)
     } else {
       ElMessage.success(`校验完成，全部 ${data.data.success_count} 行通过`)
@@ -272,14 +278,22 @@ async function handleCreateCategory(categoryName) {
   }
 }
 
-// ── 商品编号生成 ──────────────────────────────────────
+// ── 商品编号生成 / 手动修改 ────────────────────────────
 function applyPreviewResult(data) {
   previewResult.value = {
     ...previewResult.value,
+    total_count: data.preview.length,
     success_count: data.success_count,
     fail_count: data.fail_count,
     preview: data.preview,
   }
+  syncSkuMap(data.preview)
+}
+
+function syncSkuMap(preview) {
+  const map = {}
+  for (const row of preview || []) map[row.row] = row.sku || ''
+  savedSkuMap.value = map
 }
 
 async function generateRowSku(row) {
@@ -293,6 +307,51 @@ async function generateRowSku(row) {
     ElMessage.error(error.response?.data?.message || '生成编号失败，请重试')
   } finally {
     generatingSku.value[row.row] = false
+  }
+}
+
+// 管理员手动修改某行编号：所见即所存，提交值直接回写预览，确认导入时原样落库
+async function saveRowSku(row, value) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) {
+    row.sku = savedSkuMap.value[row.row] || ''
+    return ElMessage.warning('商品编号不能为空，已恢复原编号')
+  }
+  if (generatingSku.value[row.row]) return
+  generatingSku.value[row.row] = true
+  try {
+    const { data } = await api.put(`/products/import/${batchId.value}/rows/${row.row}/sku`, { sku: trimmed })
+    applyPreviewResult(data.data)
+    ElMessage.success(`第 ${row.row} 行商品编号已更新：${data.data.sku}`)
+  } catch (error) {
+    row.sku = savedSkuMap.value[row.row] || ''
+    ElMessage.error(error.response?.data?.message || '保存编号失败，请重试')
+  } finally {
+    generatingSku.value[row.row] = false
+  }
+}
+
+// ── 删除预览行 ──────────────────────────────────────
+async function removeRow(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除第 ${row.row} 行「${row.name}」吗？删除后该行不会被导入。`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  if (deletingRow.value[row.row]) return
+  deletingRow.value[row.row] = true
+  try {
+    const { data } = await api.delete(`/products/import/${batchId.value}/rows/${row.row}`)
+    applyPreviewResult(data.data)
+    ElMessage.success(`已删除第 ${row.row} 行「${row.name}」`)
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '删除失败，请重试')
+  } finally {
+    deletingRow.value[row.row] = false
   }
 }
 
@@ -443,23 +502,6 @@ onBeforeRouteLeave(() => {
   >
     <!-- 步骤1: 上传文件 -->
     <div v-if="step === 1" class="import-step">
-      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
-        <template #title>
-          <div class="alert-content">
-            <p><strong>导入步骤：</strong></p>
-            <ol>
-              <li>点击「下载导入模板」，在模板中填写商品数据（请勿修改列名或增删列）</li>
-              <li>Excel 中「分类名称」必须是后台「商品分类」中已存在的分类，否则该行判定失败</li>
-              <li>模板不包含「商品编号(SKU)」列，编号由系统按规则统一生成：在预览结果中点击该行「生成」按钮（或顶部「一键为全部行生成编号」），编号确认导入后不可修改；「是否支持定制」可用下拉选"是/否"；「商品评分」填 0-5 之间的数字（会自动就近取整到 0.5），留空默认 5</li>
-              <li>Excel 中「图片文件夹名称」为必填，需与压缩包内的子文件夹名称完全一致</li>
-              <li>按商品分别建立子文件夹，每个子文件夹内放该商品的所有图片（如 01.jpg，支持 JPG、PNG、BMP、WebP）</li>
-              <li>将所有子文件夹统一压缩为 <code>images.zip</code>（文件名必须为 images.zip）</li>
-              <li>选择 Excel 文件（必选）和 images.zip（必选），点击「上传」<br><span style="color:#909399">压缩包中缺少对应文件夹、或分类不存在的行，会在预览结果中判定失败</span></li>
-            </ol>
-          </div>
-        </template>
-      </el-alert>
-
       <div class="template-download">
         <el-button type="primary" :icon="Download" :loading="downloadingTemplate" @click="downloadTemplate">下载导入模板</el-button>
         <span class="hint">模板文件名：Products.xlsx</span>
@@ -598,20 +640,6 @@ onBeforeRouteLeave(() => {
         </div>
       </div>
 
-      <div class="sku-toolbar">
-        <span class="sku-toolbar__hint">
-          「商品编号(SKU)」模板中不再填写，请点击每行的「生成」按钮，或使用右侧一键生成；编号确认导入后不可修改
-        </span>
-        <el-button
-          type="primary"
-          plain
-          size="small"
-          :loading="generatingAll"
-          :disabled="!rowsNeedingSku.length"
-          @click="generateAllSkus"
-        >一键为全部行生成编号{{ rowsNeedingSku.length ? `（${rowsNeedingSku.length}）` : '' }}</el-button>
-      </div>
-
       <el-alert
         v-if="previewResult.fail_count > 0"
         type="warning"
@@ -637,7 +665,12 @@ onBeforeRouteLeave(() => {
           <template #default="{ row }">
             <div class="sku-cell">
               <template v-if="row.sku">
-                <span class="sku-cell__value">{{ row.sku }}</span>
+                <el-input
+                  v-model="row.sku"
+                  size="small"
+                  class="sku-input"
+                  @change="value => saveRowSku(row, value)"
+                />
                 <el-button link type="primary" size="small" :loading="generatingSku[row.row]" @click="generateRowSku(row)">重新生成</el-button>
               </template>
               <el-button v-else link type="primary" size="small" :loading="generatingSku[row.row]" @click="generateRowSku(row)">生成</el-button>
@@ -646,7 +679,7 @@ onBeforeRouteLeave(() => {
         </el-table-column>
         <el-table-column prop="name" label="商品名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="category_name" label="分类" min-width="120" show-overflow-tooltip />
-        <el-table-column label="定制" width="70" align="center">
+        <el-table-column label="定制" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="row.is_customizable ? 'warning' : 'info'" size="small">
               {{ row.is_customizable ? '支持' : '不支持' }}
@@ -670,13 +703,6 @@ onBeforeRouteLeave(() => {
         <el-table-column label="图片数" width="80" align="center">
           <template #default="{ row }">{{ row.image_count }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="80" fixed="right" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.success ? 'success' : 'danger'" size="small">
-              {{ row.success ? '通过' : '失败' }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column label="失败原因" min-width="220">
           <template #default="{ row }">
             <div v-if="row.errors" class="error-list">
@@ -693,6 +719,18 @@ onBeforeRouteLeave(() => {
               </div>
             </div>
             <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="80" fixed="right" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.success ? 'success' : 'danger'" size="small">
+              {{ row.success ? '通过' : '失败' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="80" fixed="right" align="center">
+          <template #default="{ row }">
+            <el-button link type="danger" size="small" :loading="deletingRow[row.row]" @click="removeRow(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -718,20 +756,6 @@ onBeforeRouteLeave(() => {
 </template>
 
 <style scoped>
-.alert-content ol {
-  margin: 8px 0 0 0;
-  padding-left: 20px;
-}
-.alert-content li {
-  margin-bottom: 4px;
-  line-height: 1.6;
-}
-.alert-content code {
-  background: #f0f0f0;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-family: monospace;
-}
 .template-download {
   display: flex;
   align-items: center;
@@ -795,32 +819,14 @@ onBeforeRouteLeave(() => {
   padding: 0;
   height: auto;
 }
-.sku-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 10px 14px;
-  background: #f5f7fa;
-  border-radius: 6px;
-}
-.sku-toolbar__hint {
-  font-size: 13px;
-  color: #606266;
-  line-height: 1.6;
-}
 .sku-cell {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
 }
-.sku-cell__value {
-  font-family: monospace;
-  font-size: 13px;
-  color: #303133;
+.sku-input {
+  width: 130px;
 }
 .dialog-footer {
   display: flex;

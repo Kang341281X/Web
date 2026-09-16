@@ -1,4 +1,5 @@
 import db from '../config/db.js'
+import storageService from '../services/storageService.js'
 import { findProduct } from './customerShop.js'
 
 // 订单状态机：取值与 022_customer_order.sql 的 CHECK 约束保持一致。
@@ -45,8 +46,15 @@ export function publicOrder(order) {
   }
 }
 
+// 明细对外输出：金额转数值；product_image 取当前商品主图完整地址（商品被硬删除时
+// product_id 已置 NULL，这里返回空串，由前端回退到占位图；名称/SKU/价格仍用下单快照）。
 export function publicOrderItem(item) {
-  return { ...item, price: Number(item.price), subtotal: Number(item.subtotal) }
+  return {
+    ...item,
+    price: Number(item.price),
+    subtotal: Number(item.subtotal),
+    product_image: item.main_image ? storageService.getUrl(item.main_image) : '',
+  }
 }
 
 // 订单详情（主表 + 明细），customer 用 LEFT JOIN 以兼容 customer_id 为空的历史订单。
@@ -54,13 +62,15 @@ export function publicOrderItem(item) {
 // customer_username / customer_email 是下单时的账号快照（见 026 迁移），不随账号资料变更。
 export async function findOrderDetail(orderId, connection = db) {
   const [rows] = await connection.execute(
-    `SELECT o.id, o.order_no, o.customer_id, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.shipping_fee, o.status, o.remark, o.handled_by, o.handled_by_name, o.created_at, o.updated_at, cu.phone AS customer_phone, cu.nickname AS customer_nickname FROM customer_order o LEFT JOIN customer cu ON cu.id = o.customer_id WHERE o.id = ?`,
+    `SELECT o.id, o.order_no, o.customer_id, o.customer_username, o.customer_email, o.receiver_name, o.receiver_phone, o.receiver_address, o.total_amount, o.shipping_fee, o.status, o.remark, o.handled_by, o.handled_by_name, o.created_at, o.updated_at, cu.phone AS customer_phone FROM customer_order o LEFT JOIN customer cu ON cu.id = o.customer_id WHERE o.id = ?`,
     [orderId]
   )
   const order = rows[0]
   if (!order) return null
+  // LEFT JOIN product 取当前主图（仅用于展示；商品被删除后 product_id 为 NULL，不影响快照字段）
   const [items] = await connection.execute(
-    'SELECT id, order_id, product_id, product_name, product_sku, price, quantity, subtotal FROM order_item WHERE order_id = ? ORDER BY id',
+    `SELECT oi.id, oi.order_id, oi.product_id, oi.product_name, oi.product_sku, oi.price, oi.quantity, oi.subtotal, p.main_image
+     FROM order_item oi LEFT JOIN product p ON p.id = oi.product_id WHERE oi.order_id = ? ORDER BY oi.id`,
     [orderId]
   )
   return { ...publicOrder(order), items: items.map(publicOrderItem) }
