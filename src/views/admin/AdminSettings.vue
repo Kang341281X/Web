@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
 import { IMG_FALLBACK, resolve } from '../../utils/image'
+import { COL } from '../../constants/tableColumn'
 
 const formRef = ref(null); const loading = ref(false); const saving = ref(false)
 const form = reactive({ contact_email: '', contact_email2: '', contact_phone: '', contact_phone2: '' })
@@ -288,7 +289,7 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
           <el-input v-model="row.name" maxlength="30" :disabled="row.removed" placeholder="平台名称" style="max-width: 240px" />
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="100" align="center">
+      <el-table-column label="状态" min-width="100" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.removed" type="danger" size="small" effect="light">将删除</el-tag>
           <el-tag v-else-if="isRowDirty(row)" type="warning" size="small" effect="light">未保存</el-tag>
@@ -343,7 +344,7 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
               </el-input>
             </template>
           </el-table-column>
-          <el-table-column prop="updated_at" label="更新时间" width="172" />
+          <el-table-column prop="updated_at" label="更新时间" :width="COL.DATETIME" />
         </el-table>
       </el-tab-pane>
 
@@ -353,7 +354,7 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
             <template #default="{ row }">{{ REGION_LABELS[row.region_key] || row.region_key }}</template>
           </el-table-column>
           <el-table-column prop="locale" label="语言" width="100" />
-          <!-- 运费输入框为主内容列（min-width 吸收多余宽度），其余列固定宽度 -->
+          <!-- 运费输入框 / 说明为弹性列（min-width），两者按比例分摊剩余宽度，输入框自身限宽防止拉成超长输入框 -->
           <el-table-column label="预估运费（人民币）" min-width="280">
             <template #default="{ row }">
               <el-input v-model="shippingDrafts[row.region_key]" type="number" min="0" step="1" style="max-width: 320px">
@@ -361,8 +362,8 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
               </el-input>
             </template>
           </el-table-column>
-          <el-table-column prop="note" label="说明" width="220" show-overflow-tooltip />
-          <el-table-column prop="updated_at" label="更新时间" width="172" />
+          <el-table-column prop="note" label="说明" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="updated_at" label="更新时间" :width="COL.DATETIME" />
         </el-table>
         <p class="shipping-tip">提示：未单独列出的国家和地区，统一使用「其他海外地区」这一行估算运费。</p>
       </el-tab-pane>

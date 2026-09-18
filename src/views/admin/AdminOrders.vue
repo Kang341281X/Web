@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
 import { ORDER_STATUS_OPTIONS, formatAmount, orderStatusTag } from '../../utils/order'
+import { COL, actionColWidth } from '../../constants/tableColumn'
 
 /**
  * 后台「订单管理」：列表（状态筛选 + 订单号/顾客手机号搜索）、详情（商品明细 + 收货地址）
@@ -182,10 +183,10 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 列宽：订单号为主内容列（min-width 吸收多余宽度），其余列固定宽度，避免所有列一起被拉伸 -->
+    <!-- 列宽：订单号 / 账号快照为弹性列（min-width），两者按比例分摊剩余宽度；其余短内容列统一引用 COL 常量 -->
     <el-table v-loading="loading" :data="list" height="100%" stripe style="width: 100%" @selection-change="handleSelection">
-      <el-table-column type="selection" width="46" />
-      <el-table-column label="序号" width="52"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
+      <el-table-column type="selection" :width="COL.SELECTION" />
+      <el-table-column label="序号" :width="COL.INDEX"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
       <el-table-column prop="order_no" label="订单号" min-width="185" show-overflow-tooltip />
       <el-table-column label="顾客" width="118">
         <template #default="{ row }">
@@ -202,19 +203,19 @@ onMounted(() => {
           <small>{{ row.receiver_phone }}</small>
         </template>
       </el-table-column>
-      <!-- 账号快照：下单时写入，顾客改资料或注销后依然保留（见 026 迁移） -->
-      <el-table-column label="账号快照" width="164">
+      <!-- 账号快照：下单时写入，顾客改资料或注销后依然保留（见 026 迁移）；邮箱长短不一，作为第二弹性列 -->
+      <el-table-column label="账号快照" min-width="160">
         <template #default="{ row }">
           <div>{{ row.customer_username || '未记录' }}</div>
           <small>{{ row.customer_email || '未留邮箱' }}</small>
         </template>
       </el-table-column>
-      <el-table-column label="商品金额" width="88" align="right"><template #default="{ row }">{{ formatAmount((row.total_amount || 0) - (row.shipping_fee || 0)) }}</template></el-table-column>
+      <el-table-column label="商品金额" :width="COL.AMOUNT" align="right"><template #default="{ row }">{{ formatAmount((row.total_amount || 0) - (row.shipping_fee || 0)) }}</template></el-table-column>
       <el-table-column label="运费" width="76" align="right"><template #default="{ row }">{{ Number(row.shipping_fee) > 0 ? formatAmount(row.shipping_fee) : '包邮' }}</template></el-table-column>
-      <el-table-column label="订单金额" width="92" align="right"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
-      <el-table-column label="状态" width="84"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)">{{ row.status_label }}</el-tag></template></el-table-column>
-      <el-table-column label="下单时间" width="156"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-      <el-table-column label="操作" width="72" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row)">详情</el-button></template></el-table-column>
+      <el-table-column label="订单金额" :width="COL.AMOUNT" align="right"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
+      <el-table-column label="状态" :width="COL.STATUS_TAG"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)">{{ row.status_label }}</el-tag></template></el-table-column>
+      <el-table-column label="下单时间" :width="COL.DATETIME"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+      <el-table-column label="操作" :width="actionColWidth(1)" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row)">详情</el-button></template></el-table-column>
     </el-table>
 
     <div class="pagination">
@@ -252,12 +253,12 @@ onMounted(() => {
       <div class="detail-block">
         <div class="detail-section__title">商品明细</div>
         <el-table :data="detail?.items || []" size="small" border empty-text="该订单没有商品明细">
-          <el-table-column type="index" label="序号" width="56" align="center" />
+          <el-table-column type="index" label="序号" :width="COL.INDEX" align="center" />
           <el-table-column prop="product_name" label="商品名称" min-width="200" show-overflow-tooltip />
-          <el-table-column label="商品编号（SKU）" width="130" show-overflow-tooltip><template #default="{ row }">{{ row.product_sku || '-' }}</template></el-table-column>
-          <el-table-column label="单价" width="88"><template #default="{ row }">{{ formatAmount(row.price) }}</template></el-table-column>
+          <el-table-column label="商品编号（SKU）" min-width="130" show-overflow-tooltip><template #default="{ row }">{{ row.product_sku || '-' }}</template></el-table-column>
+          <el-table-column label="单价" :width="COL.AMOUNT"><template #default="{ row }">{{ formatAmount(row.price) }}</template></el-table-column>
           <el-table-column prop="quantity" label="数量" width="72" align="center" />
-          <el-table-column label="小计" width="96"><template #default="{ row }">{{ formatAmount(row.subtotal) }}</template></el-table-column>
+          <el-table-column label="小计" :width="COL.AMOUNT"><template #default="{ row }">{{ formatAmount(row.subtotal) }}</template></el-table-column>
         </el-table>
         <div class="detail-total">
           <div><span>商品金额</span><b>{{ formatAmount(detailGoodsSubtotal) }}</b></div>

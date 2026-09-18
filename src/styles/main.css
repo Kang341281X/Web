@@ -177,3 +177,9 @@
 .catalog-pagination .el-pagination button:focus-visible,
 .catalog-pagination .el-pagination .el-pager li:focus-visible{outline:2px solid var(--clay);outline-offset:2px}
 @media(max-width:760px){.catalog-pagination{margin-top:30px;gap:12px}.catalog-pagination .el-pagination.is-background .el-pager li,.catalog-pagination .el-pagination .btn-prev,.catalog-pagination .el-pagination .btn-next{min-width:44px;height:44px;line-height:44px;font-size:.95rem}.catalog-pagination .el-pagination .el-pager li{margin:0 1px}.catalog-pagination__summary{font-size:.84rem}}
+
+/* Element Plus 表格统一内边距（后台各列表页共用，页面里不要再各自覆盖）：
+   单元格左右各 10px、行高 1.5，表头/数据行上下各 10px。 */
+.el-table .cell{padding:0 10px;line-height:1.5}
+.el-table th.el-table__cell,
+.el-table td.el-table__cell{padding:10px 0}

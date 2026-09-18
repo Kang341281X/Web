@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
+import { COL, actionColWidth } from '../../constants/tableColumn'
 
 /**
  * 后台「商品评论」：列表（关键词 / 评分 / 状态筛选）、详情、显示/隐藏与删除。
@@ -132,41 +133,41 @@ onMounted(() => {
       <el-button @click="resetFilter">重置</el-button>
     </div>
 
-    <!-- 列宽：评论内容为主内容列（min-width 吸收多余宽度，超长用 tooltip 展示，不换行、不压缩），其余列固定宽度 -->
+    <!-- 列宽：商品 / 评论内容为弹性列（min-width），两者按比例分摊剩余宽度，超长用 tooltip 展示；其余短内容列统一引用 COL 常量 -->
     <el-table v-loading="loading" :data="list" height="100%" stripe style="width: 100%">
-      <el-table-column label="序号" width="56"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
-      <el-table-column label="商品" width="140" show-overflow-tooltip>
+      <el-table-column label="序号" :width="COL.INDEX"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
+      <el-table-column label="商品" min-width="130" show-overflow-tooltip>
         <template #default="{ row }">
           <a class="review-product" :href="`/product/${row.product_id}`" target="_blank" rel="noopener">{{ row.product_name || `商品 #${row.product_id}` }}</a>
         </template>
       </el-table-column>
-      <el-table-column label="评价人" width="118">
+      <el-table-column label="评价人" width="110">
         <template #default="{ row }">
           <div>{{ row.customer_name }}</div>
           <small class="muted">{{ row.customer_phone || '账号已注销' }}</small>
         </template>
       </el-table-column>
       <!-- 列表里用数字展示评分，比五颗星更省横向空间，也便于快速比对 -->
-      <el-table-column label="评分" width="56" align="center">
+      <el-table-column label="评分" :width="COL.RATING" align="center">
         <template #default="{ row }"><span class="review-score">{{ row.rating }} 分</span></template>
       </el-table-column>
-      <el-table-column label="评论内容" min-width="480" show-overflow-tooltip>
+      <el-table-column label="评论内容" min-width="280" show-overflow-tooltip>
         <template #default="{ row }"><span class="review-content">{{ row.content }}</span></template>
       </el-table-column>
-      <el-table-column label="图片" width="64" align="center">
+      <el-table-column label="图片" :width="COL.THUMB" align="center">
         <template #default="{ row }">
           <el-image v-if="row.images?.length" :src="row.images[0]" :preview-src-list="row.images" preview-teleported fit="cover" class="review-thumb" />
           <span v-else class="muted">-</span>
         </template>
       </el-table-column>
-      <el-table-column label="购买" width="78" align="center">
+      <el-table-column label="购买" :width="COL.BOOL_TAG" align="center">
         <template #default="{ row }"><el-tag v-if="row.is_purchased" type="success" size="small">已购买</el-tag><span v-else class="muted">-</span></template>
       </el-table-column>
-      <el-table-column label="状态" width="84" align="center">
+      <el-table-column label="状态" :width="COL.STATUS_TAG" align="center">
         <template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '显示中' : '已隐藏' }}</el-tag></template>
       </el-table-column>
-      <el-table-column label="评论时间" width="146"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-      <el-table-column label="操作" width="68" fixed="right">
+      <el-table-column label="评论时间" :width="COL.DATETIME"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+      <el-table-column label="操作" :width="actionColWidth(1)" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openDetail(row)">详情</el-button>
         </template>

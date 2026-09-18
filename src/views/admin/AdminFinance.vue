@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Coin, Wallet, TrendCharts, ArrowDown } from '@element-plus/icons-vue'
 import api from '../../services/api'
 import { formatAmount, orderStatusTag } from '../../utils/order'
+import { COL, actionColWidth } from '../../constants/tableColumn'
 
 /**
  * 后台「收支明细」（仅超级管理员，路由 meta.requiresSuperAdmin + 后端 requireSuperAdmin 双重约束）：
@@ -320,12 +321,12 @@ onBeforeUnmount(() => {
           </el-dropdown>
           <span class="muted">收入口径与订单统计一致：已取消订单不计入</span>
         </div>
-        <!-- 列宽：订单号为主内容列（min-width 吸收多余宽度），其余列固定宽度 -->
+        <!-- 列宽：订单号 / 顾客为弹性列（min-width），两者按比例分摊剩余宽度；其余短内容列统一引用 COL 常量 -->
         <el-table v-loading="income.loading" :data="income.list" stripe style="width: 100%" @selection-change="handleIncomeSelection">
-          <el-table-column type="selection" width="46" />
-          <el-table-column label="序号" width="56"><template #default="{ $index }">{{ pageIndex(income, $index) }}</template></el-table-column>
+          <el-table-column type="selection" :width="COL.SELECTION" />
+          <el-table-column label="序号" :width="COL.INDEX"><template #default="{ $index }">{{ pageIndex(income, $index) }}</template></el-table-column>
           <el-table-column prop="order_no" label="订单号" min-width="185" show-overflow-tooltip />
-          <el-table-column label="顾客" width="150">
+          <el-table-column label="顾客" min-width="150">
             <template #default="{ row }">
               <div v-if="row.customer_phone">
                 <div>{{ row.customer_username || '未记录' }}</div>
@@ -334,9 +335,9 @@ onBeforeUnmount(() => {
               <span v-else class="muted">游客订单</span>
             </template>
           </el-table-column>
-          <el-table-column label="订单金额" width="110"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
-          <el-table-column label="状态" width="96"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)">{{ row.status_label }}</el-tag></template></el-table-column>
-          <el-table-column label="下单时间" width="160"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+          <el-table-column label="订单金额" :width="COL.AMOUNT"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
+          <el-table-column label="状态" :width="COL.STATUS_TAG"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)">{{ row.status_label }}</el-tag></template></el-table-column>
+          <el-table-column label="下单时间" :width="COL.DATETIME"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
         </el-table>
         <div class="pagination">
           <el-pagination v-model:current-page="income.page" v-model:page-size="income.page_size" :total="income.total" :page-sizes="[20, 50, 100]" layout="total, sizes, prev, pager, next" @current-change="loadIncome" @size-change="income.page = 1; loadIncome()" />
@@ -359,17 +360,17 @@ onBeforeUnmount(() => {
           </el-dropdown>
           <span class="muted">支出为手工登记，可编辑或删除</span>
         </div>
-        <!-- 列宽：备注为主内容列（min-width 吸收多余宽度），其余列固定宽度 -->
+        <!-- 列宽：支出类别 / 备注为弹性列（min-width），两者按比例分摊剩余宽度；其余短内容列统一引用 COL 常量 -->
         <el-table v-loading="expense.loading" :data="expense.list" stripe style="width: 100%" @selection-change="handleExpenseSelection">
-          <el-table-column type="selection" width="46" />
-          <el-table-column label="序号" width="56"><template #default="{ $index }">{{ pageIndex(expense, $index) }}</template></el-table-column>
+          <el-table-column type="selection" :width="COL.SELECTION" />
+          <el-table-column label="序号" :width="COL.INDEX"><template #default="{ $index }">{{ pageIndex(expense, $index) }}</template></el-table-column>
           <el-table-column prop="expense_date" label="发生日期" width="120" />
-          <el-table-column prop="category" label="支出类别" width="130" show-overflow-tooltip />
-          <el-table-column label="金额" width="120"><template #default="{ row }">{{ formatAmount(row.amount) }}</template></el-table-column>
+          <el-table-column prop="category" label="支出类别" min-width="110" show-overflow-tooltip />
+          <el-table-column label="金额" :width="COL.AMOUNT"><template #default="{ row }">{{ formatAmount(row.amount) }}</template></el-table-column>
           <el-table-column prop="created_by_name" label="登记人" width="110" show-overflow-tooltip />
           <el-table-column prop="note" label="备注" min-width="220" show-overflow-tooltip />
-          <el-table-column label="登记时间" width="160"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-          <el-table-column label="操作" width="128" fixed="right">
+          <el-table-column label="登记时间" :width="COL.DATETIME"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+          <el-table-column label="操作" :width="actionColWidth(2)" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEditExpense(row)">编辑</el-button>
               <el-button link type="danger" @click="removeExpense(row)">删除</el-button>

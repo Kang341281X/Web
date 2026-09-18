@@ -7,6 +7,7 @@ import { useUserStore } from '../../stores/user'
 import { resolve } from '../../utils/image'
 import { formatAddress } from '../../utils/address'
 import { formatAmount, orderStatusTag } from '../../utils/order'
+import { COL, actionColWidth } from '../../constants/tableColumn'
 
 /**
  * 后台「用户管理」：顾客列表 + 详情（收货地址、历史订单概览）+ 启用/禁用。
@@ -191,10 +192,9 @@ onMounted(load)
       <el-button @click="resetFilter">重置</el-button>
     </div>
 
-    <!-- 列宽：短内容列（序号/手机号/状态/时间/操作）用固定像素，长内容列（顾客/邮箱）只设 min-width，
-         剩余宽度由 el-table 按比例自动分给弹性列，列间距随容器伸缩而非写死 -->
+    <!-- 列宽：顾客 / 邮箱为弹性列（min-width），两者按比例分摊剩余宽度；其余短内容列统一引用 COL 常量 -->
     <el-table v-loading="loading" :data="list" height="100%" stripe style="width: 100%">
-      <el-table-column label="序号" width="64" align="center"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
+      <el-table-column label="序号" :width="COL.INDEX" align="center"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
       <el-table-column label="顾客" min-width="160">
         <template #default="{ row }">
           <div class="user-cell">
@@ -203,11 +203,11 @@ onMounted(load)
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="手机号" width="130" align="center"><template #default="{ row }">{{ row.phone || '-' }}</template></el-table-column>
+      <el-table-column label="手机号" :width="COL.PHONE" align="center"><template #default="{ row }">{{ row.phone || '-' }}</template></el-table-column>
       <el-table-column label="邮箱" min-width="200" show-overflow-tooltip><template #default="{ row }">{{ row.email || '-' }}</template></el-table-column>
-      <el-table-column label="状态" width="90" align="center"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'danger'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
-      <el-table-column label="注册时间" width="170" align="center"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-      <el-table-column label="操作" width="80" align="center">
+      <el-table-column label="状态" :width="COL.STATUS_TAG" align="center"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'danger'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
+      <el-table-column label="注册时间" :width="COL.DATETIME" align="center"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+      <el-table-column label="操作" :width="actionColWidth(1)" align="center">
         <template #default="{ row }">
           <el-button link type="primary" @click="openDetail(row)">查看</el-button>
         </template>
@@ -239,9 +239,9 @@ onMounted(load)
         </div>
         <el-table :data="detail?.addresses || []" size="small" border empty-text="该顾客还没有添加收货地址">
           <el-table-column prop="receiver_name" label="收货人" width="100" />
-          <el-table-column prop="receiver_phone" label="联系电话" width="124" />
-          <el-table-column label="收货地址" min-width="400" show-overflow-tooltip><template #default="{ row }">{{ formatAddress(row) || row.detail_address }}</template></el-table-column>
-          <el-table-column label="默认" width="72" align="center"><template #default="{ row }"><el-tag v-if="row.is_default" type="success" size="small">默认</el-tag><span v-else class="muted">-</span></template></el-table-column>
+          <el-table-column prop="receiver_phone" label="联系电话" :width="COL.PHONE" />
+          <el-table-column label="收货地址" min-width="320" show-overflow-tooltip><template #default="{ row }">{{ formatAddress(row) || row.detail_address }}</template></el-table-column>
+          <el-table-column label="默认" :width="COL.BOOL_TAG" align="center"><template #default="{ row }"><el-tag v-if="row.is_default" type="success" size="small">默认</el-tag><span v-else class="muted">-</span></template></el-table-column>
         </el-table>
       </div>
 
@@ -252,9 +252,9 @@ onMounted(load)
         </div>
         <el-table v-loading="ordersLoading" :data="recentOrders" size="small" border empty-text="该顾客还没有下过订单">
           <el-table-column prop="order_no" label="订单号" min-width="185" show-overflow-tooltip />
-          <el-table-column label="金额" width="88"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
-          <el-table-column label="状态" width="84"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)" size="small">{{ row.status_label }}</el-tag></template></el-table-column>
-          <el-table-column label="下单时间" width="156"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+          <el-table-column label="金额" :width="COL.AMOUNT"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
+          <el-table-column label="状态" :width="COL.STATUS_TAG"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)" size="small">{{ row.status_label }}</el-tag></template></el-table-column>
+          <el-table-column label="下单时间" :width="COL.DATETIME"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
         </el-table>
       </div>
     </div>
