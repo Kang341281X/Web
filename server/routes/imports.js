@@ -541,6 +541,31 @@ router.post('/import/preview', importUpload.fields([
   }
 })
 
+// ── 导入失败补偿 ──────────────────────────────────────
+// 删除本请求已创建的商品行（product_image 由外键 ON DELETE CASCADE 一并清理；
+// 新建商品不会有订单/购物车引用）及其已生成的图片目录
+async function discardCreatedProducts(productIds) {
+  if (!productIds.length) return
+  try {
+    await db.execute(`DELETE FROM product WHERE id IN (${productIds.map(() => '?').join(',')})`, productIds)
+  } catch (error) {
+    console.error('导入补偿：删除已创建商品失败', error)
+  }
+  for (const pid of productIds) {
+    try { await storageService.deleteDirectory(`products/${pid}`) } catch {}
+  }
+}
+
+// 删除本请求新建的分类（调用前需先 discardCreatedProducts，避免外键引用残留）
+async function discardCreatedCategories(categoryIds) {
+  if (!categoryIds.length) return
+  try {
+    await db.execute(`DELETE FROM category WHERE id IN (${categoryIds.map(() => '?').join(',')})`, categoryIds)
+  } catch (error) {
+    console.error('导入补偿：删除已创建分类失败', error)
+  }
+}
+
 // ── 确认导入接口 ──────────────────────────────────────
 router.post('/import/confirm', async (req, res, next) => {
   const batchId = req.body.batchId
@@ -580,10 +605,30 @@ router.post('/import/confirm', async (req, res, next) => {
     return res.status(400).json({ success: false, message: `分类不存在：${missingNames[0]}，请先在后台创建该分类后重新导入` })
   }
 
+  // ── 写入阶段：拆成「两段纯 DB 事务 + 中间不持锁搬移文件」──
+  // 图片最终路径 /uploads/products/<productId>/… 依赖 productId，必须先插入商品行
+  // 才能确定目录，无法像 products.js 的补图接口那样在事务前就拿到最终路径。
+  // 因此改为：事务一（纯 DB）领取批次并创建商品行（暂不上架）→ 不持锁把临时
+  // 图片 rename 进各自商品目录 → 事务二（纯 DB）写图片记录并统一上架。
+  // 两段事务都只含数据库写入（毫秒级持锁），mkdir/rename 等慢速 I/O 全部发生在
+  // 事务之外，不会长时间阻塞其它请求的事务（如顾客下单）。
+  // 商品先以 status=0 落库（前台列表/详情均过滤 status=1，全程不可见），
+  // 图片就位后在事务二统一上架，避免搬移期间前台出现"有商品没图片"的空档。
   const connection = await db.getConnection()
   const createdProductIds = []
   try {
     await connection.beginTransaction()
+
+    // 领取批次：条件更新作为防重入闸门。事务互斥锁引入后，重复点击「确认导入」
+    // 会排队而不是报错，若不在这里挡下，两次确认会导入两份商品。
+    // 失败路径会连同批次记录一起清理，不会残留中间态。
+    const [claim] = await connection.execute(
+      "UPDATE import_batch SET status = 'confirmed' WHERE id = ? AND status = 'pending'",
+      [batchId]
+    )
+    if (!claim.affectedRows) {
+      throw Object.assign(new Error('该批次已确认或正在导入中，请勿重复提交'), { status: 409 })
+    }
 
     for (const row of successRows) {
       const categoryId = categoryMap.get(row.category_name)
@@ -595,19 +640,40 @@ router.post('/import/confirm', async (req, res, next) => {
       const ratingResult = normalizeRating(row.rating)
       const rating = ratingResult.valid ? ratingResult.rating : 5
 
-      // 插入 product
+      // 插入 product：status 先落 0（下架），事务二图片就位后再上架
       const [productResult] = await connection.execute(
-        'INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status, sku, is_customizable, rating, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)',
+        'INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status, sku, is_customizable, rating, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)',
         [row.name, categoryId, row.price, row.original_price, row.stock, row.unit || null, row.manufacturer || null, row.brand || null, row.description || null, sku, isCustomizable, rating, req.admin.id, req.admin.real_name || req.admin.username]
       )
-      const productId = productResult.insertId
-      createdProductIds.push(productId)
+      createdProductIds.push(productResult.insertId)
+    }
 
-      // 创建专属目录并移动图片
+    await connection.commit()
+  } catch (error) {
+    await connection.rollback()
+    // 唯一约束兜底：作为最后一道防线，遇到商品编号冲突时给出清晰提示而不是 500
+    // （此时领取已随事务回滚、批次仍为 pending、临时图片未动，修正编号后可直接重试）
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE constraint failed/i.test(error.message || '')) {
+      return res.status(409).json({ success: false, message: '商品编号已存在，请重试' })
+    }
+    if (error.status) {
+      return res.status(error.status).json({ success: false, message: error.message })
+    }
+    next(error)
+    return
+  } finally {
+    connection.release()
+  }
+
+  // ── 搬移图片（不持事务锁）：临时图片 rename 进各自商品的最终目录 ──
+  try {
+    for (let i = 0; i < successRows.length; i++) {
+      const row = successRows[i]
+      const productId = createdProductIds[i]
       const productDir = join(uploadRoot(), 'products', String(productId))
       await mkdir(productDir, { recursive: true })
 
-      let mainImageUrl = null
+      row.image_urls = []
       for (let imgIdx = 0; imgIdx < row.image_files.length; imgIdx++) {
         const tempImageRelPath = row.image_files[imgIdx] // relative to tempDir, e.g. "folderName/1.jpg"
         const tempAbsPath = join(batch.temp_dir, tempImageRelPath)
@@ -615,59 +681,61 @@ router.post('/import/confirm', async (req, res, next) => {
         // 生成 UUID 文件名
         const ext = '.' + tempImageRelPath.split('.').pop().toLowerCase()
         const uuidName = randomUUID() + ext
-        const destPath = join(productDir, uuidName)
-        await rename(tempAbsPath, destPath)
+        await rename(tempAbsPath, join(productDir, uuidName))
 
-        const imageUrl = `/uploads/products/${productId}/${uuidName}`
-        const isMain = imgIdx === 0 ? 1 : 0
-
-        await connection.execute(
-          'INSERT INTO product_image (product_id, image_url, is_main, sort_order) VALUES (?, ?, ?, ?)',
-          [productId, imageUrl, isMain, imgIdx]
-        )
-
-        if (imgIdx === 0) mainImageUrl = imageUrl
+        row.image_urls.push(`/uploads/products/${productId}/${uuidName}`)
       }
-
-      // 更新 product.main_image：无图片时使用默认占位图
-      if (!mainImageUrl) {
-        mainImageUrl = '/assets/images/products/product-placeholder.svg'
-      }
-      await connection.execute('UPDATE product SET main_image = ? WHERE id = ?', [mainImageUrl, productId])
     }
-
-    // 标记批次为已确认
-    await connection.execute('UPDATE import_batch SET status = ? WHERE id = ?', ['confirmed', batchId])
-
-    await connection.commit()
-
-    // 清理临时目录
-    await cleanupTempDir(batch.temp_dir)
-
-    await writeOperationLog(req.admin.id, 'import_products', `批量导入商品：成功${successRows.length}条`, req)
-
-    res.json({
-      success: true,
-      data: {
-        imported_count: successRows.length,
-        product_ids: createdProductIds,
-        sku_replacements: [],
-      },
-    })
   } catch (error) {
-    await connection.rollback()
-    // 回滚已创建的商品目录
-    for (const pid of createdProductIds) {
-      try { await storageService.deleteDirectory(`products/${pid}`) } catch {}
-    }
-    // 唯一约束兜底：作为最后一道防线，遇到商品编号冲突时给出清晰提示而不是 500
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE constraint failed/i.test(error.message || '')) {
-      return res.status(409).json({ success: false, message: '商品编号已存在，请重试' })
-    }
+    // 补偿：商品行尚未写图片记录也未上架，删除后前台无感知；
+    // 临时图片已被搬走一部分、批次无法重试，直接清理并要求重新上传
+    await discardCreatedProducts(createdProductIds)
+    await cleanupBatch(batch.id, batch.temp_dir)
     next(error)
-  } finally {
-    connection.release()
+    return
   }
+
+  // ── 事务二（纯 DB）：写入图片记录、设置主图并统一上架 ──
+  const finalizeConnection = await db.getConnection()
+  try {
+    await finalizeConnection.beginTransaction()
+    for (let i = 0; i < successRows.length; i++) {
+      const row = successRows[i]
+      const productId = createdProductIds[i]
+      for (let imgIdx = 0; imgIdx < row.image_urls.length; imgIdx++) {
+        await finalizeConnection.execute(
+          'INSERT INTO product_image (product_id, image_url, is_main, sort_order) VALUES (?, ?, ?, ?)',
+          [productId, row.image_urls[imgIdx], imgIdx === 0 ? 1 : 0, imgIdx]
+        )
+      }
+      // 无图片时使用默认占位图
+      const mainImageUrl = row.image_urls[0] || '/assets/images/products/product-placeholder.svg'
+      await finalizeConnection.execute('UPDATE product SET main_image = ?, status = 1 WHERE id = ?', [mainImageUrl, productId])
+    }
+    await finalizeConnection.commit()
+  } catch (error) {
+    await finalizeConnection.rollback()
+    await discardCreatedProducts(createdProductIds)
+    await cleanupBatch(batch.id, batch.temp_dir)
+    next(error)
+    return
+  } finally {
+    finalizeConnection.release()
+  }
+
+  // 清理临时目录
+  await cleanupTempDir(batch.temp_dir)
+
+  await writeOperationLog(req.admin.id, 'import_products', `批量导入商品：成功${successRows.length}条`, req)
+
+  res.json({
+    success: true,
+    data: {
+      imported_count: successRows.length,
+      product_ids: createdProductIds,
+      sku_replacements: [],
+    },
+  })
 })
 
 // ── 文件夹重命名接口 ──────────────────────────────────
@@ -1195,12 +1263,16 @@ router.post('/import/online', onlineUpload.any(), async (req, res, next) => {
       })
     }
 
-    // ── 写入阶段：事务提交，任一步异常都回滚并清理已落盘图片 ──
+    // ── 写入阶段：拆成「两段纯 DB 事务 + 中间不持锁落盘」──
+    // storageService.save 的最终路径依赖 productId，必须先插入商品行才能确定目录；
+    // 事务一创建分类与商品行（暂不上架）→ 不持锁把图片写到最终目录 →
+    // 事务二写图片记录并统一上架。慢速文件 I/O 全部移出事务、缩短持锁时间，
+    // 与 products.js 图片接口"先落盘、再进事务写库"的原则一致。
     const connection = await db.getConnection()
     const createdProductIds = []
-    const savedPaths = []
+    const createdCategoryIds = []
     const createdCategoryNames = []
-    const txCategoryIds = new Map() // 本事务内已解析/创建的「分类名 → id」，避免同名重复创建
+    const txCategoryIds = new Map() // 事务一内已解析/创建的「分类名 → id」，避免同名重复创建
     try {
       await connection.beginTransaction()
       for (const row of prepared) {
@@ -1212,41 +1284,71 @@ router.post('/import/online', onlineUpload.any(), async (req, res, next) => {
             const ensured = await ensureCategory(connection.execute.bind(connection), row.categoryName, req.admin.id, req.admin.real_name || req.admin.username)
             categoryId = ensured.id
             txCategoryIds.set(row.categoryName, categoryId)
-            if (ensured.created) createdCategoryNames.push(row.categoryName)
+            if (ensured.created) {
+              createdCategoryIds.push(categoryId)
+              createdCategoryNames.push(row.categoryName)
+            }
           }
         }
+        // status 先落 0（下架），事务二图片就位后再上架，前台全程不可见半成品
         const [productResult] = await connection.execute(
-          'INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status, sku, is_customizable, rating, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)',
+          'INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status, sku, is_customizable, rating, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)',
           [row.name, categoryId, row.price, row.original_price, row.stock, row.unit, row.manufacturer, row.brand, row.description, row.sku, row.is_customizable, row.rating, req.admin.id, req.admin.real_name || req.admin.username]
         )
-        const productId = productResult.insertId
-        createdProductIds.push(productId)
-
-        let mainImage = null
-        for (let imgIdx = 0; imgIdx < row.files.length; imgIdx++) {
-          const imagePath = await storageService.save(row.files[imgIdx], `products/${productId}`)
-          savedPaths.push(imagePath)
-          await connection.execute(
-            'INSERT INTO product_image (product_id, image_url, is_main, sort_order) VALUES (?, ?, ?, ?)',
-            [productId, imagePath, imgIdx === 0 ? 1 : 0, imgIdx]
-          )
-          if (imgIdx === 0) mainImage = imagePath
-        }
-        await connection.execute('UPDATE product SET main_image = ? WHERE id = ?', [mainImage || '/assets/images/products/product-placeholder.svg', productId])
+        createdProductIds.push(productResult.insertId)
       }
       await connection.commit()
     } catch (error) {
       await connection.rollback()
-      await Promise.all(savedPaths.map(path => storageService.delete(path).catch(() => {})))
-      for (const pid of createdProductIds) {
-        try { await storageService.deleteDirectory(`products/${pid}`) } catch {}
-      }
       if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE constraint failed/i.test(error.message || '')) {
         return res.status(409).json({ success: false, message: '商品编号已存在，请重试' })
       }
       throw error
     } finally {
       connection.release()
+    }
+
+    // ── 落盘（不持事务锁）：图片写入各自商品的最终目录，拿到最终 URL ──
+    try {
+      for (let i = 0; i < prepared.length; i++) {
+        const row = prepared[i]
+        const productId = createdProductIds[i]
+        row.image_urls = []
+        for (let imgIdx = 0; imgIdx < row.files.length; imgIdx++) {
+          const imagePath = await storageService.save(row.files[imgIdx], `products/${productId}`)
+          row.image_urls.push(imagePath)
+        }
+      }
+    } catch (error) {
+      // 补偿：删除商品行及其图片目录（目录删除已覆盖所有已落盘文件），再清掉本请求新建的分类
+      await discardCreatedProducts(createdProductIds)
+      await discardCreatedCategories(createdCategoryIds)
+      throw error
+    }
+
+    // ── 事务二（纯 DB）：写入图片记录、设置主图并统一上架 ──
+    const finalizeConnection = await db.getConnection()
+    try {
+      await finalizeConnection.beginTransaction()
+      for (let i = 0; i < prepared.length; i++) {
+        const row = prepared[i]
+        const productId = createdProductIds[i]
+        for (let imgIdx = 0; imgIdx < row.image_urls.length; imgIdx++) {
+          await finalizeConnection.execute(
+            'INSERT INTO product_image (product_id, image_url, is_main, sort_order) VALUES (?, ?, ?, ?)',
+            [productId, row.image_urls[imgIdx], imgIdx === 0 ? 1 : 0, imgIdx]
+          )
+        }
+        await finalizeConnection.execute('UPDATE product SET main_image = ?, status = 1 WHERE id = ?', [row.image_urls[0] || '/assets/images/products/product-placeholder.svg', productId])
+      }
+      await finalizeConnection.commit()
+    } catch (error) {
+      await finalizeConnection.rollback()
+      await discardCreatedProducts(createdProductIds)
+      await discardCreatedCategories(createdCategoryIds)
+      throw error
+    } finally {
+      finalizeConnection.release()
     }
 
     await writeOperationLog(req.admin.id, 'import_products_online', `在线表格批量新增商品：成功${prepared.length}条${createdCategoryNames.length ? `（新建分类：${createdCategoryNames.join('、')}）` : ''}`, req)
