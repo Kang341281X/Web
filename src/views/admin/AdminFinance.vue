@@ -5,6 +5,7 @@ import { Coin, Wallet, TrendCharts, ArrowDown } from '@element-plus/icons-vue'
 import api from '../../services/api'
 import { formatAmount, orderStatusTag } from '../../utils/order'
 import { COL, actionColWidth } from '../../constants/tableColumn'
+import { useIsMobile } from '../../composables/useIsMobile'
 
 /**
  * 后台「收支明细」（仅超级管理员，路由 meta.requiresSuperAdmin + 后端 requireSuperAdmin 双重约束）：
@@ -25,6 +26,8 @@ const summary = ref({ range: {}, granularity: 'day', income_total: 0, expense_to
 const chartRef = ref(null)
 let chartInstance = null
 
+// 移动端去掉操作列 fixed，避免固定列吃掉窄屏本就稀缺的可视宽度
+const isMobile = useIsMobile()
 const activeTab = ref('income')
 const query = reactive({ date_range: DEFAULT_RANGE(), granularity: 'day' })
 
@@ -370,7 +373,7 @@ onBeforeUnmount(() => {
           <el-table-column prop="created_by_name" label="登记人" width="110" show-overflow-tooltip />
           <el-table-column prop="note" label="备注" min-width="220" show-overflow-tooltip />
           <el-table-column label="登记时间" :width="COL.DATETIME"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-          <el-table-column label="操作" :width="actionColWidth(2)" fixed="right">
+          <el-table-column label="操作" :width="actionColWidth(2)" :fixed="isMobile ? false : 'right'">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEditExpense(row)">编辑</el-button>
               <el-button link type="danger" @click="removeExpense(row)">删除</el-button>

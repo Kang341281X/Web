@@ -258,4 +258,9 @@ function goHome() {
   font-size: 12px;
   color: #c0c4cc;
 }
+
+/* iOS 聚焦小于 16px 的输入框会自动放大页面：手机上把后台登录的 el-input 字号提到 16px */
+@media (max-width: 760px) {
+  .login-page :deep(.el-input__inner) { font-size: 16px }
+}
 </style>

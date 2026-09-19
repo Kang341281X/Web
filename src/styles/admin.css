@@ -365,6 +365,19 @@
     padding: 12px;
   }
 }
+
+/* 小屏提示条（AdminLayout 由 v-if="isMobile" 控制，仅移动端渲染）：
+   后台数据表列多、窄屏需横向滚动，提示用户横屏或改用电脑 */
+.admin-mobile-hint {
+  margin: 0 0 12px;
+  padding: 9px 14px;
+  border: 1px solid #f3d19e;
+  border-radius: 4px;
+  background: #fdf6ec;
+  color: #b88230;
+  font-size: 12px;
+  line-height: 1.6;
+}
 @media (max-width: 480px) {
   .dashboard-stat-grid {
     grid-template-columns: 1fr;

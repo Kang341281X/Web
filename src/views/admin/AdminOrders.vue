@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
 import { ORDER_STATUS_OPTIONS, formatAmount, orderStatusTag } from '../../utils/order'
 import { COL, actionColWidth } from '../../constants/tableColumn'
+import { useIsMobile } from '../../composables/useIsMobile'
 
 /**
  * 后台「订单管理」：列表（状态筛选 + 订单号/顾客手机号搜索）、详情（商品明细 + 收货地址）
@@ -14,6 +15,8 @@ import { COL, actionColWidth } from '../../constants/tableColumn'
  */
 const route = useRoute()
 
+// 移动端去掉操作列 fixed，避免固定列吃掉窄屏本就稀缺的可视宽度
+const isMobile = useIsMobile()
 const loading = ref(false)
 const list = ref([])
 const total = ref(0)
@@ -215,7 +218,7 @@ onMounted(() => {
       <el-table-column label="订单金额" :width="COL.AMOUNT" align="right"><template #default="{ row }">{{ formatAmount(row.total_amount) }}</template></el-table-column>
       <el-table-column label="状态" :width="COL.STATUS_TAG"><template #default="{ row }"><el-tag :type="orderStatusTag(row.status)">{{ row.status_label }}</el-tag></template></el-table-column>
       <el-table-column label="下单时间" :width="COL.DATETIME"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-      <el-table-column label="操作" :width="actionColWidth(1)" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row)">详情</el-button></template></el-table-column>
+      <el-table-column label="操作" :width="actionColWidth(1)" :fixed="isMobile ? false : 'right'"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row)">详情</el-button></template></el-table-column>
     </el-table>
 
     <div class="pagination">

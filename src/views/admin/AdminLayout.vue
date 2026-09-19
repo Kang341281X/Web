@@ -122,6 +122,8 @@ function handleMenuSelect(index) {
 
       <!-- 主内容 -->
       <el-main class="admin-main">
+        <!-- 小屏提示：仅移动端渲染（isMobile），表格列多需横滚 -->
+        <div v-if="isMobile" class="admin-mobile-hint">当前屏幕较窄，数据表格需左右滑动查看，建议横屏或使用电脑访问后台。</div>
         <RouterView />
       </el-main>
     </el-container>

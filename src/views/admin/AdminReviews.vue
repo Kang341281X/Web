@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
 import { COL, actionColWidth } from '../../constants/tableColumn'
+import { useIsMobile } from '../../composables/useIsMobile'
 
 /**
  * 后台「商品评论」：列表（关键词 / 评分 / 状态筛选）、详情、显示/隐藏与删除。
@@ -17,6 +18,8 @@ import { COL, actionColWidth } from '../../constants/tableColumn'
  */
 const route = useRoute()
 
+// 移动端去掉操作列 fixed，避免固定列吃掉窄屏本就稀缺的可视宽度
+const isMobile = useIsMobile()
 const loading = ref(false)
 const list = ref([])
 const total = ref(0)
@@ -167,7 +170,7 @@ onMounted(() => {
         <template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '显示中' : '已隐藏' }}</el-tag></template>
       </el-table-column>
       <el-table-column label="评论时间" :width="COL.DATETIME"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-      <el-table-column label="操作" :width="actionColWidth(1)" fixed="right">
+      <el-table-column label="操作" :width="actionColWidth(1)" :fixed="isMobile ? false : 'right'">
         <template #default="{ row }">
           <el-button link type="primary" @click="openDetail(row)">详情</el-button>
         </template>

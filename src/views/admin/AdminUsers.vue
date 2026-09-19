@@ -3,7 +3,10 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
 import { resolve } from '../../utils/image'
+import { useIsMobile } from '../../composables/useIsMobile'
 
+// 移动端去掉操作列 fixed，避免固定列吃掉窄屏本就稀缺的可视宽度
+const isMobile = useIsMobile()
 const loading = ref(false); const list = ref([]); const total = ref(0); const page = ref(1); const keyword = ref('')
 const dialogVisible = ref(false); const isEditing = ref(false); const selectedId = ref(null)
 const form = reactive({ username: '', password: '', real_name: '', phone: '', email: '', status: 1 })
@@ -49,7 +52,7 @@ onMounted(load)
       <el-table-column prop="email" label="邮箱" width="180" />
       <el-table-column label="角色" width="116"><template #default="{ row }"><el-tag :type="row.role === 'super_admin' ? 'danger' : 'info'">{{ row.role === 'super_admin' ? '超级管理员' : '管理员' }}</el-tag></template></el-table-column>
       <el-table-column label="状态" width="84"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
-      <el-table-column label="操作" width="214" fixed="right"><template #default="{ row }"><template v-if="row.role !== 'super_admin'"><el-button link type="primary" @click="openEdit(row)">编辑</el-button><el-button link type="warning" @click="resetPassword(row)">重置密码</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template><span v-else class="muted">受保护</span></template></el-table-column>
+      <el-table-column label="操作" width="214" :fixed="isMobile ? false : 'right'"><template #default="{ row }"><template v-if="row.role !== 'super_admin'"><el-button link type="primary" @click="openEdit(row)">编辑</el-button><el-button link type="warning" @click="resetPassword(row)">重置密码</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template><span v-else class="muted">受保护</span></template></el-table-column>
     </el-table>
     <div class="pagination"><el-pagination v-model:current-page="page" :page-size="10" :total="total" layout="total, prev, pager, next" @current-change="load" /></div>
   </el-card>

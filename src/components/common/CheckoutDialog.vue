@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, ShoppingCart } from '@element-plus/icons-vue'
@@ -44,6 +44,14 @@ const downloading = ref(false)
 const submitting = ref(false)
 const selectedAddressId = ref(null)
 const remark = ref('')
+
+// 移动端断点：桌面用表格、手机用卡片列表渲染商品明细（表格最小宽 570px，窄屏会横向滚动）。
+// 用 matchMedia + change 事件实时切换，不轮询 innerWidth；组件卸载时移除监听。
+const mobileQuery = window.matchMedia('(max-width: 760px)')
+const isMobile = ref(mobileQuery.matches)
+const onMobileQueryChange = e => { isMobile.value = e.matches }
+mobileQuery.addEventListener('change', onMobileQueryChange)
+onUnmounted(() => mobileQuery.removeEventListener('change', onMobileQueryChange))
 
 // 与 Cart.vue 保持一致：feeCny <= 0 视为包邮，提示文案相应切换
 const shippingFree = computed(() => (Number(props.shippingFee) || 0) <= 0)
@@ -214,7 +222,8 @@ async function handleSubmit() {
       购物清单已下载，请将该文件发送给以下联系人完成购买。
     </el-alert>
 
-    <el-table :data="tableRows" border style="width: 100%" :max-height="360">
+    <!-- 商品明细：桌面端保留表格；移动端换卡片式竖排列表，避免窄屏横向滚动 -->
+    <el-table v-if="!isMobile" :data="tableRows" border style="width: 100%" :max-height="360">
       <el-table-column label="商品图片" width="100">
         <template #default="{ row }">
           <AppImage
@@ -233,6 +242,16 @@ async function handleSubmit() {
         <template #default="{ row }">¥{{ row.subtotal.toFixed(2) }}</template>
       </el-table-column>
     </el-table>
+    <ul v-else class="checkout-items-mobile">
+      <li v-for="row in tableRows" :key="row.product.id">
+        <AppImage :src="row.image" :alt="row.name" class="checkout-item__thumb" />
+        <div class="checkout-item__main">
+          <p class="checkout-item__name">{{ row.name }}</p>
+          <p class="checkout-item__meta">¥{{ row.price.toFixed(2) }} × {{ row.quantity }}</p>
+        </div>
+        <strong class="checkout-item__subtotal">¥{{ row.subtotal.toFixed(2) }}</strong>
+      </li>
+    </ul>
 
     <div class="checkout-total">
       <span>{{ language.t('subtotal') }}</span>
@@ -408,6 +427,22 @@ async function handleSubmit() {
   gap: 10px;
   flex-wrap: wrap;
 }
+
+/* 移动端商品明细卡片（替代 el-table）：视觉与 Orders.vue 的 .order-items 移动端卡片保持一致 */
+.checkout-items-mobile { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line) }
+.checkout-items-mobile li {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.checkout-item__thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--cream) }
+.checkout-item__main { min-width: 0 }
+.checkout-item__name { font-size: .88rem; font-weight: 600; margin: 0; word-break: break-word }
+.checkout-item__meta { font-size: .78rem; color: var(--muted); margin: 4px 0 0; white-space: nowrap }
+.checkout-item__subtotal { font-size: .88rem }
 
 @media (max-width: 760px) {
   .checkout-addresses { grid-template-columns: 1fr }
