@@ -145,18 +145,21 @@ function generateOrderNo() {
 // 不修改 product.sales：与 restoreOrderStock 的口径保持一致（销量按历史累计售出统计，取消不回滚），
 // 故下单/取消都只操作 stock，取消时能精确回补下单扣掉的数量。
 //
-// shippingFee：来自前端按当前语言对应的 shipping_rate.fee_cny，作为订单级费用快照进 customer_order。
-// 后端不二次查询 shipping_rate，避免被后台调价后的视图与下单快照错位；传入值必须 >= 0 否则直接拒绝。
+// 运费：不信任前端传入的金额。前端只声明下单时的界面语言（locale）与页面展示的运费值
+// （shippingFee）；服务端在下单事务内按 locale 查 shipping_rate.fee_cny 重新计算，
+// 以服务端算出的金额为准写入订单。前端值仅用于一致性校验：与当前费率不相等
+// （后台刚调过价导致页面数据过期，或数值被篡改）时拒绝下单并提示刷新重试，
+// 保证「所见即所付」——顾客永远不会被收取一个页面上没显示过的运费。
 // 取消订单不退回运费（运费是物流服务费用而非商品款项），故 restoreOrderStock 不触碰该列。
-export async function createCustomerOrder({ customer, address, items, remark = null, shippingFee = 0 }) {
+export async function createCustomerOrder({ customer, address, items, remark = null, locale, shippingFee }) {
   if (!address) throw Object.assign(new Error('请先选择收货地址'), { status: 400 })
 
-  const shipping = Number(shippingFee)
-  if (!Number.isFinite(shipping) || shipping < 0) {
-    throw Object.assign(new Error('运费不正确'), { status: 400 })
+  const STALE_SHIPPING = '运费信息已过期，请刷新页面重试'
+  // 前端展示口径：下单时刻页面上显示的运费；非数字一律视为过期，拒绝下单
+  const declaredShipping = Number(shippingFee)
+  if (!Number.isFinite(declaredShipping)) {
+    throw Object.assign(new Error(STALE_SHIPPING), { status: 409 })
   }
-  // 与金额一致保留两位小数，避免前端展示出现 25.00000000003 等浮点尾数
-  const shippingFeeNormalized = Math.round(shipping * 100) / 100
 
   // 归并重复商品，并按商品 id 升序处理，保证同一事务内扣减顺序稳定、减少并发写同表时的冲突几率
   const merged = new Map()
@@ -172,6 +175,23 @@ export async function createCustomerOrder({ customer, address, items, remark = n
   const connection = await db.getConnection()
   try {
     await connection.beginTransaction()
+
+    // 服务端口径：在下单事务内按前端声明的界面语言查当前 shipping_rate（locale 与区域一一对应），
+    // 事务内读取保证费率与订单写入在同一原子视图中，写入金额完全由服务端得出
+    const [rateRows] = await connection.execute(
+      'SELECT fee_cny FROM shipping_rate WHERE locale = ?',
+      [String(locale || '').trim()]
+    )
+    if (!rateRows.length) {
+      throw Object.assign(new Error(STALE_SHIPPING), { status: 409 })
+    }
+    // 与金额一致保留两位小数；前端展示值对齐到同一精度后再比较，避免 25.00000000003 之类的浮点尾数误判
+    const shippingFeeNormalized = Math.round(Number(rateRows[0].fee_cny) * 100) / 100
+    const declaredNormalized = Math.round(declaredShipping * 100) / 100
+    if (declaredNormalized !== shippingFeeNormalized) {
+      throw Object.assign(new Error(STALE_SHIPPING), { status: 409 })
+    }
+
     const lines = []
     let goodsAmount = 0
 

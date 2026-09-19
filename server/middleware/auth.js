@@ -42,6 +42,8 @@ const LOG_MAP = {
   create_category: { module: '分类管理', type: '新增分类' },
   update_category: { module: '分类管理', type: '编辑分类' },
   delete_category: { module: '分类管理', type: '删除分类' },
+  upload_category_image: { module: '分类管理', type: '上传分类图片' },
+  delete_category_image: { module: '分类管理', type: '删除分类图片' },
   update_settings: { module: '其他设置', type: '修改设置' },
   update_exchange_rate: { module: '其他设置', type: '修改汇率' },
   update_shipping_rate: { module: '其他设置', type: '修改运费' },
@@ -52,6 +54,7 @@ const LOG_MAP = {
   update_profile: { module: '其他设置', type: '修改个人信息' },
   unauthorized_admin_access: { module: '其他设置', type: '越权访问' },
   update_customer_status: { module: '顾客管理', type: '启用/禁用顾客' },
+  delete_customer: { module: '顾客管理', type: '删除顾客' },
   reset_customer_password: { module: '顾客管理', type: '重置顾客密码' },
   update_order_status: { module: '订单管理', type: '更新订单状态' },
   export_orders: { module: '订单管理', type: '导出' },
@@ -60,6 +63,7 @@ const LOG_MAP = {
   create_expense: { module: '收支明细', type: '新增支出' },
   update_expense: { module: '收支明细', type: '编辑支出' },
   delete_expense: { module: '收支明细', type: '删除支出' },
+  export_finance: { module: '收支明细', type: '导出' },
 }
 
 export async function writeOperationLog(adminId, action, detail, req) {

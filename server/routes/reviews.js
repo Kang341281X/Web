@@ -184,6 +184,8 @@ export const publicRouter = Router()
 // 这是公开接口，但允许带顾客 token：带了就多返回 is_mine / can_edit，
 // 让前端知道「哪条是自己写的、还能不能改（24 小时内）」，从而决定编辑/删除按钮是否展示。
 // 未登录（或 token 已过期）时一律按游客处理，接口结果对游客完全不变。
+// 另外对已登录顾客返回 can_review（是否存在包含该商品的「已完成」订单，即发表评价的资格），
+// 前端据此决定「写评价」入口是否展示——与 customerReview.js POST 的服务端校验同一口径。
 publicRouter.get('/products/:id/reviews', optionalCustomerAuth, async (req, res, next) => {
   try {
     const productId = toId(req.params.id)
@@ -213,6 +215,19 @@ publicRouter.get('/products/:id/reviews', optionalCustomerAuth, async (req, res,
       [productId, REVIEW_VISIBLE]
     )
 
+    // 发表评价的资格（游客为 null，前端按「未登录」引导登录；口径与 customerReview.js 的 POST 一致）
+    let canReview = null
+    if (req.customer) {
+      const [[order]] = await db.execute(
+        `SELECT 1 AS ok FROM customer_order o
+           JOIN order_item oi ON oi.order_id = o.id
+          WHERE o.customer_id = ? AND o.status = 'completed' AND oi.product_id = ?
+          LIMIT 1`,
+        [req.customer.id, productId]
+      )
+      canReview = Boolean(order)
+    }
+
     const [rows] = await db.execute(
       `SELECT r.id, r.product_id, r.customer_name, cu.avatar AS customer_avatar, r.rating, r.content, r.images, r.order_id,
               (r.customer_id = ?) AS is_mine,
@@ -226,6 +241,7 @@ publicRouter.get('/products/:id/reviews', optionalCustomerAuth, async (req, res,
     res.json({
       success: true,
       data: rows.map(publicReview),
+      can_review: canReview,
       summary: {
         total: Number(summary.total),
         average: Number(Number(summary.average).toFixed(1)),

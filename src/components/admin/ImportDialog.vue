@@ -55,7 +55,7 @@ const failRows = computed(() => {
 })
 
 // ── 模板下载 ──────────────────────────────────────────
-// 统一走后端 GET /api/products/import-template（而不是直接下载 public 下的静态文件）：
+// 统一走后端 GET /api/product-imports/template（而不是直接下载 public 下的静态文件）：
 // 模板以后更新只需替换后端一份文件，前端不必跟着发版；api 实例会自动携带管理员 token。
 // 从 Content-Disposition 中解析后端给定的文件名，解析失败时回退到默认名
 function resolveTemplateFileName(headers) {
@@ -71,7 +71,7 @@ async function downloadTemplate() {
   if (downloadingTemplate.value) return
   downloadingTemplate.value = true
   try {
-    const response = await api.get('/products/import-template', { responseType: 'blob', timeout: 60000 })
+    const response = await api.get('/product-imports/template', { responseType: 'blob', timeout: 60000 })
     const url = URL.createObjectURL(response.data)
     const link = document.createElement('a')
     link.href = url
@@ -153,7 +153,7 @@ async function handlePreview() {
       formData.append('zip', zipFile.value.raw || zipFile.value)
     }
 
-    const { data } = await api.post('/products/import/preview', formData, {
+    const { data } = await api.post('/product-imports/preview', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120000,
     })
@@ -223,7 +223,7 @@ async function handleRenameFolder() {
     const parentFolder = currentFolder.value ? currentFolder.value.folder_name : ''
     const oldName = renamingFolder.value.split('/').pop()
 
-    const { data } = await api.post(`/products/import/${batchId.value}/rename-folder`, {
+    const { data } = await api.post(`/product-imports/${batchId.value}/rename-folder`, {
       parent_folder: parentFolder,
       old_name: oldName,
       new_name: newName,
@@ -258,7 +258,7 @@ async function handleCreateCategory(categoryName) {
   if (!categoryName || creatingCategory.value[categoryName]) return
   creatingCategory.value[categoryName] = true
   try {
-    const { data } = await api.post(`/products/import/${batchId.value}/create-category`, {
+    const { data } = await api.post(`/product-imports/${batchId.value}/create-category`, {
       category_name: categoryName,
     })
 
@@ -300,7 +300,7 @@ async function generateRowSku(row) {
   if (generatingSku.value[row.row]) return
   generatingSku.value[row.row] = true
   try {
-    const { data } = await api.put(`/products/import/${batchId.value}/rows/${row.row}/sku`)
+    const { data } = await api.put(`/product-imports/${batchId.value}/rows/${row.row}/sku`)
     applyPreviewResult(data.data)
     ElMessage.success(`第 ${row.row} 行已生成商品编号：${data.data.sku}`)
   } catch (error) {
@@ -320,7 +320,7 @@ async function saveRowSku(row, value) {
   if (generatingSku.value[row.row]) return
   generatingSku.value[row.row] = true
   try {
-    const { data } = await api.put(`/products/import/${batchId.value}/rows/${row.row}/sku`, { sku: trimmed })
+    const { data } = await api.put(`/product-imports/${batchId.value}/rows/${row.row}/sku`, { sku: trimmed })
     applyPreviewResult(data.data)
     ElMessage.success(`第 ${row.row} 行商品编号已更新：${data.data.sku}`)
   } catch (error) {
@@ -345,7 +345,7 @@ async function removeRow(row) {
   if (deletingRow.value[row.row]) return
   deletingRow.value[row.row] = true
   try {
-    const { data } = await api.delete(`/products/import/${batchId.value}/rows/${row.row}`)
+    const { data } = await api.delete(`/product-imports/${batchId.value}/rows/${row.row}`)
     applyPreviewResult(data.data)
     ElMessage.success(`已删除第 ${row.row} 行「${row.name}」`)
   } catch (error) {
@@ -359,7 +359,7 @@ async function generateAllSkus() {
   if (!rowsNeedingSku.value.length) return
   generatingAll.value = true
   try {
-    const { data } = await api.post(`/products/import/${batchId.value}/generate-skus`)
+    const { data } = await api.post(`/product-imports/${batchId.value}/generate-skus`)
     applyPreviewResult(data.data)
     ElMessage.success(`已为 ${data.data.generated} 行生成商品编号`)
   } catch (error) {
@@ -384,7 +384,7 @@ async function handleConfirm() {
 
   confirming.value = true
   try {
-    const { data } = await api.post('/products/import/confirm', { batchId: batchId.value })
+    const { data } = await api.post('/product-imports/confirm', { batchId: batchId.value })
     ElMessage.success(`成功导入 ${data.data.imported_count} 个商品`)
     emit('success')
     resetAndClose()
@@ -416,7 +416,7 @@ function cancelBatch(id) {
   if (!id) return
   const token = localStorage.getItem('admin_token')
   try {
-    fetch(`/api/products/import/${id}`, {
+    fetch(`/api/product-imports/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` },
       keepalive: true,
@@ -457,7 +457,7 @@ function handleBeforeUnload() {
   if (batchId.value) {
     const token = localStorage.getItem('admin_token')
     try {
-      fetch(`/api/products/import/${batchId.value}`, {
+      fetch(`/api/product-imports/${batchId.value}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
         keepalive: true,

@@ -36,6 +36,7 @@ npm run dev      # 前端 Vite，默认 5173
 
 - 顾客在购物车结算弹窗里登录后可「提交订单」，系统在事务内校验并扣减库存、写入 `customer_order` / `order_item`，并清空已下单商品的购物车项；后台「订单管理」随即能看到新订单（`pending`），由管理员手工改状态发货。
 - 下单时会把收货信息与账号信息（`customer_username` 昵称快照、`customer_email` 邮箱快照，见 `server/sql/026`）一并快照进订单，之后账号资料被改或被删都不影响历史订单。
+- 运费以服务端为准：下单事务内按前端声明的界面语言查 `shipping_rate` 重新计算并写入订单（计入 `total_amount`）；与页面展示值不一致（如后台刚调价）返回 `409` 提示刷新重试，详见「汇率与运费」。
 - 取消订单（顾客端或后台）只回补库存、不回滚销量；只有 `pending` / `confirmed` 可取消，`shipped` / `completed` / `cancelled` 为终态，重复取消幂等。
 - 「下载结算清单 Excel」作为提交订单之外的并行选项保留：无需登录，导出后可先与客服核对再下单。本期不涉及任何在线支付、收银台或支付回调。
 
@@ -58,7 +59,7 @@ npm run dev      # 前端 Vite，默认 5173
 - `POST /api/customer/products/:productId/reviews`（发布评价）
 - `PUT /api/customer/reviews/:id`（修改评价，发布超过 24 小时拒绝）
 - `DELETE /api/customer/reviews/:id`（删除评价，不限时间）
-- `POST /api/customer/orders`（下单，body：`address_id`、`remark?`、`items?`；`items` 省略时按购物车下单）
+- `POST /api/customer/orders`（下单，body：`address_id`、`locale`（界面语言，用于服务端重算运费）、`shipping_fee`（页面展示运费，仅做一致性校验，不一致返回 `409`）、`remark?`、`items?`；`items` 省略时按购物车下单）
 - `GET /api/customer/orders`（我的订单，支持 `page` / `page_size` / `status`）
 - `GET /api/customer/orders/:id`（订单详情）
 - `PUT /api/customer/orders/:id/cancel`（取消订单并回补库存）
@@ -76,7 +77,7 @@ npm run dev      # 前端 Vite，默认 5173
 ## 商品评论（登录可写，24 小时内可改，删除不限时）
 
 - 入口在商品详情页「买家评价」面板：登录后可「写评价」（评分 1-5 + 文字 + 可选配图）；自己发布的评论展示「编辑 / 删除」。
-- 任何登录用户都可以评价，**不校验是否购买过**；`is_purchased` 仅在评论绑定了订单时为真，顾客端入口产生的评价恒为 `false`。
+- **只允许对「已完成（`status = completed`）」订单中包含的商品评价**：发布时把最近一笔命中订单的 id 写入 `product_review.order_id`，`is_purchased`（已购买标识）由此生效；没有已完成订单时返回 `400`「请先购买该商品后再评价」，前台同步隐藏「写评价」入口并提示（公开评论接口对已登录顾客返回 `can_review` 资格字段，与服务端校验同一口径）。
 - 发布后 24 小时内可修改，超过 24 小时只能删除（前端不展示「编辑」按钮，后端返回 400「评论发布超过 24 小时，无法修改」）。`created_at` 是判定窗口的唯一依据，改一次不会重新计时（见 `server/sql/027`）。
 - 增 / 改 / 删都会重算商品评分（`product.rating` / `review_count`）。后台「隐藏评论」与顾客「删除评论」共用 `server/utils/review.js` 里的同一份重算逻辑，保证两边口径一致。
 - 评论配图存放在 `/uploads/reviews/`，单张不超过 5MB、单条评论最多 6 张；删除评论或编辑时移除配图会一并清理文件。
@@ -143,7 +144,7 @@ npm run dev      # 前端 Vite，默认 5173
 
 - 汇率：后台「系统设置 → 汇率」维护 5 种语言各自的展示货币（`locale` / `currency_symbol` / `currency_code` / `rate_from_cny`，见 `server/sql/` 的 `exchange_rate` 表）。语言 store 启动时拉取一次 `/api/public/exchange-rates` 并缓存，`language.price()` 据此把人民币价格换算成当前语言的展示货币。
 - 汇率只影响**展示**：`zh-CN` 恒为 `1`；下单、扣库存与订单金额一律按人民币计算，改汇率不会改变任何实际金额。
-- 运费：后台「系统设置 → 运费」按区域维护（`region_key` 取 `CN` / `TW` / `JP` / `KR` / `OTHER`，`fee_cny` 为人民币运费，`0` 表示包邮，`note` 为可选备注，见 `shipping_rate` 表）。商品详情页按当前语言对应区域展示「预计运费」，同样只作展示参考，不参与结算金额。
+- 运费：后台「系统设置 → 运费」按区域维护（`region_key` 取 `CN` / `TW` / `JP` / `KR` / `OTHER`，`fee_cny` 为人民币运费，`0` 表示包邮，`note` 为可选备注，见 `shipping_rate` 表）。商品详情页按当前语言对应区域展示「预计运费」。下单时后端在下单事务内按前端声明的界面语言查 `shipping_rate.fee_cny` 重新计算运费并计入订单 `total_amount`（`shipping_fee` 列），前端传入的展示值仅做一致性校验：与当前费率不相等（后台调价后页面过期 / 数值被篡改）返回 `409`，提示「运费信息已过期，请刷新页面重试」，保证顾客被收取的运费永远与页面展示一致。
 
 相关接口：
 
@@ -186,7 +187,7 @@ npm run dev      # 前端 Vite，默认 5173
 - 管理员管理（超管）：`GET` / `POST /api/admins`、`GET` / `PUT` / `DELETE /api/admins/:id`、`PUT /api/admins/:id/reset-password`
 - 商品：`GET` / `POST /api/products`、`GET /api/products/stats`、`GET` / `PUT` / `DELETE /api/products/:id`、`POST /api/products/batch-delete`、`POST /api/products/export`（导出商品 Excel，按选中项或筛选结果）
 - 商品图片：`POST /api/products/:id/images`、`PUT /api/products/:id/images/sort`、`POST /api/products/images/:imageId/replace`、`PUT /api/products/images/:imageId/set-main`、`DELETE /api/products/images/:imageId`
-- 商品导入（同样挂在 `/api/products` 下）：`GET /api/products/import-template`、`POST /api/products/import/preview`、`POST /api/products/import/confirm`、`POST /api/products/import/online`、`POST /api/products/import/:batchId/rename-folder`、`POST /api/products/import/:batchId/create-category`、`PUT /api/products/import/:batchId/rows/:row/sku`、`POST /api/products/import/:batchId/generate-skus`、`DELETE /api/products/import/:batchId`
+- 商品导入（独立挂在 `/api/product-imports` 下）：`GET /api/product-imports/template`、`POST /api/product-imports/preview`、`POST /api/product-imports/confirm`、`POST /api/product-imports/online`、`POST /api/product-imports/:batchId/rename-folder`、`POST /api/product-imports/:batchId/create-category`、`PUT /api/product-imports/:batchId/rows/:row/sku`、`POST /api/product-imports/:batchId/generate-skus`、`DELETE /api/product-imports/:batchId`
 - 分类：`GET` / `POST /api/categories`、`PUT` / `DELETE /api/categories/:id`、`POST /api/categories/:id/image`、`DELETE /api/categories/:id/image`
 - 顾客：`GET /api/admin-customers`（`keyword` 匹配用户名 / 手机号 / 昵称 / 邮箱）、`GET /api/admin-customers/stats`、`GET /api/admin-customers/:id`、`PUT /api/admin-customers/:id/status`
 - 订单：`GET /api/admin-orders`、`GET /api/admin-orders/stats`、`GET /api/admin-orders/:id`、`PUT /api/admin-orders/:id/status`
@@ -277,6 +278,6 @@ pm2 startup   # 让它开机自启
  把域名的 DNS A 记录指向服务器公网 IP。
 
 **9. 数据备份**
- SQLite 是单文件数据库，定期备份 `data.db` 和 `uploads/` 目录就行。如果以后访问量变大想换真正的数据库，`package.json` 里其实已经装了 `mysql2` 依赖，说明作者本来就留了迁移空间。
+ SQLite 是单文件数据库，定期备份 `data.db` 和 `uploads/` 目录就行。如果以后访问量变大想换真正的数据库（如 MySQL），`server/config/db.js` 已把查询封装成 `execute` / `getConnection` 形态（兼容 mysql2 风格的接口），届时引入对应驱动替换实现即可，业务代码基本不用动。
 
 有一点我没能确认：`server/index.js` 里后端是否已经顺手把 `dist/` 静态文件也托管了（如果是，部署会更简单——一个 Node 进程 + Nginx 只做 HTTPS 终端和反代就够了，不用额外配 Nginx 托管静态文件那一段）。建议你打开这个文件看一眼有没有 `express.static(...)` 之类的代码，如果没有，就按上面第 6 步"Nginx 托管 dist + 反代 API"这套来做。

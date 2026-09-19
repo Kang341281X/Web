@@ -85,10 +85,16 @@ export async function fetchProduct(id) {
 
 // 商品详情页「买家评价」：返回已显示的评论列表 + 评分概览（平均分 / 各星级条数）。
 // 后端只返回 status = 1 的评论，顾客注销后仍以用户名快照展示。
-// 已登录时会带上 is_mine / can_edit，供页面展示「编辑 / 删除」入口。
+// 已登录时会带上 is_mine / can_edit，供页面展示「编辑 / 删除」入口；
+// can_review 表示发表评价的资格（存在包含该商品的已完成订单），游客为 null。
 export async function fetchProductReviews(productId, params = {}) {
   const { data } = await publicApi.get(`/products/${productId}/reviews`, { params })
-  return { reviews: (data.data || []).map(adaptReview), summary: data.summary, pagination: data.pagination }
+  return {
+    reviews: (data.data || []).map(adaptReview),
+    summary: data.summary,
+    pagination: data.pagination,
+    canReview: data.can_review === undefined ? null : Boolean(data.can_review),
+  }
 }
 
 export async function fetchSettings() {

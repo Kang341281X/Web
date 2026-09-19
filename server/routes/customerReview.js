@@ -25,8 +25,8 @@ import {
  *   - 评分重算、图片解析、24 小时窗口判断共用 utils/review.js，不重复实现；
  *   - 后台改 status 或删除都会重算评分，本文件的增/改/删同样重算，因此前台评分始终一致。
  *
- * 本期不校验「是否购买过该商品」：任何登录用户都可以评价，
- * 因此写入的 order_id 固定为空，评论列表里的 is_purchased 对这个入口产生的评价恒为 false。
+ * 只有「已完成（status = completed）」订单中包含该商品的顾客才能评价（见下方 POST 的资格校验）；
+ * 发布时把命中的订单 id 写入 order_id，评论列表的 is_purchased（已购买标识）由此生效。
  */
 
 const router = Router()
@@ -110,6 +110,19 @@ router.post('/products/:productId/reviews', upload.array('images', REVIEW_MAX_IM
     const product = products[0]
     if (!product || !product.status) return res.status(404).json({ success: false, message: '商品不存在或已下架' })
 
+    // 购买资格：只允许评价自己「已完成」订单中出现过的商品（取消的不算，order_item.product_id
+    // 在商品被硬删除后会置 NULL，也不会误命中）。取最近一笔命中的订单绑定到评论，
+    // order_id 非空即 is_purchased = true，前台与后台的「已购买」标识由此生效。
+    const [orders] = await db.execute(
+      `SELECT o.id FROM customer_order o
+         JOIN order_item oi ON oi.order_id = o.id
+        WHERE o.customer_id = ? AND o.status = 'completed' AND oi.product_id = ?
+        ORDER BY o.id DESC LIMIT 1`,
+      [req.customer.id, productId]
+    )
+    const order = orders[0]
+    if (!order) return res.status(400).json({ success: false, message: '请先购买该商品后再评价' })
+
     const rating = requiredRating(body.rating)
     const content = requiredText(body.content, '评价内容', { min: 1, max: 500 })
     const images = await saveImages(req.files)
@@ -117,8 +130,8 @@ router.post('/products/:productId/reviews', upload.array('images', REVIEW_MAX_IM
     // customer_name 取用户名快照（昵称已并入用户名），用户名为空时退化为脱敏手机号：
     // 评论列表是公开的，不能把完整手机号暴露出去（与 utils/customer.js 的脱敏口径一致）
     const [result] = await db.execute(
-      `INSERT INTO product_review (product_id, customer_id, customer_name, rating, content, images, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      `INSERT INTO product_review (product_id, customer_id, customer_name, rating, content, images, order_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
       [
         productId,
         req.customer.id,
@@ -126,6 +139,7 @@ router.post('/products/:productId/reviews', upload.array('images', REVIEW_MAX_IM
         rating,
         content,
         images.length ? JSON.stringify(images) : null,
+        order.id,
       ]
     )
 

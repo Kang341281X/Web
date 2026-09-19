@@ -191,7 +191,7 @@ async function submit() {
 
   submitting.value = true
   try {
-    const { data } = await api.post('/products/import/online', formData, {
+    const { data } = await api.post('/product-imports/online', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120000,
     })

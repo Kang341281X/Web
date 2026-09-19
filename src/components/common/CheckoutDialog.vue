@@ -22,8 +22,9 @@ import AppImage from '../common/AppImage.vue'
  */
 const props = defineProps({
   visible: Boolean,
-  // 由 Cart.vue 传入：当前语言对应的 shipping_rate.fee_cny，作为订单运费快照传给后端；
-  // 0 表示包邮。未传时兜底 0（理论上 Cart.vue 一定会传，但留默认值便于单元测试与未来复用）。
+  // 由 Cart.vue 传入：当前语言对应的 shipping_rate.fee_cny，即页面展示给顾客的运费；
+  // 0 表示包邮。仅用于提交给后端做一致性校验（后端按 shipping_rate 重新计算，
+  // 两值不一致会拒绝下单），最终写入订单的金额以服务端为准。
   shippingFee: { type: Number, default: 0 },
 })
 const emit = defineEmits(['update:visible'])
@@ -177,7 +178,10 @@ async function handleSubmit() {
     const result = await orderStore.createOrder({
       address_id: selectedAddressId.value,
       remark: remark.value.trim(),
-      // 运费快照：后端 createCustomerOrder 会再次校验 >= 0 并四舍五入到 2 位小数
+      // 运费：声明界面语言 locale + 页面展示的运费值。后端按 locale 查 shipping_rate
+      // 重新计算并以服务端金额为准写入订单；与展示值不一致（后台刚调价）会拒绝下单
+      // 并提示刷新重试，保证顾客不会被收取页面上没显示过的金额
+      locale: language.locale,
       shipping_fee: shippingFee.value,
       items: tableRows.value.map(row => ({ product_id: row.product.id, quantity: row.quantity })),
     })

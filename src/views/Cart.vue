@@ -11,7 +11,8 @@ const checkoutVisible = ref(false)
 
 // 运费与 ProductDetail.vue 共用同一份数据（src/data/shipping.js + language.shipping getter），
 // 不再硬编码「满 299 免邮」之类的临时规则。feeCny 即 shipping_rate 表的 fee_cny，0 表示包邮。
-// 此处只读取展示，不二次校验后端，后端 createCustomerOrder 仍会再次校验 >= 0。
+// 此处只读取展示；下单时后端会按 shipping_rate 重新计算运费并与该展示值比对，
+// 不一致（后台调价后页面过期）会拒绝下单并提示刷新重试。
 const shipping = computed(() => language.shipping)
 const shippingFee = computed(() => shipping.value.feeCny || 0)
 const shippingFree = computed(() => shippingFee.value <= 0)

@@ -56,7 +56,8 @@ const customerText = computed(() => {
 })
 
 // 订单详情内商品金额合计：从明细累加得到，与 customer_order.total_amount 拆分展示
-// total_amount = goodsSubtotal + shipping_fee，运费的快照值由后端在 createCustomerOrder 写入
+// total_amount = goodsSubtotal + shipping_fee，运费由后端下单时按 shipping_rate
+// 重新计算写入（前端传入的展示值仅做一致性校验，以服务端金额为准）
 const detailGoodsSubtotal = computed(() => {
   const items = detail.value?.items
   if (!Array.isArray(items)) return 0

@@ -208,7 +208,7 @@ const TEMPLATE_FILE_PATH = resolve(
   '..', '..', 'public', 'assets', 'Products.xlsx'
 )
 
-router.get('/import-template', async (req, res, next) => {
+router.get('/template', async (req, res, next) => {
   try {
     if (!existsSync(TEMPLATE_FILE_PATH)) {
       return res.status(404).json({ success: false, message: '模板文件不存在，请联系管理员' })
@@ -223,7 +223,7 @@ router.get('/import-template', async (req, res, next) => {
 })
 
 // ── 预览接口 ──────────────────────────────────────────
-router.post('/import/preview', importUpload.fields([
+router.post('/preview', importUpload.fields([
   { name: 'excel', maxCount: 1 },
   { name: 'zip', maxCount: 1 },
 ]), async (req, res, next) => {
@@ -567,7 +567,7 @@ async function discardCreatedCategories(categoryIds) {
 }
 
 // ── 确认导入接口 ──────────────────────────────────────
-router.post('/import/confirm', async (req, res, next) => {
+router.post('/confirm', async (req, res, next) => {
   const batchId = req.body.batchId
   if (!batchId || typeof batchId !== 'string') {
     return res.status(400).json({ success: false, message: '缺少批次ID' })
@@ -744,7 +744,7 @@ router.post('/import/confirm', async (req, res, next) => {
 //   parent_folder: 父文件夹名称（如 "images"），如果为空则重命名顶层文件夹
 //   old_name: 原文件夹名称（不含父级路径）
 //   new_name: 新文件夹名称（不含父级路径）
-router.post('/import/:batchId/rename-folder', async (req, res, next) => {
+router.post('/:batchId/rename-folder', async (req, res, next) => {
   try {
     const { batchId } = req.params
     const { parent_folder, old_name, new_name } = req.body
@@ -964,7 +964,7 @@ async function saveBatchPreview(batchId, previewData) {
 // ── 一键创建缺失分类接口 ────────────────────────────────
 // 在预览阶段，若某行失败原因为「分类不存在：xxx」，管理员可点击「添加分类」直接创建该分类；
 // 创建后自动移除本批次所有相关行的该错误，并重新计算成功/失败数。
-router.post('/import/:batchId/create-category', async (req, res, next) => {
+router.post('/:batchId/create-category', async (req, res, next) => {
   try {
     const { batchId } = req.params
     const categoryName = String(req.body.category_name || '').trim()
@@ -1065,7 +1065,7 @@ router.post('/import/:batchId/create-category', async (req, res, next) => {
 // ── 为单行生成 / 手动修改商品编号 ────────────────────────
 // 参数 row 为 Excel 行号（preview_data 里的 row 字段，不是数组下标）
 // body 携带非空 sku 时按管理员提交值保存（所见即所存）；否则按同一算法重新生成
-router.put('/import/:batchId/rows/:row/sku', async (req, res, next) => {
+router.put('/:batchId/rows/:row/sku', async (req, res, next) => {
   try {
     const { batchId } = req.params
     const { previewData } = await getPendingBatchPreview(batchId)
@@ -1084,7 +1084,7 @@ router.put('/import/:batchId/rows/:row/sku', async (req, res, next) => {
 })
 
 // ── 一键为全部缺失编号的行生成商品编号 ──────────────────
-router.post('/import/:batchId/generate-skus', async (req, res, next) => {
+router.post('/:batchId/generate-skus', async (req, res, next) => {
   try {
     const { batchId } = req.params
     const { previewData } = await getPendingBatchPreview(batchId)
@@ -1106,7 +1106,7 @@ router.post('/import/:batchId/generate-skus', async (req, res, next) => {
 // ── 删除预览中的某一行 ──────────────────────────────────
 // 管理员在确认导入前剔除不需要的记录：从 preview_data 移除并重算成功/失败数。
 // 行对应的临时图片不单独清理（保留在临时目录，批次结束时随目录一并清理）。
-router.delete('/import/:batchId/rows/:row', async (req, res, next) => {
+router.delete('/:batchId/rows/:row', async (req, res, next) => {
   try {
     const { batchId } = req.params
     const { previewData } = await getPendingBatchPreview(batchId)
@@ -1153,7 +1153,7 @@ async function ensureCategory(executor, name, adminId, adminName) {
 // 请求：multipart/form-data
 //   rows：JSON 字符串数组，每行文本字段（不接受 status，统一按上架创建）
 //   images_<下标>：该行对应的图片文件（同一字段名可重复携带多张）
-router.post('/import/online', onlineUpload.any(), async (req, res, next) => {
+router.post('/online', onlineUpload.any(), async (req, res, next) => {
   try {
     let rows
     try {
@@ -1362,7 +1362,7 @@ router.post('/import/online', onlineUpload.any(), async (req, res, next) => {
 })
 
 // ── 取消导入接口 ──────────────────────────────────────
-router.delete('/import/:batchId', async (req, res, next) => {
+router.delete('/:batchId', async (req, res, next) => {
   try {
     const batchId = req.params.batchId
     const [batches] = await db.execute('SELECT id, temp_dir, status FROM import_batch WHERE id = ?', [batchId])

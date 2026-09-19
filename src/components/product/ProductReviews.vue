@@ -15,13 +15,14 @@ import AppImage from '../common/AppImage.vue'
  * 数据来自 /api/public/products/:id/reviews（对应 product_review 表）：
  *   - 只展示 status = 1 的评论，隐藏/删除由后台「商品管理 → 商品评论」控制；
  *   - customer_name 为评论时的用户名快照，顾客注销后依旧能正常展示；
- *   - is_purchased 表示该评论绑定了订单（本期顾客端入口产生的评价恒为 false）；
+ *   - is_purchased 表示该评论绑定了订单（发表时写入已完成订单的 order_id）；
  *   - 登录后接口会额外返回 is_mine / can_edit，用来决定「编辑 / 删除」按钮是否展示。
  *
  * 业务规则（与后端 routes/customerReview.js 一致）：
- *   - 任何登录用户都可以评价，不校验是否购买过；
+ *   - 只有「已完成」订单中包含该商品的顾客才能评价（接口返回 can_review），
+ *     无购买资格时隐藏「写评价」入口并提示；真正的拦截以后端为准；
  *   - 发布后 24 小时内可修改，超过 24 小时只能删除；
- *   - 删除不限时间。真正的拦截以后端为准，这里的按钮显隐只是避免用户白点一次。
+ *   - 删除不限时间。
  */
 const props = defineProps({ productId: { type: Number, required: true } })
 const emit = defineEmits(['changed'])
@@ -34,6 +35,12 @@ const loading = ref(false)
 const failed = ref(false)
 const reviews = ref([])
 const summary = ref({ total: 0, average: 0, distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } })
+
+// 发表评价的资格：true / false 由后端按「是否存在包含该商品的已完成订单」判定，
+// null 表示未登录（或 token 失效被按游客处理），前端按「未登录」引导登录。
+const canReview = ref(null)
+// 已登录但没有购买资格：隐藏「写评价」入口并提示（后端 POST 仍会再校验一次）
+const purchaseBlocked = computed(() => customer.isLoggedIn && canReview.value === false)
 
 const LEVELS = [5, 4, 3, 2, 1]
 
@@ -102,9 +109,9 @@ const MAX_PAGE_SIZE = 50
 const expanded = ref(false)
 
 async function fetchPage(page, pageSize) {
-  // 已登录时请求会带上顾客 token，后端据此标出哪些评论是自己写的
-  const { reviews: list, summary: overview, pagination } = await fetchProductReviews(props.productId, { page, page_size: pageSize })
-  return { list, overview, pagination }
+  // 已登录时请求会带上顾客 token，后端据此标出哪些评论是自己写的、有没有评价资格
+  const { reviews: list, summary: overview, pagination, canReview: eligible } = await fetchProductReviews(props.productId, { page, page_size: pageSize })
+  return { list, overview, pagination, canReview: eligible }
 }
 
 async function load() {
@@ -115,6 +122,7 @@ async function load() {
     const first = await fetchPage(1, expanded.value ? MAX_PAGE_SIZE : FIRST_PAGE_SIZE)
     reviews.value = first.list
     summary.value = first.overview
+    canReview.value = first.canReview
     // 展开态下把所有剩余分页补全，保证「查看全部评价」看到的确实是全部评论
     const total = Number(first.pagination?.total ?? first.overview?.total ?? first.list.length)
     let page = 2
@@ -170,11 +178,16 @@ async function scrollToForm() {
   formRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
-// 「写评价」：未登录先弹登录框，登录成功后由 watch 重新加载列表
+// 「写评价」：未登录先弹登录框，登录成功后由 watch 重新加载列表（含评价资格）；
+// 已登录但没有购买资格时入口已隐藏，这里再挡一次，防止通过其它方式触发
 function openCreate() {
   if (!customer.isLoggedIn) {
     user.openLogin()
     ElMessage.info(language.t('reviewLoginNeeded'))
+    return
+  }
+  if (purchaseBlocked.value) {
+    ElMessage.warning(language.t('reviewPurchaseRequired'))
     return
   }
   resetForm()
@@ -287,11 +300,13 @@ watch(() => props.productId, () => { expanded.value = false; load() }, { immedia
 
 <template>
   <div v-loading="loading" class="review-panel">
-    <!-- 写评价入口：未登录也能看到，点击引导登录（评价只能绑定到具体账号） -->
+    <!-- 写评价入口：未登录也能看到，点击引导登录（评价只能绑定到具体账号）；
+         已登录但无购买资格（没有包含该商品的已完成订单）时隐藏按钮并给出说明 -->
     <div class="review-toolbar">
-      <p v-if="customer.isLoggedIn" class="review-toolbar__hint">{{ language.t('reviewEditWindow') }}</p>
+      <span v-if="purchaseBlocked" class="review-toolbar__hint">{{ language.t('reviewPurchaseRequired') }}</span>
+      <p v-else-if="customer.isLoggedIn" class="review-toolbar__hint">{{ language.t('reviewEditWindow') }}</p>
       <span v-else class="review-toolbar__hint">{{ language.t('reviewLoginNeeded') }}</span>
-      <button v-if="!formOpen" type="button" class="button primary review-write" @click="openCreate">
+      <button v-if="!formOpen && !purchaseBlocked" type="button" class="button primary review-write" @click="openCreate">
         {{ language.t('writeReview') }}
       </button>
     </div>
