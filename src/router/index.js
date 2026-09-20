@@ -65,6 +65,11 @@ const router = createRouter({
           path: 'orders',
           component: () => import('../views/admin/AdminOrders.vue'),
         },
+        // 访客下载记录：未登录访客下载结算清单产生的 intent_order 只读列表，对应 /api/admin-intent-orders
+        {
+          path: 'intent-orders',
+          component: () => import('../views/admin/AdminIntentOrders.vue'),
+        },
         // settings/logs 对普通管理员可见，仅 admins 仍限 super_admin
         {
           path: 'settings',

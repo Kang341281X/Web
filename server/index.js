@@ -3,12 +3,15 @@ import './config/env.js'
 import './migrate.js'
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import adminRouter from './routes/admin.js'
 import adminsRouter from './routes/admins.js'
 import adminCustomersRouter from './routes/customers.js'
 import adminOrdersRouter from './routes/orders.js'
+// 访客下载记录（intent_order 只读列表）：仅后台查看访客下载结算清单产生的记录
+import intentOrdersRouter from './routes/intentOrders.js'
 import categoriesRouter from './routes/categories.js'
 import productsRouter from './routes/products.js'
 import importsRouter, { startImportCleanupTask } from './routes/imports.js'
@@ -58,6 +61,8 @@ await mkdir(resolve(uploadDir, 'avatars'), { recursive: true })
 await mkdir(resolve(uploadDir, 'products'), { recursive: true })
 await mkdir(resolve(uploadDir, 'settings'), { recursive: true })
 await mkdir(resolve(uploadDir, 'import-temp'), { recursive: true })
+// helmet：安全响应头。本服务只提供 API 与 /uploads 静态文件（无 SPA 静态托管），默认配置即可
+app.use(helmet())
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') || true }))
 app.use(express.json({ limit: '1mb' }))
 app.use('/uploads', express.static(uploadDir, { fallthrough: false, maxAge: '1d' }))
@@ -66,6 +71,7 @@ app.use('/api/admin', adminRouter)
 app.use('/api/admins', adminsRouter)
 app.use('/api/admin-customers', adminCustomersRouter)
 app.use('/api/admin-orders', adminOrdersRouter)
+app.use('/api/admin-intent-orders', intentOrdersRouter)
 app.use('/api/admin-reviews', adminReviewsRouter)
 app.use('/api/categories', categoriesRouter)
 // 批量导入相关接口独立挂在 /api/product-imports，与 productsRouter 的 /:id 路由互不影响

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, ShoppingCart } from '@element-plus/icons-vue'
@@ -12,6 +12,7 @@ import { useLanguageStore } from '../../stores/language'
 import { productTitle } from '../../data/translations'
 import { formatAddress } from '../../utils/address'
 import { fetchSettings, saveIntentOrder, exportCheckoutList } from '../../services/publicApi'
+import { useIsMobile } from '../../composables/useIsMobile'
 import AppImage from '../common/AppImage.vue'
 
 /**
@@ -47,12 +48,8 @@ const selectedAddressId = ref(null)
 const remark = ref('')
 
 // 移动端断点：桌面用表格、手机用卡片列表渲染商品明细（表格最小宽 570px，窄屏会横向滚动）。
-// 用 matchMedia + change 事件实时切换，不轮询 innerWidth；组件卸载时移除监听。
-const mobileQuery = window.matchMedia('(max-width: 760px)')
-const isMobile = ref(mobileQuery.matches)
-const onMobileQueryChange = e => { isMobile.value = e.matches }
-mobileQuery.addEventListener('change', onMobileQueryChange)
-onUnmounted(() => mobileQuery.removeEventListener('change', onMobileQueryChange))
+// 复用 useIsMobile（matchMedia + change 实时切换，组件卸载自动移除监听），断点保持原 760px。
+const isMobile = useIsMobile(760)
 
 // 与 Cart.vue 保持一致：feeCny <= 0 视为包邮，提示文案相应切换
 const shippingFree = computed(() => (Number(props.shippingFee) || 0) <= 0)

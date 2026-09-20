@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import db from '../config/db.js'
 import { requireAuth, writeOperationLog } from '../middleware/auth.js'
+import { loginLimiter } from '../middleware/rateLimit.js'
 import storageService from '../services/storageService.js'
 import { consumeCaptcha } from '../services/captchaService.js'
 import { publicAdmin, requiredText } from '../utils/admin.js'
@@ -14,7 +15,8 @@ const fields = 'id, username, role, real_name, avatar, phone, email, status, mus
 
 // 管理员登录：与顾客登录共用同一套图形验证码（见 server/services/captchaService.js）。
 // 后台权限远高于顾客账号，且界面里就能看到默认口令提示，更值得挡一层撞库。
-router.post('/login', async (req, res, next) => {
+// loginLimiter 放最前：限流通过后才进入验证码/账号密码校验（15 分钟 10 次/IP）
+router.post('/login', loginLimiter, async (req, res, next) => {
   try {
     // 先验证码后账号密码：不通过就连数据库都不查，避免 bcrypt 开销被用来做放大攻击
     const captchaId = req.body.captchaId ?? req.body.captcha_id

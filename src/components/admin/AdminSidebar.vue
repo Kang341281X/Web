@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Goods, DataLine, Setting, Document, User, List, Avatar, Tickets, ChatDotRound, Money } from '@element-plus/icons-vue'
+import { Goods, DataLine, Setting, Document, User, List, Avatar, Tickets, ChatDotRound, Money, Download } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
 
 const props = defineProps({
@@ -62,6 +62,12 @@ const activeMenu = computed(() => route.path)
       <el-menu-item index="/admin/orders">
         <el-icon><Tickets /></el-icon>
         <template #title>订单管理</template>
+      </el-menu-item>
+
+      <!-- 访客下载记录：未登录访客下载结算清单产生的只读记录，与顾客正式订单是两套数据 -->
+      <el-menu-item index="/admin/intent-orders">
+        <el-icon><Download /></el-icon>
+        <template #title>访客下载记录</template>
       </el-menu-item>
 
       <!-- 收支明细：仅超级管理员可见（后端同样按 super_admin 拦截） -->

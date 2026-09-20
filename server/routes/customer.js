@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import db from '../config/db.js'
 import { requireCustomerAuth } from '../middleware/customerAuth.js'
+import { loginLimiter } from '../middleware/rateLimit.js'
 import storageService from '../services/storageService.js'
 import { consumeCaptcha } from '../services/captchaService.js'
 import { publicCustomer, requiredPhone, requiredUsername, requiredPassword, normalizeEmail, isUniqueViolation } from '../utils/customer.js'
@@ -53,7 +54,8 @@ router.post('/register', async (req, res, next) => {
 })
 
 // 登录：用户名 + 密码（先过人机校验，再验账号密码），通过后签发顾客专用 token（payload 为 { customerId }）
-router.post('/login', async (req, res, next) => {
+// loginLimiter 放最前：限流通过后才进入验证码/账号密码校验（15 分钟 10 次/IP）
+router.post('/login', loginLimiter, async (req, res, next) => {
   try {
     // 1) 验证码：不通过就直接结束，绝不碰数据库。
     //    这样既省掉一次昂贵的 bcrypt 比对，也不会通过「响应快慢」泄漏用户名是否已注册。
