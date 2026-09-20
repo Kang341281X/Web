@@ -1,11 +1,11 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { useLanguageStore } from '../stores/language'
 import { useCartStore } from '../stores/cart'
 import { productBadge, productTitle, productDescription } from '../data/translations'
 import { fetchProduct, fetchProducts } from '../services/publicApi'
+import { useQuantityFeedback } from '../composables/useQuantityFeedback'
 import ProductGallery from '../components/product/ProductGallery.vue'
 import ProductGrid from '../components/product/ProductGrid.vue'
 import FavoriteButton from '../components/product/FavoriteButton.vue'
@@ -51,11 +51,13 @@ async function refreshProductRating() {
 }
 
 // 登录态下加购会请求服务端，失败或按库存截断时给出提示；游客仍是纯本地操作
+// 失败 / 截断 toast 文案与购物车页对齐（见 composables/useQuantityFeedback.js）
+const { handle: handleQuantityFeedback } = useQuantityFeedback()
 const add = async () => {
   if (!product.value) return
   const result = await cart.add(product.value, quantity.value)
-  if (!result.success) { ElMessage.error(result.message); return }
-  if (result.truncated) ElMessage.warning(result.message)
+  handleQuantityFeedback(result)
+  if (!result.success) return
   added.value = true
   setTimeout(() => { added.value = false }, 1500)
 }

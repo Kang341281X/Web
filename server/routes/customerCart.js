@@ -129,7 +129,8 @@ router.put('/:productId', async (req, res, next) => {
 
     res.json({
       success: true,
-      message: target < quantity ? `库存仅剩 ${product.stock} 件，数量已调整为 ${target}` : '数量已更新',
+      // 与 POST /（加购）截断文案保持同一口径，避免商品详情页/购物车页 toast 文案不一致
+      message: target < quantity ? `库存仅剩 ${product.stock} 件，购物车数量已调整为 ${target}` : '数量已更新',
       truncated: target < quantity,
       data: { product_id: productId, quantity: target, stock: product.stock },
     })

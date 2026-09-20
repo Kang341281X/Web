@@ -98,7 +98,7 @@ onMounted(loadDashboard)
           <div><div class="dashboard-stat-value">{{ stats.totalProducts }}</div><div class="dashboard-stat-label">商品总数</div></div>
         </div>
       </el-card>
-      <el-card shadow="hover" body-style="padding: 20px;">
+      <el-card shadow="hover" body-style="padding: 20px;" class="dashboard-stat-clickable" @click="router.push('/admin/products?stock=low')">
         <div class="dashboard-stat-card">
           <div class="dashboard-stat-icon dashboard-stat-icon--red"><el-icon :size="28"><Warning /></el-icon></div>
           <div><div class="dashboard-stat-value">{{ stats.lowStock }}</div><div class="dashboard-stat-label">低库存预警(&lt;{{ stats.lowStockThreshold }})</div></div>

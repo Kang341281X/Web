@@ -52,6 +52,11 @@ router.put('/profile', requireAuth, upload.single('avatar'), async (req, res, ne
     const [rows] = await db.execute(`SELECT ${fields}, password FROM admin WHERE id = ?`, [req.admin.id])
     const current = rows[0]
     if (!current) return res.status(404).json({ success: false, message: '管理员不存在' })
+    // 首次登录必须改密：除「提交新密码」外，联系方式/头像等其他更新都拒绝，避免把改密页面变成"顺手改其他信息"的入口。
+    // 仅当请求里真的带了 new_password 时才放行（即真正在改密）；其他情况下与 requirePasswordChanged 一致返回 403 + PASSWORD_CHANGE_REQUIRED。
+    if (current.must_change_password && !req.body.new_password) {
+      return res.status(403).json({ success: false, code: 'PASSWORD_CHANGE_REQUIRED', message: '请先修改初始密码' })
+    }
     const updates = []; const values = []
     for (const field of ['phone', 'email']) {
       if (Object.hasOwn(req.body, field)) {

@@ -74,7 +74,9 @@ async function handleLogin() {
         localStorage.removeItem('admin_saved_username')
       }
       ElMessage.success(`欢迎回来，${result.user.username}`)
-      router.push('/admin')
+      // 首次登录（must_change_password=1）必须先在个人中心改密，跳转 /admin/profile；
+      // 路由守卫（router/index.js）+ 后端 requirePasswordChanged 双重拦截确保不会被绕过去。
+      router.push(result.user.must_change_password ? '/admin/profile' : '/admin')
     } else {
       ElMessage.error(result.message || '登录失败')
       // 验证码是一次性的，任何一次失败都已经把它作废，必须换一张再让用户重试
@@ -178,7 +180,6 @@ function goHome() {
 
       <div class="login-footer">
         <span class="login-back" @click="goHome">← 返回前台首页</span>
-        <small class="login-hint">默认账号: admin / 123456</small>
       </div>
     </div>
   </div>
@@ -253,10 +254,6 @@ function goHome() {
 }
 .login-back:hover {
   color: #409eff;
-}
-.login-hint {
-  font-size: 12px;
-  color: #c0c4cc;
 }
 
 /* iOS 聚焦小于 16px 的输入框会自动放大页面：手机上把后台登录的 el-input 字号提到 16px */

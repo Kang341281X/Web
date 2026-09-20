@@ -103,6 +103,13 @@ const router = createRouter({
 // 路由守卫：后台管理需要登录
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
+  // 首次登录必须改密：must_change_password=true 期间，除 /admin/profile 外的所有后台路由/接口一律拦截。
+  // 这里放在最前面：即便用户已经登录、未过期，也不允许绕过改密去访问其他后台页面。
+  // 后端 requirePasswordChanged 中间件会在 API 层做同样拦截（见 server/middleware/auth.js），
+  // 此处只是前端入口的第一道闸，避免渲染其他页面/触发其 onMounted 数据请求造成 403 噪音。
+  if (to.path.startsWith('/admin') && to.path !== '/admin/profile' && to.path !== '/admin/login' && userStore.adminUser?.must_change_password) {
+    return next('/admin/profile')
+  }
   // 需要登录但未登录 → 跳转登录页
   if (to.meta.requiresAuth && !userStore.isAdmin) {
     return next('/admin/login')

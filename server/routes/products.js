@@ -57,10 +57,13 @@ async function validateProduct(body, excludeId = null, adminUsername = '') {
   if (!categories[0]) throw Object.assign(new Error('商品分类不存在'), { status: 400 })
   return values
 }
-function whereClause({ keyword, categoryId, ids }) {
+function whereClause({ keyword, categoryId, ids, stockLevel }) {
   const clauses = []; const params = []
   if (keyword) { const like = `%${keyword}%`; clauses.push('(p.name LIKE ? OR p.sku LIKE ? OR p.manufacturer LIKE ? OR p.brand LIKE ?)'); params.push(like, like, like, like) }
   if (categoryId) { clauses.push('p.category_id = ?'); params.push(categoryId) }
+  // 库存等级过滤：与仪表盘「低库存预警」卡片共用同一阈值 LOW_STOCK_THRESHOLD（见下方 stats 接口），
+  // 保证卡片数字与列表筛出来的数量口径完全一致。
+  if (stockLevel === 'low') { clauses.push('p.stock < ?'); params.push(LOW_STOCK_THRESHOLD) }
   if (ids?.length) { clauses.push(`p.id IN (${ids.map(() => '?').join(',')})`); params.push(...ids) }
   return { sql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params }
 }
@@ -79,7 +82,9 @@ router.get('/', async (req, res, next) => {
   try {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1); const pageSize = Math.min(Math.max(Number.parseInt(req.query.page_size, 10) || 20, 1), 100)
     const keyword = String(req.query.keyword || '').trim(); const categoryId = req.query.category_id ? numberValue(req.query.category_id, '分类', { min: 1, integer: true }) : null
-    const where = whereClause({ keyword, categoryId }); const [[{ total }]] = await db.execute(`SELECT COUNT(*) AS total FROM product p ${where.sql}`, where.params)
+    // 支持 ?stock=low 过滤低库存商品，与仪表盘 /stats 接口共用 LOW_STOCK_THRESHOLD，统计口径一致
+    const stockLevel = String(req.query.stock || '').trim().toLowerCase() === 'low' ? 'low' : null
+    const where = whereClause({ keyword, categoryId, stockLevel }); const [[{ total }]] = await db.execute(`SELECT COUNT(*) AS total FROM product p ${where.sql}`, where.params)
     const [rows] = await db.execute(`SELECT ${selectFields} FROM product p JOIN category c ON c.id = p.category_id ${where.sql} ORDER BY p.updated_at DESC, p.id DESC LIMIT ? OFFSET ?`, [...where.params, pageSize, (page - 1) * pageSize])
     res.json({ success: true, data: rows.map(publicProduct), pagination: { page, page_size: pageSize, total } })
   } catch (error) { next(error) }
