@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useLanguageStore } from '../stores/language'
 import { fetchProducts, fetchCategories } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
+import ProductGridSkeleton from '../components/product/ProductGridSkeleton.vue'
 import CategoryCarousel from '../components/category/CategoryCarousel.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
@@ -79,7 +80,8 @@ onMounted(async () => {
         <h2>{{ language.t('products') }}</h2>
         <p class="section-count">{{ total }} {{ language.t('items') }}</p>
       </div>
-      <ProductGrid v-if="products.length" :products="products" />
+      <ProductGridSkeleton v-if="loading" />
+      <ProductGrid v-else-if="products.length" :products="products" />
       <EmptyState v-else :title="language.t('noResults')" :action="language.t('continueShopping')">{{ language.t('craftedDescription') }}</EmptyState>
       <div v-if="totalPages > 1" class="catalog-pagination">
         <el-pagination

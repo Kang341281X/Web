@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useLanguageStore } from '../stores/language'
 import { fetchProducts } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
+import ProductGridSkeleton from '../components/product/ProductGridSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
 // 每页显示 60 个商品，超出部分自动分到后续页
@@ -57,7 +58,8 @@ onMounted(search)
       <h1>{{ query ? `${language.t('resultFor')} "${query}"` : language.t('search') }}</h1>
       <p v-if="query">{{ total }} {{ language.t('items') }}</p>
     </div>
-    <ProductGrid v-if="results.length" :products="results" />
+    <ProductGridSkeleton v-if="loading" />
+    <ProductGrid v-else-if="results.length" :products="results" />
     <EmptyState v-else :title="language.t('noResults')" :action="language.t('continueShopping')">{{ query ? language.t('craftedDescription') : language.t('searchPlaceholder') }}</EmptyState>
 
     <div v-if="totalPages > 1" class="catalog-pagination">

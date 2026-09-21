@@ -4,6 +4,7 @@ import { useFavoritesStore } from '../stores/favorites'
 import { useLanguageStore } from '../stores/language'
 import { fetchProduct } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
+import ProductGridSkeleton from '../components/product/ProductGridSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 const favorites = useFavoritesStore(), language = useLanguageStore()
 const saved = ref([])
@@ -26,4 +27,4 @@ async function loadFavorites() {
 onMounted(loadFavorites)
 watch(() => favorites.ids.length, loadFavorites)
 </script>
-<template><section class="container page"><div class="page-intro"><h1>{{ language.t('favorites') }}</h1></div><ProductGrid v-if="saved.length" :products="saved" /><EmptyState v-else-if="!favorites.loading" icon="♡" :title="language.t('emptyFavorites')" :action="language.t('continueShopping')" /></section></template>
+<template><section class="container page"><div class="page-intro"><h1>{{ language.t('favorites') }}</h1></div><ProductGridSkeleton v-if="loading" /><ProductGrid v-else-if="saved.length" :products="saved" /><EmptyState v-else-if="!favorites.loading" icon="♡" :title="language.t('emptyFavorites')" :action="language.t('continueShopping')" /></section></template>

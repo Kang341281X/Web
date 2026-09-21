@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useLanguageStore } from '../stores/language'
 import { fetchProducts, fetchCategories } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
+import ProductGridSkeleton from '../components/product/ProductGridSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
 // 每页显示 60 个商品，超出部分自动分到后续页
@@ -56,7 +57,8 @@ onMounted(load)
 <template>
   <section class="container page category-page">
     <div class="page-intro"><h1>{{ language.category(categoryName) }}</h1></div>
-    <ProductGrid v-if="items.length" :products="items" />
+    <ProductGridSkeleton v-if="loading" />
+    <ProductGrid v-else-if="items.length" :products="items" />
     <EmptyState v-else :title="language.t('noResults')" :action="language.t('continueShopping')" />
 
     <div v-if="totalPages > 1" class="catalog-pagination">

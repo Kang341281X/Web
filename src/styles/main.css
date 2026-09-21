@@ -194,3 +194,20 @@
 .el-table .cell{padding:0 10px;line-height:1.5}
 .el-table th.el-table__cell,
 .el-table td.el-table__cell{padding:10px 0}
+
+/* 加载中骨架屏：复用 .product-grid 布局的列表占位 + 详情页骨架；shimmer 动画；尊重 prefers-reduced-motion。*/
+.skeleton-shimmer{background:linear-gradient(90deg,#f1ebe3 0%,#e9e2d8 50%,#f1ebe3 100%);background-size:200% 100%;animation:skeleton-shimmer 1.4s ease-in-out infinite;border-radius:2px}
+@keyframes skeleton-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@media (prefers-reduced-motion: reduce){.skeleton-shimmer{animation:none}}
+/* 列表骨架卡片（与 ProductGrid 共用 .product-grid 网格）*/
+.product-skeleton-card{display:flex;flex-direction:column;gap:10px}
+.product-skeleton-card .skeleton-image{aspect-ratio:.88}
+.product-skeleton-card .skeleton-line{height:12px}
+.product-skeleton-card .skeleton-line.short{height:10px}
+@media(max-width:760px){.product-skeleton-card .skeleton-line{height:11px}}
+/* 商品详情骨架（与 .detail-layout 网格一致）*/
+.detail-skeleton-gallery{aspect-ratio:1}
+.detail-skeleton-info{display:flex;flex-direction:column;gap:14px}
+.detail-skeleton-info .skeleton-line{height:14px}
+.detail-skeleton-info .skeleton-line.tall{height:36px}
+.detail-skeleton-info .skeleton-line.short{height:10px}
