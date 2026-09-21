@@ -35,7 +35,7 @@ npm run dev      # 前端 Vite，默认 5173
 ## 顾客下单 → 后台人工发货
 
 - 顾客在购物车结算弹窗里登录后可「提交订单」，系统在事务内校验并扣减库存、写入 `customer_order` / `order_item`，并清空已下单商品的购物车项；后台「订单管理」随即能看到新订单（`pending`），由管理员手工改状态发货。
-- 下单时会把收货信息与账号信息（`customer_username` 昵称快照、`customer_email` 邮箱快照，见 `server/sql/026`）一并快照进订单，之后账号资料被改或被删都不影响历史订单。
+- 下单时会把收货信息与账号信息（`customer_username` 用户名快照、`customer_email` 邮箱快照，见 `server/sql/026`）一并快照进订单，之后账号资料被改或被删都不影响历史订单。
 - 运费以服务端为准：下单事务内按前端声明的界面语言查 `shipping_rate` 重新计算并写入订单（计入 `total_amount`）；与页面展示值不一致（如后台刚调价）返回 `409` 提示刷新重试，详见「汇率与运费」。
 - 取消订单（顾客端或后台）只回补库存、不回滚销量；只有 `pending` / `confirmed` 可取消，`shipped` / `completed` / `cancelled` 为终态，重复取消幂等。
 - 「下载结算清单 Excel」作为提交订单之外的并行选项保留：无需登录，导出后可先与客服核对再下单。本期不涉及任何在线支付、收银台或支付回调。
@@ -44,7 +44,7 @@ npm run dev      # 前端 Vite，默认 5173
 
 - 登录凭证是**用户名**：`POST /api/customer/register` 需同时提交 `username` 与 `phone`。用户名为 4-20 位字母、数字或下划线且全局唯一，冲突返回 `409「用户名已被占用」`；手机号仍按原有规则校验、保持唯一，冲突返回 `409「该手机号已注册」`。
 - `phone` 仍是 `customer` 表的主键 / 内部唯一标识（订单、地址、评论都锚定 `customer.id`），只是不再用于登录，其结构与约束未做改动；`username` 见 `server/sql/030`。
-- 历史账号由迁移 030 自动回填 `username = phone`，因此老账号可直接用手机号当作用户名登录，之后可在个人中心改成其它用户名（改名前会做唯一性校验，重复则返回 `409`）。
+- 历史账号由迁移 030 自动回填 `username = phone`，因此老账号可直接用手机号当作用户名登录。**用户名一经注册不可修改**：它是登录凭证，个人中心（`Account.vue`）只展示不提供改名入口，`PUT /api/customer/profile` 也只接受手机号 / 邮箱 / 头像；后台同样没有改名接口。昵称字段已在迁移 035 中删除，展示名直接用用户名。
 - 本应用没有短信 / 邮件找回，忘记用户名时管理员可在后台「顾客管理」（支持按用户名搜索）查看。
 
 ## 结算与订单接口
@@ -73,6 +73,7 @@ npm run dev      # 前端 Vite，默认 5173
 
 - `GET /api/admin-orders`、`GET /api/admin-orders/stats`、`GET /api/admin-orders/:id`
 - `PUT /api/admin-orders/:id/status`
+- `POST /api/admin-orders/export`（导出订单 Excel，`mode: filter / selected`）
 
 ## 商品评论（登录可写，24 小时内可改，删除不限时）
 
@@ -131,14 +132,20 @@ npm run dev      # 前端 Vite，默认 5173
 - `POST /api/customer/login`：`{ username, password, captchaId, captchaText }`
 - `POST /api/admin/login`：`{ username, password, captchaId, captchaText }`
 
-> 后台为什么也要加：后台权限远高于顾客账号（可改商品、订单、管理员），且登录页上直接写着默认口令提示，是比顾客端更值得挡的撞库目标；复用已有实现只需增加一个挂载点，成本近乎为零。若希望后台保持无障碍登录（例如内部脚本直连 `/api/admin/login`），删掉 `server/routes/admin.js` 里那段 `consumeCaptcha` 校验即可恢复。
+> 后台为什么也要加：后台权限远高于顾客账号（可改商品、订单、管理员），是比顾客端更值得挡的撞库目标；复用已有实现只需增加一个挂载点，成本近乎为零。若希望后台保持无障碍登录（例如内部脚本直连 `/api/admin/login`），删掉 `server/routes/admin.js` 里那段 `consumeCaptcha` 校验即可恢复。
 
 可调环境变量（均有默认值，可不配置）：
 
 - `CAPTCHA_TTL_MS`：有效期，默认 `300000`（5 分钟）
 - `CAPTCHA_MAX_STORE`：同时存活的验证码条数上限，默认 `5000`
 
-当前未做（如需请另行确认）：按 IP / 手机号维度的登录频率限制、验证码接口本身的限流。图形验证码只提高单次尝试成本，配合限流效果更好。
+限流现状（`server/middleware/rateLimit.js`，按 IP 计数）：
+
+- 登录接口（管理员 + 顾客）挂 `loginLimiter`：15 分钟 10 次，`skipSuccessfulRequests` 使登录成功的请求不消耗额度，额度只留给失败尝试（防爆破）。
+- 注册接口挂 `registerLimiter`：每小时 10 次。注册本身无验证码，用限流兜底批量灌注册 / 用户名撞库探测。
+- 生产环境挂在 Nginx 后面时必须配置 `X-Forwarded-For` 并设置 `TRUST_PROXY`（见「上传到服务器」第 6 步），否则限流取不到真实客户端 IP，会退化成全站共用额度。
+
+仍未做（如需请另行确认）：按手机号维度的登录频率限制、验证码接口本身的限流。图形验证码只提高单次尝试成本，配合限流效果更好。
 
 ## 汇率与运费
 
@@ -174,7 +181,7 @@ npm run dev      # 前端 Vite，默认 5173
 ### 顾客接口
 
 - `POST /api/customer/register`（用户名 + 手机号 + 密码）、`POST /api/customer/login`（用户名 + 密码 + 验证码）—— 无需 token
-- `GET` / `PUT /api/customer/profile`（`PUT` 为 `multipart/form-data`，可改昵称 / 用户名 / 邮箱 / 头像）、`PUT /api/customer/password`
+- `GET` / `PUT /api/customer/profile`（`PUT` 为 `multipart/form-data`，可改手机号 / 邮箱 / 头像；**用户名不可改**）、`PUT /api/customer/password`
 - 收货地址：`GET` / `POST /api/customer/addresses`、`PUT` / `DELETE /api/customer/addresses/:id`、`PUT /api/customer/addresses/:id/set-default`
 - 购物车：`GET` / `POST` / `DELETE /api/customer/cart`、`PUT` / `DELETE /api/customer/cart/:productId`、`POST /api/customer/cart/merge`
 - 收藏：`GET` / `POST /api/customer/favorites`、`POST` / `DELETE /api/customer/favorites/:productId`、`POST /api/customer/favorites/merge`
@@ -189,9 +196,11 @@ npm run dev      # 前端 Vite，默认 5173
 - 商品图片：`POST /api/products/:id/images`、`PUT /api/products/:id/images/sort`、`POST /api/products/images/:imageId/replace`、`PUT /api/products/images/:imageId/set-main`、`DELETE /api/products/images/:imageId`
 - 商品导入（独立挂在 `/api/product-imports` 下）：`GET /api/product-imports/template`、`POST /api/product-imports/preview`、`POST /api/product-imports/confirm`、`POST /api/product-imports/online`、`POST /api/product-imports/:batchId/rename-folder`、`POST /api/product-imports/:batchId/create-category`、`PUT /api/product-imports/:batchId/rows/:row/sku`、`POST /api/product-imports/:batchId/generate-skus`、`DELETE /api/product-imports/:batchId`
 - 分类：`GET` / `POST /api/categories`、`PUT` / `DELETE /api/categories/:id`、`POST /api/categories/:id/image`、`DELETE /api/categories/:id/image`
-- 顾客：`GET /api/admin-customers`（`keyword` 匹配用户名 / 手机号 / 昵称 / 邮箱）、`GET /api/admin-customers/stats`、`GET /api/admin-customers/:id`、`PUT /api/admin-customers/:id/status`
-- 订单：`GET /api/admin-orders`、`GET /api/admin-orders/stats`、`GET /api/admin-orders/:id`、`PUT /api/admin-orders/:id/status`
+- 顾客：`GET /api/admin-customers`（`keyword` 匹配用户名 / 手机号 / 邮箱，可按 `status` 筛选）、`GET /api/admin-customers/stats`、`GET /api/admin-customers/:id`、`PUT /api/admin-customers/:id/status`
+- 订单：`GET /api/admin-orders`、`GET /api/admin-orders/stats`、`GET /api/admin-orders/:id`、`PUT /api/admin-orders/:id/status`、`POST /api/admin-orders/export`（导出订单 Excel，`mode: filter / selected`，与商品导出同一套交互）
+- 意向单（访客下载结算清单的只读记录）：`GET /api/admin-intent-orders`、`GET /api/admin-intent-orders/:id`
 - 评论：`GET /api/admin-reviews`、`GET /api/admin-reviews/stats`、`PUT /api/admin-reviews/:id/status`、`DELETE /api/admin-reviews/:id`
+- 收支明细（仅超级管理员，收入来自订单实时聚合、支出来自 `finance_expense` 手工登记）：`GET /api/admin/finance/summary`（`start_date` / `end_date` / `granularity=day|month`）、`GET /api/admin/finance/income`、`GET` / `POST /api/admin/finance/expenses`、`PUT` / `DELETE /api/admin/finance/expenses/:id`、`POST /api/admin/finance/export`（导出收入 / 支出明细 Excel）
 - 设置：`GET` / `PUT /api/settings`、`GET` / `POST /api/settings/socials`、`PUT` / `DELETE /api/settings/socials/:id`、`POST /api/settings/socials/:id/image`
 - 汇率与运费：见上文「汇率与运费」
 - 操作日志：`GET /api/logs`（`keyword` / `module` / `start_date` / `end_date` + 分页）
@@ -208,11 +217,11 @@ npm run dev
 ```
 
 # GitHub
-每次修改代码后，重复以下命令即可同步：
+每次修改代码后，重复以下命令即可同步（推送分支是 `master`）：
 ```
 git add .
 git commit -m ""
-git push origin main
+git push origin master
 ```
 
 
