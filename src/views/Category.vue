@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18nTitle } from '../composables/useI18nTitle'
 import { useRoute } from 'vue-router'
 import { useLanguageStore } from '../stores/language'
 import { fetchProducts, fetchCategories } from '../services/publicApi'
@@ -13,6 +14,9 @@ const PAGE_SIZE = 60
 const route = useRoute(), language = useLanguageStore()
 const categoryName = computed(() => route.params.category)
 const items = ref([])
+// 分类页标题：路由参数即分类名（由 CategoryNav / Header 等按 /category/${c.name} 生成）；
+// App.vue 在 /category/ 前缀下不设置 document.title，避免被覆盖。
+useI18nTitle(() => categoryName.value)
 const loading = ref(false)
 const page = ref(1)
 const total = ref(0)

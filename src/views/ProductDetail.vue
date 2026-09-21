@@ -6,6 +6,7 @@ import { useCartStore } from '../stores/cart'
 import { productBadge, productTitle, productDescription } from '../data/translations'
 import { fetchProduct, fetchProducts } from '../services/publicApi'
 import { useQuantityFeedback } from '../composables/useQuantityFeedback'
+import { useI18nTitle } from '../composables/useI18nTitle'
 import ProductGallery from '../components/product/ProductGallery.vue'
 import ProductGrid from '../components/product/ProductGrid.vue'
 import FavoriteButton from '../components/product/FavoriteButton.vue'
@@ -13,6 +14,9 @@ import ProductReviews from '../components/product/ProductReviews.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 const route = useRoute(), language = useLanguageStore(), cart = useCartStore()
 const product = ref(null); const related = ref([]); const quantity = ref(1); const added = ref(false); const activeTab = ref('description'); const loading = ref(false)
+// 商品详情页标题依赖当前商品的多语言标题，由本组件独立设置；
+// App.vue 在 /product/ 前缀下不设置 document.title，避免被覆盖。
+useI18nTitle(() => title.value)
 const title = computed(() => product.value ? productTitle(product.value, language.locale) : '')
 const description = computed(() => product.value ? productDescription(product.value, language.locale) : '')
 const badge = computed(() => product.value ? productBadge(product.value.badge, language.locale) : '')
