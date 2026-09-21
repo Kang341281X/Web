@@ -15,13 +15,13 @@ function publicProduct(product) {
   }
 }
 
-// 分类列表（只返回启用且有封面图的，用于首页轮播展示）
+// 分类列表（仅按启用状态过滤；无图的分类仍返回，由前端 CategoryCarousel 等统一显示占位图，避免导航 / 筛选 / 详情面包屑里「消失」）
 router.get('/categories', async (_req, res, next) => {
   try {
     const [rows] = await db.execute(
-      "SELECT id, name, parent_id, sort_order, image FROM category WHERE status = 1 AND image IS NOT NULL AND image != '' ORDER BY sort_order, id"
+      "SELECT id, name, parent_id, sort_order, image FROM category WHERE status = 1 ORDER BY sort_order, id"
     )
-    res.json({ success: true, data: rows.map(row => ({ ...row, image_url: storageService.getUrl(row.image) })) })
+    res.json({ success: true, data: rows.map(row => ({ ...row, image_url: row.image ? storageService.getUrl(row.image) : '' })) })
   } catch (error) {
     next(error)
   }

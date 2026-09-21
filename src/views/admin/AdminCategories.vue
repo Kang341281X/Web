@@ -174,6 +174,7 @@ onMounted(load)
             </el-upload>
             <el-button v-if="editingImageUrl && !createImagePreview" size="small" type="danger" @click="deleteImage">删除图片</el-button>
             <el-button v-if="createImagePreview" size="small" @click="clearPendingImage">移除图片</el-button>
+            <p class="dialog-image-hint">建议上传图片，用于首页分类轮播；未上传将显示占位图。</p>
           </div>
         </div>
       </el-form-item>
@@ -192,4 +193,5 @@ onMounted(load)
 .dialog-thumb { width:100px; height:135px; border-radius:4px }
 .dialog-thumb-placeholder { width:100px; height:135px; border-radius:4px; background:#f5f7fa; color:#c0c4cc; display:flex; align-items:center; justify-content:center; font-size:13px }
 .dialog-image-actions { display:flex; flex-direction:column; gap:8px; padding-top:4px }
+.dialog-image-hint { margin:6px 0 0; color:#909399; font-size:12px; line-height:1.5 }
 </style>
