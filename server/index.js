@@ -40,6 +40,11 @@ const app = express()
 const port = Number(process.env.PORT || 3001)
 const uploadDir = resolve(process.env.UPLOAD_DIR || './uploads')
 
+// trust proxy：生产环境挂在 Nginx 等反向代理后面时，让 req.ip 取 X-Forwarded-For 里的真实客户端 IP；
+// 不设置的话 req.ip 恒为 127.0.0.1，middleware/rateLimit.js 的登录/注册限流会退化成全站共用额度。
+// TRUST_PROXY 默认 1（只信任一层代理）；本地直连开发（不挂代理）可在 .env.development 设 TRUST_PROXY=false。
+app.set('trust proxy', process.env.TRUST_PROXY === 'false' ? false : Number(process.env.TRUST_PROXY) || 1)
+
 if (!process.env.JWT_SECRET) {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('生产环境必须配置 JWT_SECRET')

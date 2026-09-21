@@ -271,6 +271,18 @@ pm2 startup   # 让它开机自启
 - `/api/...` 之类的请求反向代理到 `127.0.0.1:3001`
 - 用 certbot / Let's Encrypt 签发免费 HTTPS 证书
 
+反代时必须把真实客户端 IP 传给后端，否则后端看到的 `req.ip` 恒为 `127.0.0.1`，登录/注册的按 IP 限流会退化成全站共用额度：
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:3001;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header Host $host;
+}
+```
+
+后端通过 `TRUST_PROXY` 环境变量决定是否信任该头（默认 `1`，即信任一层代理，`.env.production.example` 已带）；本地不挂代理直连开发时在 `.env.development` 里设 `TRUST_PROXY=false`。
+
 **7. 防火墙 / 安全组**
  只放行 80、443（和你需要的 22 端口做 SSH），**3001 端口不要对公网开放**。
 
