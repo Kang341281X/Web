@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import db from '../config/db.js'
 import { requireCustomerAuth } from '../middleware/customerAuth.js'
-import { loginLimiter } from '../middleware/rateLimit.js'
+import { loginLimiter, registerLimiter } from '../middleware/rateLimit.js'
 import storageService from '../services/storageService.js'
 import { consumeCaptcha } from '../services/captchaService.js'
 import { publicCustomer, requiredPhone, requiredUsername, requiredPassword, normalizeEmail, isUniqueViolation } from '../utils/customer.js'
@@ -15,8 +15,9 @@ const fields = 'id, phone, username, email, avatar, status, last_login_time, cre
 
 // 注册：用户名 + 手机号 + 密码（+ 可选邮箱）
 // 用户名是登录凭证（唯一）兼展示名（昵称），手机号仍是内部唯一标识 —— 两者各自校验、各自报错，互不混用。
-// 注册不需要验证码（人机校验只用于登录）；注册成功直接签发 token，注册完即是登录态。
-router.post('/register', async (req, res, next) => {
+// 注册不需要验证码（人机校验只用于登录），因此用 registerLimiter 兜底（每 IP 每小时 10 次）；
+// 注册成功直接签发 token，注册完即是登录态。
+router.post('/register', registerLimiter, async (req, res, next) => {
   try {
     const username = requiredUsername(req.body.username)
     const phone = requiredPhone(req.body.phone)

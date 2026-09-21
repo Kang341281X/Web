@@ -15,3 +15,17 @@ export const loginLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: '尝试次数过多，请稍后再试' }
 })
+
+/**
+ * 注册接口限流：每 IP 每小时最多 10 次。
+ * 注册没有验证码（人机校验只用于登录），是前台唯一无门槛的写入口，
+ * 用限流兜底批量灌注册 / 用户名撞库探测。与 loginLimiter 是两个独立实例，
+ * 额度互不干扰；成功注册同样计数（单 IP 一小时注册超 10 次本身就可疑）。
+ */
+export const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: '注册过于频繁，请稍后再试' }
+})
