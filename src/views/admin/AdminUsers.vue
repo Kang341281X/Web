@@ -8,7 +8,7 @@ import { useIsMobile } from '../../composables/useIsMobile'
 // 移动端去掉操作列 fixed，避免固定列吃掉窄屏本就稀缺的可视宽度
 const isMobile = useIsMobile()
 const loading = ref(false); const list = ref([]); const total = ref(0); const page = ref(1); const keyword = ref('')
-const dialogVisible = ref(false); const isEditing = ref(false); const selectedId = ref(null)
+const dialogVisible = ref(false); const isEditing = ref(false); const selectedId = ref(null); const saving = ref(false)
 const form = reactive({ username: '', password: '', real_name: '', phone: '', email: '', status: 1 })
 const rules = {
   username: [{ required: true, message: '请输入账号', trigger: 'blur' }, { min: 3, max: 50, message: '账号为 3-50 个字符', trigger: 'blur' }],
@@ -25,12 +25,15 @@ async function load() {
 function openCreate() { resetForm(); isEditing.value = false; dialogVisible.value = true }
 function openEdit(row) { Object.assign(form, { username: row.username, password: '', real_name: row.real_name, phone: row.phone || '', email: row.email || '', status: row.status }); selectedId.value = row.id; isEditing.value = true; dialogVisible.value = true }
 async function save() {
-  await formRef.value.validate()
+  if (saving.value) return
+  saving.value = true
   try {
+    // 校验失败：el-form 行内提示已足够，静默返回（finally 复位 saving），不弹「保存失败」toast
+    try { await formRef.value.validate() } catch { return }
     if (isEditing.value) await api.put(`/admins/${selectedId.value}`, { real_name: form.real_name, phone: form.phone, email: form.email, status: form.status })
     else await api.post('/admins', form)
     ElMessage.success(isEditing.value ? '管理员已更新' : '管理员已创建'); dialogVisible.value = false; load()
-  } catch (error) { ElMessage.error(error.response?.data?.message || '保存失败') }
+  } catch (error) { ElMessage.error(error.response?.data?.message || '保存失败') } finally { saving.value = false }
 }
 async function remove(row) {
   try { await ElMessageBox.confirm(`确认删除管理员“${row.username}”吗？`, '删除确认', { type: 'warning' }); await api.delete(`/admins/${row.id}`); ElMessage.success('已删除'); if (list.value.length === 1 && page.value > 1) page.value--; load() } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error(error.response?.data?.message || '删除失败') }
@@ -58,7 +61,7 @@ onMounted(load)
   </el-card>
   <el-dialog v-model="dialogVisible" :title="isEditing ? '编辑管理员' : '新增管理员'" width="min(520px, calc(100% - 32px))" @closed="resetForm">
     <el-form ref="formRef" :model="form" :rules="rules" label-width="92px"><el-form-item label="账号" prop="username"><el-input v-model="form.username" :disabled="isEditing" /></el-form-item><el-form-item v-if="!isEditing" label="初始密码" prop="password"><el-input v-model="form.password" type="password" show-password /></el-form-item><el-form-item label="姓名" prop="real_name"><el-input v-model="form.real_name" /></el-form-item><el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item><el-form-item label="邮箱" prop="email"><el-input v-model="form.email" /></el-form-item><el-form-item label="状态"><el-switch v-model="form.status" :active-value="1" :inactive-value="0" active-text="启用" inactive-text="禁用" /></el-form-item></el-form>
-    <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template>
+    <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template>
   </el-dialog>
 </template>
 
