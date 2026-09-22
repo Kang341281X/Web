@@ -14,6 +14,9 @@ const form = reactive({ name: '', parent_id: 0, sort_order: 0, status: 1 })
 const rules = { name: [{ required: true, message: '请输入分类名称', trigger: 'blur' }] }
 const parentOptions = computed(() => categories.value.filter(item => item.id !== editingId.value))
 const imageUploading = ref(false)
+// 分类保存请求的防重复提交状态：与图片上传的 imageUploading 互不干涉，
+// 保存按钮只关心「分类本身保存」这一次请求（category 表无唯一约束，连点两次会建出两条同名分类）
+const saving = ref(false)
 // 已保存的分类图片地址（编辑时读取自列表行数据）
 const editingImageUrl = ref(null)
 // 新增分类时暂存的待上传图片与本地预览
@@ -58,8 +61,11 @@ function edit(row) {
   dialogVisible.value = true
 }
 async function save() {
-  await formRef.value.validate()
+  if (saving.value) return
+  saving.value = true
   try {
+    // 校验失败：el-form 自带行内提示，静默返回即可（finally 会复位 saving），不弹「保存失败」toast
+    try { await formRef.value.validate() } catch { return }
     let savedId = editingId.value
     if (savedId) {
       await api.put(`/categories/${savedId}`, form)
@@ -83,6 +89,8 @@ async function save() {
     load()
   } catch (error) {
     ElMessage.error(error.response?.data?.message || '保存失败')
+  } finally {
+    saving.value = false
   }
 }
 async function remove(row) {
@@ -179,7 +187,7 @@ onMounted(load)
         </div>
       </el-form-item>
     </el-form>
-    <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template>
+    <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template>
   </el-dialog>
 </template>
 
