@@ -23,31 +23,57 @@ const pageSummary = computed(() => language.t('pageSummary')
   .replace('{page}', String(page.value))
   .replace('{total}', String(totalPages.value)))
 
+// 输入防抖：停顿 350ms 后才真正发请求，避免每敲一个字符都打一次接口。
+// 与 SearchBar.vue 的联想输入共用同一套「setTimeout + 自增序号」手写模式，不引入新依赖。
+const SEARCH_DEBOUNCE = 350
+let searchTimer = null
+// 自增请求序号：每次发请求都带一个，响应回来时只认「当前最新一次」，
+// 慢响应若晚于更新的请求到达，这次响应直接作废，不写 results/total
+let latestToken = 0
+
 async function search() {
-  if (!query.value) { results.value = []; total.value = 0; return }
+  const token = ++latestToken
+  if (!query.value) { results.value = []; total.value = 0; loading.value = false; return }
   loading.value = true
   try {
     const { products, pagination } = await fetchProducts({ page: page.value, page_size: PAGE_SIZE, keyword: query.value })
+    if (token !== latestToken) return // 已有更新的请求发出，这次响应作废
     results.value = products
     total.value = Number(pagination?.total) || products.length
   } catch (error) {
+    if (token !== latestToken) return
     console.error('Search failed:', error)
     results.value = []
     total.value = 0
   } finally {
-    loading.value = false
+    if (token === latestToken) loading.value = false
   }
 }
 
-// 翻页：重新请求对应 page 的数据并滚回顶部，让用户明确知道自己在第几页
+// 翻页：重新请求对应 page 的数据并滚回顶部，让用户明确知道自己在第几页。
+// 翻页直接调 search()，不经过防抖——用户点击分页后应当立即响应
 async function changePage(next) {
   page.value = Number(next) || 1
   window.scrollTo({ top: 0, behavior: 'smooth' })
   await search()
 }
 
-// 换关键词后回到第 1 页，否则可能停在新结果范围之外的页码上
-watch(query, () => { page.value = 1; search() })
+// 换关键词后回到第 1 页，否则可能停在新结果范围之外的页码上。
+// 关键词变化走 350ms 防抖；同时立刻作废在途请求并清掉待发的旧防抖，
+// 保证「快速输入后立刻清空」时：清空分支同步清结果、旧响应被序号拦截，不会残留上一次的搜索内容。
+watch(query, () => {
+  clearTimeout(searchTimer)
+  latestToken++ // 立刻作废在途请求，防止防抖窗口内旧响应写入已变化的关键词结果
+  page.value = 1
+  if (!query.value) {
+    // 清空关键词：结果立即清掉，不等防抖
+    results.value = []
+    total.value = 0
+    loading.value = false
+    return
+  }
+  searchTimer = setTimeout(search, SEARCH_DEBOUNCE)
+})
 onMounted(search)
 </script>
 
