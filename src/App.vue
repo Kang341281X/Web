@@ -7,6 +7,7 @@ import Footer from './components/footer/Footer.vue'
 import MobileBottomNav from './components/common/MobileBottomNav.vue'
 import LoginModal from './components/common/LoginModal.vue'
 import BackToTop from './components/common/BackToTop.vue'
+import RouteProgressBar from './components/common/RouteProgressBar.vue'
 
 const route = useRoute()
 const language = useLanguageStore()
@@ -33,6 +34,8 @@ watch(
 </script>
 
 <template>
+  <!-- 路由进度条放在 isAdmin 判断之外：后台路由同样是懒加载的，前后台都需要导航反馈 -->
+  <RouteProgressBar />
   <template v-if="isAdmin">
     <RouterView />
   </template>

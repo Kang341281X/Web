@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '../stores/user'
+import { useRouteProgress } from '../composables/useRouteProgress'
 import Home from '../views/Home.vue'
 import Products from '../views/Products.vue'
 import ProductDetail from '../views/ProductDetail.vue'
@@ -101,7 +102,13 @@ const router = createRouter({
 })
 
 // 路由守卫：后台管理需要登录
+// 顶部进度条：beforeEach 统一 start()，afterEach / onError 统一 finish()。
+// 守卫里的 return next('/xxx') 重定向分支不需要各自调 finish()——重定向会触发第二次导航，
+// 第二次 beforeEach 的 start() 会取消上一次尚未显示的计时（见 useRouteProgress），
+// 最终由重定向目标导航的 afterEach 收尾，整条进度条只有一次生命周期，不会闪两下。
+const { start, finish } = useRouteProgress()
 router.beforeEach((to, from, next) => {
+  start()
   const userStore = useUserStore()
   // 首次登录必须改密：must_change_password=true 期间，除 /admin/profile 外的所有后台路由/接口一律拦截。
   // 这里放在最前面：即便用户已经登录、未过期，也不允许绕过改密去访问其他后台页面。
@@ -123,5 +130,9 @@ router.beforeEach((to, from, next) => {
   }
   next()
 })
+// afterEach 对失败导航（取消 / 中止 / 重复）也会带 failure 参数触发，finish() 幂等可安全重复调用
+router.afterEach(() => finish())
+// 懒加载 chunk 请求失败（弱网 / 发版后旧 chunk 404）走 onError 兜底，确保进度条不会卡住不消失
+router.onError(() => finish())
 
 export default router
