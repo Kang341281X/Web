@@ -25,12 +25,14 @@ const router = Router()
  * 详见 server/services/captchaService.js 顶部说明。
  */
 router.get('/captcha', (_req, res) => {
-  const { captchaId, svg, expiresIn } = issueCaptcha()
+  const { captchaId, svg, expiresIn, text } = issueCaptcha()
   res.json({
     success: true,
     captchaId,
     image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
     expiresIn,
+    // 仅供自动化测试（playwright 接口用例）读取验证码文本；生产/开发环境未设置该变量时绝不回显。
+    ...(process.env.CAPTCHA_TEST_ECHO === '1' ? { text } : {}),
   })
 })
 

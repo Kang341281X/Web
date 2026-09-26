@@ -142,8 +142,9 @@ function generateOrderNo() {
 // 与 changeOrderStatus 里取消回补库存（stock = stock + ?）共用同一张表的行级更新，
 // 任何并发下库存都不会被扣成负数。
 //
-// 不修改 product.sales：与 restoreOrderStock 的口径保持一致（销量按历史累计售出统计，取消不回滚），
-// 故下单/取消都只操作 stock，取消时能精确回补下单扣掉的数量。
+// product.sales 在下单扣库存的同一事务内累加（见 createCustomerOrder），
+// 与 restoreOrderStock 的口径保持一致（销量按历史累计售出统计，取消不回滚），
+// 故取消时只回补 stock，不影响 sales。
 //
 // 运费：不信任前端传入的金额。前端只声明下单时的界面语言（locale）与页面展示的运费值
 // （shippingFee）；服务端在下单事务内按 locale 查 shipping_rate.fee_cny 重新计算，
@@ -200,9 +201,11 @@ export async function createCustomerOrder({ customer, address, items, remark = n
       if (!product) throw Object.assign(new Error('商品不存在或已下架'), { status: 400 })
       if (!product.status) throw Object.assign(new Error(`「${product.name}」已下架`), { status: 400 })
 
+      // 同一条 UPDATE 内扣库存并累加销量，保证两者原子生效；
+      // 条件 stock >= ? 保证库存不足时整条语句不生效，sales 也不会被多加
       const [result] = await connection.execute(
-        "UPDATE product SET stock = stock - ?, updated_at = datetime('now') WHERE id = ? AND stock >= ?",
-        [quantity, productId, quantity]
+        "UPDATE product SET stock = stock - ?, sales = sales + ?, updated_at = datetime('now') WHERE id = ? AND stock >= ?",
+        [quantity, quantity, productId, quantity]
       )
       if (!result.affectedRows) throw Object.assign(new Error(`「${product.name}」库存不足`), { status: 400 })
 

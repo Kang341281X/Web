@@ -64,9 +64,12 @@ export function issueCaptcha() {
 
   const captchaId = randomUUID()
   // 统一小写比较，用户不必纠结大小写
-  store.set(captchaId, { text: String(text).toLowerCase(), expiresAt: Date.now() + TTL_MS })
+  const normalized = String(text).toLowerCase()
+  store.set(captchaId, { text: normalized, expiresAt: Date.now() + TTL_MS })
 
-  return { captchaId, svg: data, expiresIn: Math.floor(TTL_MS / 1000) }
+  // text 一并返回：仅给 routes/captcha.js 在 CAPTCHA_TEST_ECHO 环境变量显式开启时回显给自动化测试用，
+  // 未开启时调用方拿不到（svg 是 path 绘制的字形，机器无法从图片里还原文本）。
+  return { captchaId, svg: data, expiresIn: Math.floor(TTL_MS / 1000), text: normalized }
 }
 
 /**

@@ -8,12 +8,14 @@ const USERNAME_PATTERN = /^[A-Za-z0-9_]{4,20}$/
 
 export function requiredPhone(value) {
   const phone = String(value || '').trim()
+  if (!phone) throw Object.assign(new Error('手机号不能为空'), { status: 400 })
   if (!PHONE_PATTERN.test(phone)) throw Object.assign(new Error('手机号格式不正确'), { status: 400 })
   return phone
 }
 
 export function requiredPassword(value, label = '密码') {
   const password = String(value || '')
+  if (!password) throw Object.assign(new Error(`${label}不能为空`), { status: 400 })
   if (password.length < 6 || password.length > 128) {
     throw Object.assign(new Error(`${label}长度应为 6-128 个字符`), { status: 400 })
   }
@@ -22,6 +24,7 @@ export function requiredPassword(value, label = '密码') {
 
 export function requiredUsername(value) {
   const username = String(value || '').trim()
+  if (!username) throw Object.assign(new Error('用户名不能为空'), { status: 400 })
   if (!USERNAME_PATTERN.test(username)) {
     throw Object.assign(new Error('用户名需为 4-20 位字母、数字或下划线'), { status: 400 })
   }
@@ -39,9 +42,10 @@ export function normalizeEmail(value) {
   return email || null
 }
 
-// 必填文本：去空格后校验长度
+// 必填文本：值为空提示「不能为空」，非空但长度不达标才提示长度范围
 export function requiredText(value, label, { min = 1, max = 255 } = {}) {
   const text = String(value || '').trim()
+  if (!text) throw Object.assign(new Error(`${label}不能为空`), { status: 400 })
   if (text.length < min || text.length > max) {
     throw Object.assign(new Error(`${label}长度应为 ${min}-${max} 个字符`), { status: 400 })
   }

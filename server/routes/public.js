@@ -65,7 +65,7 @@ router.get('/products', async (req, res, next) => {
     } else if (sort === 'newest') {
       orderClause = 'ORDER BY p.created_at DESC, p.id DESC'
     } else if (sort === 'rating') {
-      orderClause = 'ORDER BY p.sales DESC, p.id DESC'
+      orderClause = 'ORDER BY p.rating DESC, p.review_count DESC, p.id DESC'
     }
 
     const [[{ total }]] = await db.execute(`SELECT COUNT(*) AS total FROM product p ${where}`, params)

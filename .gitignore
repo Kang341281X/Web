@@ -5,26 +5,13 @@ node_modules
 dist
 .tmp-dist/
 
-# 环境变量（本地 / 生产密钥不入库；.env.*.example 作为模板保留）
-.env
-.env.development
-.env.production
+# 测试（playwright）：测试用数据库副本与运行产物，每次 npm test 重新生成
+server/test.db*
+test-results/
+playwright-report/
+
 
 # 用户上传内容（运行时生成，不入库；仅保留目录占位）
 # 注意用 uploads/* 而不是 uploads：父目录被整体忽略时，后面的 ! 例外规则不会生效
 uploads/*
 !/uploads/.gitkeep
-
-# 本地 SQLite 数据库与临时文件（data.db / tmp*.db 及 WAL / SHM）
-server/data.db*
-server/tmp*.db
-# seed 脚本执行前的数据库备份目录（server/backup-<时间戳>/）
-server/backup-*/
-*.db-shm
-*.db-wal
-*.sqlite
-*.sqlite3
-
-# 本地调试日志（npm run dev / node server/index.js 等命令的终端输出重定向）
-# 若某个功能确需把 .log 纳入版本库，单独加一条 !path/to/that.log 例外即可
-*.log
