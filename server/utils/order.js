@@ -1,6 +1,7 @@
 import db from '../config/db.js'
 import storageService from '../services/storageService.js'
 import { findProduct } from './customerShop.js'
+import { generateOrderNo } from './orderNo.js'
 
 // 订单状态机：取值与 022_customer_order.sql 的 CHECK 约束保持一致。
 //
@@ -125,15 +126,8 @@ export async function changeOrderStatus(orderId, status, { handledBy = null, han
   } catch (error) { await connection.rollback(); throw error } finally { connection.release() }
 }
 
-// 订单号：CO + 年月日时分秒 + 4 位随机数。
-// 种子脚本生成的假订单号以 SD 开头（见 server/scripts/seed-dev-data.js），真实下单固定用 CO 前缀，
-// 两者在库里一眼可区分，也便于排查「某条订单是真实下单还是造的数据」。
-function generateOrderNo() {
-  const now = new Date()
-  const pad = value => String(value).padStart(2, '0')
-  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  return `CO${stamp}${Math.floor(1000 + Math.random() * 9000)}`
-}
+// 订单号生成与唯一约束冲突判定见 utils/orderNo.js：
+// CO + 年月日时分秒 + 毫秒 + 6 位随机数；撞号时由路由层兜底返回 409（见 routes/customerOrder.js）。
 
 // 顾客下单（事务）：校验并扣减库存 → 写入订单主表 + 明细 → 清空已下单商品对应的购物车项。
 //

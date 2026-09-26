@@ -47,10 +47,16 @@ async function validateProduct(body, excludeId = null, adminUsername = '') {
     name: requiredText(body.name, '商品名称', { min: 1, max: 200 }),
     categoryId: numberValue(body.category_id, '商品分类', { min: 1, integer: true }),
     price: numberValue(body.price, '售价'), originalPrice: numberValue(body.original_price, '原价', { nullable: true }),
-    stock: numberValue(body.stock, '库存', { integer: true }), sales: numberValue(body.sales ?? 0, '销量', { integer: true }),
     unit: optionalText(body.unit, 20), manufacturer: optionalText(body.manufacturer, 100), brand: optionalText(body.brand, 100),
     description: optionalText(body.description, 5000), detail: optionalText(body.detail, 1000000), status: Number(body.status) === 0 ? 0 : 1,
     sku, isCustomizable, rating
+  }
+  // 库存 / 销量只在「新增商品」时随表单写入（设定初始值）；
+  // 编辑（excludeId !== null）时不再接受这两个字段，改走 PATCH /:id/stock（库存增量调整）
+  // 与顾客下单的原子扣减，避免「编辑表单里的过期快照整行覆盖」造成丢失更新（销量被静默回滚）。
+  if (excludeId === null) {
+    values.stock = numberValue(body.stock, '库存', { integer: true })
+    values.sales = numberValue(body.sales ?? 0, '销量', { integer: true })
   }
   if (values.originalPrice !== null && values.originalPrice < values.price) throw Object.assign(new Error('原价不能低于售价'), { status: 400 })
   const [categories] = await db.execute('SELECT id FROM category WHERE id = ?', [values.categoryId])
@@ -146,13 +152,39 @@ router.post('/', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const id = Number(req.params.id); const item = await validateProduct(req.body, id, req.admin.username)
-    const [result] = await db.execute('UPDATE product SET name = ?, category_id = ?, price = ?, original_price = ?, stock = ?, sales = ?, unit = ?, manufacturer = ?, brand = ?, description = ?, detail = ?, status = ?, sku = ?, is_customizable = ?, rating = ? WHERE id = ?', [item.name, item.categoryId, item.price, item.originalPrice, item.stock, item.sales, item.unit, item.manufacturer, item.brand, item.description, item.detail, item.status, item.sku, item.isCustomizable, item.rating, id])
+    // 库存 / 销量不在编辑商品时更新（见 validateProduct 注释），只能通过
+    // PATCH /:id/stock 做增量调整，或由顾客下单的原子扣减推进，杜绝丢失更新
+    const [result] = await db.execute('UPDATE product SET name = ?, category_id = ?, price = ?, original_price = ?, unit = ?, manufacturer = ?, brand = ?, description = ?, detail = ?, status = ?, sku = ?, is_customizable = ?, rating = ? WHERE id = ?', [item.name, item.categoryId, item.price, item.originalPrice, item.unit, item.manufacturer, item.brand, item.description, item.detail, item.status, item.sku, item.isCustomizable, item.rating, id])
     if (!result.affectedRows) return res.status(404).json({ success: false, message: '商品不存在' })
     await writeOperationLog(req.admin.id, 'update_product', String(id), req); res.json({ success: true, data: await getProduct(id) })
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE constraint failed/i.test(error.message || '')) return res.status(409).json({ success: false, message: '商品编号已存在' })
     next(error)
   }
+})
+// 库存调整（增量更新）：stock = stock + delta，与顾客下单的 stock = stock - ? 一样是原子行级更新，
+// 不依赖调用方读到的旧值，天然规避「编辑商品表单的过期库存快照覆盖真实库存」的丢失更新问题。
+//   body: { delta: ±N }（兼容 quantity 字段名），可选 { reason } 说明调整原因（补货 / 盘点等）
+//   stock + delta < 0 时整条不生效并返回 400；调整后返回最新库存便于前端即时刷新展示。
+router.patch('/:id/stock', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) return res.status(404).json({ success: false, message: '商品不存在' })
+    const body = req.body || {}
+    const delta = Number(body.delta ?? body.quantity)
+    const reason = optionalText(body.reason, 200)
+    if (!Number.isInteger(delta) || delta === 0) return res.status(400).json({ success: false, message: '调整数量必须是非零整数' })
+
+    const [rows] = await db.execute('SELECT id, name, stock FROM product WHERE id = ?', [id])
+    if (!rows[0]) return res.status(404).json({ success: false, message: '商品不存在' })
+
+    // 条件更新：WHERE stock + ? >= 0 保证库存不会被调负；affectedRows = 0 即当前库存不足以下调
+    const [result] = await db.execute("UPDATE product SET stock = stock + ?, updated_at = datetime('now') WHERE id = ? AND stock + ? >= 0", [delta, id, delta])
+    if (!result.affectedRows) return res.status(400).json({ success: false, message: `调整后库存不能为负数（当前库存 ${rows[0].stock}）` })
+
+    await writeOperationLog(req.admin.id, 'adjust_stock', `${rows[0].name}：库存 ${delta > 0 ? '+' : ''}${delta}（${rows[0].stock} → ${rows[0].stock + delta}）${reason ? `，原因：${reason}` : ''}`, req)
+    res.json({ success: true, message: '库存已调整', data: { id, delta, stock: rows[0].stock + delta } })
+  } catch (error) { next(error) }
 })
 async function deleteProducts(ids, adminId, req) {
   const uniqueIds = [...new Set(ids.map(Number).filter(Number.isInteger))]

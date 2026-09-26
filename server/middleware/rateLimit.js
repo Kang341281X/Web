@@ -29,3 +29,17 @@ export const registerLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: '注册过于频繁，请稍后再试' }
 })
+
+/**
+ * 公开写接口限流：每 IP 每分钟最多 20 次。
+ * 用于无需登录但有明显 CPU / IO 成本的公开接口（如结算清单 Excel 导出：
+ * 每次请求都要读模板、解压、剔除批注关系、写行、重新打包），
+ * 防止匿名用户高频刷接口占用服务器资源。计数不区分成败（正常用户导出一次即用一次）。
+ */
+export const publicWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: '操作过于频繁，请稍后再试' }
+})

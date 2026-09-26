@@ -5,10 +5,26 @@ node_modules
 dist
 .tmp-dist/
 
-# 测试（playwright）：测试用数据库副本与运行产物，每次 npm test 重新生成
+# SQLite 数据库与 WAL/SHM 伴随文件（运行时生成/写入，含真实用户数据，不入库）
+# data.db 由 db:migrate + seed 重建；test.db 为测试副本；tmp*.db 为调试残留；backup-*/ 为手工备份
+server/data.db*
 server/test.db*
+server/tmp*.db*
+server/backup-*/
+
+# 运行日志（本地 dev 脚本重定向输出，不入库）
+*.log
+
+# 测试（playwright）：测试用数据库副本与运行产物，每次 npm test 重新生成
 test-results/
 playwright-report/
+
+# 环境变量：真实配置含部署差异与密钥，不入库；只提交 *.example 模板
+.env
+.env.*
+!.env.example
+!.env.production.example
+!.env.development.example
 
 
 # 用户上传内容（运行时生成，不入库；仅保留目录占位）

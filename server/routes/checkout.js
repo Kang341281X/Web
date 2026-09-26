@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import AdmZip from 'adm-zip'
 import ExcelJS from 'exceljs'
+import { publicWriteLimiter } from '../middleware/rateLimit.js'
 
 const router = Router()
 
@@ -43,11 +44,17 @@ function round2(value) {
 // POST /api/public/checkout/export
 // 接收购物车明细 items: [{ sku, name, quantity, price }]
 // 基于模板（表头已冻结在第一行）从第 2 行写入数据，并保留模板样式
-router.post('/checkout/export', async (req, res, next) => {
+// 公开接口（无需登录）且有模板解压/重打包成本：挂公开写限流 + 条目数上限双重防护
+const MAX_EXPORT_ITEMS = 200
+
+router.post('/checkout/export', publicWriteLimiter, async (req, res, next) => {
   try {
     const items = Array.isArray(req.body?.items) ? req.body.items : []
     if (!items.length) {
       return res.status(400).json({ success: false, message: '购物车中没有可导出的商品' })
+    }
+    if (items.length > MAX_EXPORT_ITEMS) {
+      return res.status(400).json({ success: false, message: `导出条目过多（最多 ${MAX_EXPORT_ITEMS} 条），请精简购物车后重试` })
     }
     if (!existsSync(templatePath)) {
       return res.status(500).json({ success: false, message: '结算清单模板文件不存在' })

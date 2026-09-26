@@ -35,6 +35,7 @@ const LOG_MAP = {
   login: { module: '登录', type: '登录' },
   create_product: { module: '商品管理', type: '新增商品' },
   update_product: { module: '商品管理', type: '编辑商品' },
+  adjust_stock: { module: '商品管理', type: '调整库存' },
   delete_products: { module: '商品管理', type: '删除商品' },
   import_products: { module: '商品管理', type: '导入确认' },
   import_products_online: { module: '商品管理', type: '在线表格批量新增' },

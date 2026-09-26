@@ -3,6 +3,7 @@ import db from '../config/db.js'
 import { requireCustomerAuth } from '../middleware/customerAuth.js'
 import { optionalText } from '../utils/customer.js'
 import { publicOrder, findOrderDetail, changeOrderStatus, orderStatusLabel, isValidOrderStatus, createCustomerOrder } from '../utils/order.js'
+import { isUniqueConstraintError } from '../utils/orderNo.js'
 
 // 顾客端「我的订单」：下单 + 列表 + 详情 + 取消。
 // 下单/取消的库存处理都收敛在 utils/order.js，与管理端订单接口共用同一份实现。
@@ -77,7 +78,15 @@ router.post('/', async (req, res, next) => {
       shippingFee: body.shipping_fee,
     })
     res.status(201).json({ success: true, message: '订单已提交，我们会尽快与您确认', data: order })
-  } catch (error) { next(error) }
+  } catch (error) {
+    // 订单号唯一索引兜底（与 routes/products.js 的 SKU 冲突同一套识别口径）：
+    // order_no 撞号的概率已被毫秒 + 6 位随机数压到极低，但 UNIQUE 约束仍可能触发，
+    // 此时事务已回滚、库存与购物车均未受影响，返回 409 引导顾客重试，而不是 500。
+    if (isUniqueConstraintError(error)) {
+      return res.status(409).json({ success: false, message: '下单太频繁，请重试一次' })
+    }
+    next(error)
+  }
 })
 
 // 我的订单列表：分页 + 可选状态筛选，附商品种类数与商品总件数，列表页无需再拉详情

@@ -24,6 +24,8 @@ const dialogVisible = ref(false); const saving = ref(false); const formRef = ref
 const rules = { name: [{ required: true, message: '请输入商品名称', trigger: 'blur' }], category_id: [{ required: true, message: '请选择分类', trigger: 'change' }], price: [{ required: true, message: '请输入售价', trigger: 'blur' }] }
 // 裁剪对话框状态
 const cropVisible = ref(false); const cropSrc = ref(''); const cropImageId = ref(null); const cropNewUid = ref(null)
+// 库存调整弹窗状态：编辑商品时库存不随表单提交（防丢失更新），改为独立的增量调整接口
+const stockDialogVisible = ref(false); const stockSaving = ref(false); const stockForm = reactive({ delta: 1, reason: '' })
 // 新文件计数器，用于生成临时 ID
 let newFileSeq = 0
 function defaultForm() { return { id: null, name: '', category_id: '', price: 0, original_price: null, stock: 0, sales: 0, unit: '', manufacturer: '', brand: '', sku: '', is_customizable: '0', rating: 5, description: '', detail: '', status: 1 } }
@@ -73,7 +75,12 @@ async function save() {
     saving.value = true
     let productId = form.id
     let savedSku = ''
-    if (editing.value) await api.put(`/products/${productId}`, form)
+    if (editing.value) {
+      // 编辑时不提交 stock / sales：库存走「调整库存」增量接口（PATCH /:id/stock），
+      // 销量由顾客下单推进；否则弹窗打开时的过期快照会整行覆盖期间的真实变动（丢失更新）
+      const { stock, sales, ...basic } = form
+      await api.put(`/products/${productId}`, basic)
+    }
     else { const { data } = await api.post('/products', form); productId = data.data.id; form.id = productId; savedSku = data.data.sku }
     await uploadNewFiles(productId)
     // 只对已保存的图片排序（新图已在上传时处理）
@@ -81,6 +88,18 @@ async function save() {
     if (savedImages.length) await api.put(`/products/${productId}/images/sort`, { images: savedImages.map((image, index) => ({ id: image.id, sort_order: index })) })
     ElMessage.success(savedSku ? `商品已保存，商品编号：${savedSku}` : '商品已保存'); dialogVisible.value = false; load()
   } catch (error) { ElMessage.error(error.response?.data?.message || '保存失败') } finally { saving.value = false }
+}
+// 打开「调整库存」小弹窗：输入增量（正数补货 / 负数下减）与原因
+function openAdjustStock() { stockForm.delta = 1; stockForm.reason = ''; stockDialogVisible.value = true }
+async function submitAdjustStock() {
+  try {
+    stockSaving.value = true
+    const { data } = await api.patch(`/products/${form.id}/stock`, { delta: stockForm.delta, reason: stockForm.reason || undefined })
+    form.stock = data.data.stock
+    stockDialogVisible.value = false
+    ElMessage.success(`库存已调整，当前库存：${data.data.stock}`)
+    load()
+  } catch (error) { ElMessage.error(error.response?.data?.message || '库存调整失败') } finally { stockSaving.value = false }
 }
 async function removeImage(image) {
   // 新图片直接从前端移除，无需调用后端
@@ -269,7 +288,17 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
             <el-form-item label="原价"><el-input-number v-model="form.original_price" :min="0" :precision="2" style="width:100%" /></el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="6">
-            <el-form-item label="库存"><el-input-number v-model="form.stock" :min="0" style="width:100%" /></el-form-item>
+            <el-form-item label="库存">
+              <!-- 新增：设定初始库存；编辑：只读展示 + 独立「调整库存」增量入口，防止过期快照覆盖真实库存 -->
+              <template v-if="editing">
+                <div class="stock-row">
+                  <span class="stock-current">{{ form.stock }}</span>
+                  <el-button type="primary" plain @click="openAdjustStock">调整库存</el-button>
+                </div>
+                <div class="sku-immutable-tip">库存不随商品编辑提交，请通过「调整库存」修改，避免覆盖下单期间的库存变动</div>
+              </template>
+              <el-input-number v-else v-model="form.stock" :min="0" style="width:100%" />
+            </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="商品评分"><el-input-number v-model="form.rating" :min="0" :max="5" :step="0.5" :precision="2" step-strictly style="width:100%" /></el-form-item>
@@ -338,6 +367,20 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
     </template>
   </el-dialog>
 <ImportDialog v-model:visible="importDialogVisible" @success="onImportSuccess" @category-created="onCategoryCreated" />
+<!-- 调整库存：独立于商品编辑的增量调整弹窗（append-to-body 避免嵌套层级问题） -->
+<el-dialog v-model="stockDialogVisible" title="调整库存" width="min(420px, calc(100% - 24px))" append-to-body destroy-on-close>
+  <el-form label-position="top">
+    <el-form-item label="当前库存"><span class="stock-current">{{ form.stock }}</span></el-form-item>
+    <el-form-item label="调整数量（正数补货，负数下减）">
+      <el-input-number v-model="stockForm.delta" :step="1" step-strictly style="width:100%" placeholder="如 100 或 -20" />
+    </el-form-item>
+    <el-form-item label="调整原因（选填）"><el-input v-model="stockForm.reason" maxlength="200" placeholder="如：补货 / 盘点修正" /></el-form-item>
+  </el-form>
+  <template #footer>
+    <el-button @click="stockDialogVisible = false">取消</el-button>
+    <el-button type="primary" :loading="stockSaving" :disabled="!stockForm.delta" @click="submitAdjustStock">确认调整</el-button>
+  </template>
+</el-dialog>
 <OnlineCreateDialog v-model:visible="onlineDialogVisible" @success="onOnlineSuccess" />
 <ImageCropDialog v-model:visible="cropVisible" :src="cropSrc" :image-id="cropImageId" :product-id="form.id" @cropped="onCropped" />
 </template>
@@ -379,6 +422,9 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
 .image-upload-tip { margin-top:12px; font-size:12px; color:#909399; line-height:1.6 }
 .dragging { opacity:.4 }
 .sku-row { display:flex; align-items:center; gap:8px; width:100% }
+/* 编辑态库存：当前值 + 调整入口横向排布，当前值等宽显示 */
+.stock-row { display:flex; align-items:center; gap:10px; width:100% }
+.stock-current { font-size:15px; font-weight:600; color:#303133; font-variant-numeric:tabular-nums; min-width:48px }
 .sku-immutable-tip { margin-top:4px; font-size:12px; color:#909399; line-height:1.5 }
 /* 编辑态：商品编号只读，输入框置灰且文字不可选中，提示该字段不可修改 */
 .sku-input.is-locked :deep(.el-input__wrapper) { background:#f5f7fa; box-shadow:0 0 0 1px #e4e7ed inset }

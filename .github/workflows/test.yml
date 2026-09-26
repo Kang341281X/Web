@@ -1,0 +1,45 @@
+# 接口级自动化测试：tests/*.spec.mjs 全部为纯 HTTP 用例（playwright 只做测试编排与
+# webServer 进程管理，不驱动浏览器），因此无需下载 Chromium，冷启动快、无浏览器依赖。
+#
+# 密钥说明：server/index.js 仅在 NODE_ENV=production 时强制要求 JWT_SECRET /
+# CUSTOMER_JWT_SECRET；playwright.config.js 的 webServer 已用测试专用 env 启动后端
+# （NODE_ENV=test + 固定测试密钥），本工作流不需要额外注入任何密钥。
+#
+# 数据库说明：db:migrate 建表并写入迁移自带的演示商品（含库存）与运费记录，
+# db:seed 幂等补齐管理员账号与站点设置；tests/prepare-test-db.mjs 会把这份
+# server/data.db 复制为 server/test.db，测试数据只落副本，绝不污染基线。
+name: Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # 锁定 20.x：better-sqlite3 的预编译二进制对该 LTS 版本兼容性最好，
+          # 避免走 node-gyp 源码编译
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Migrate database
+        run: npm run db:migrate
+
+      - name: Seed accounts & settings
+        run: npm run db:seed
+
+      - name: Run tests
+        run: npm test

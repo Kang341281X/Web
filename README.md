@@ -1,5 +1,7 @@
 # 购物网站后台管理系统
 
+[![Test](https://github.com/Kang341281X/Web/actions/workflows/test.yml/badge.svg)](https://github.com/Kang341281X/Web/actions/workflows/test.yml)
+
 ## 首次启动
 
 ```
@@ -29,6 +31,23 @@ npm run db:seed
 npm run server   # 后端 Express，默认 3001
 npm run dev      # 前端 Vite，默认 5173
 ```
+
+
+
+## 哪些文件不入库（.gitignore 说明）
+
+以下几类文件是**运行时产物或本机配置**，已被 `.gitignore` 排除且不应再提交：
+
+| 类别 | 匹配规则 | 不入库的原因 |
+|---|---|---|
+| SQLite 数据库及其 WAL/SHM 伴随文件 | `server/data.db*`、`server/test.db*`、`server/tmp*.db*`、`server/backup-*/` | `data.db` 由 `npm run db:migrate` + `npm run db:seed` 随时重建，且内容随运行不断变化（订单、用户、bcrypt 密码哈希），提交会造成无意义的巨大 diff 与合并冲突；`-shm` / `-wal` 是 SQLite 运行期的共享内存与预写日志，只在本机有意义 |
+| 运行日志 | `*.log` | dev / 部署脚本重定向输出的本地日志，含请求 IP 等环境相关信息，无协作价值且会无限增长 |
+| 真实环境变量文件 | `.env`、`.env.*`（例外：各 `*.example` 模板继续入库） | 真实配置包含部署差异与 JWT 密钥等敏感值；模板 `.env.development.example` / `.env.production.example` / `.env.example` 已覆盖全部需要配置的变量，新环境复制模板后填写即可 |
+| 依赖与构建产物 | `node_modules/`、`dist/` | 可由 `npm install` / `npm run build` 复现，仓库根目录 `.npmrc` 已固定官方源保证可复现性 |
+| 测试产物 | `test-results/`、`playwright-report/`、`server/test.db*` | 每次 `npm test` 重新生成 |
+| 用户上传内容 | `uploads/*`（保留 `.gitkeep` 占位） | 运行时生成，属于部署环境的数据而非代码 |
+
+如果某个本应忽略的文件已被 git 跟踪，`.gitignore` 不会自动生效，需要先 `git rm --cached <文件>` 再提交。
 
 
 

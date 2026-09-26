@@ -1,6 +1,7 @@
 <script setup>
 import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { useLanguageStore } from './stores/language'
 import Header from './components/header/Header.vue'
 import Footer from './components/footer/Footer.vue'
@@ -34,17 +35,21 @@ watch(
 </script>
 
 <template>
-  <!-- 路由进度条放在 isAdmin 判断之外：后台路由同样是懒加载的，前后台都需要导航反馈 -->
-  <RouteProgressBar />
-  <template v-if="isAdmin">
-    <RouterView />
-  </template>
-  <template v-else>
-    <Header />
-    <main><RouterView /></main>
-    <Footer />
-    <MobileBottomNav />
-    <BackToTop />
-    <LoginModal />
-  </template>
+  <!-- el-config-provider：Element Plus 按需引入后，中文 locale 在这里全局提供
+       （替代原先 main.js 里的 app.use(ElementPlus, { locale: zhCn })） -->
+  <el-config-provider :locale="zhCn">
+    <!-- 路由进度条放在 isAdmin 判断之外：后台路由同样是懒加载的，前后台都需要导航反馈 -->
+    <RouteProgressBar />
+    <template v-if="isAdmin">
+      <RouterView />
+    </template>
+    <template v-else>
+      <Header />
+      <main><RouterView /></main>
+      <Footer />
+      <MobileBottomNav />
+      <BackToTop />
+      <LoginModal />
+    </template>
+  </el-config-provider>
 </template>

@@ -14,10 +14,12 @@ import ProductReviews from '../components/product/ProductReviews.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 const route = useRoute(), language = useLanguageStore(), cart = useCartStore()
 const product = ref(null); const related = ref([]); const quantity = ref(1); const added = ref(false); const activeTab = ref('description'); const loading = ref(false)
+const title = computed(() => product.value ? productTitle(product.value, language.locale) : '')
 // 商品详情页标题依赖当前商品的多语言标题，由本组件独立设置；
 // App.vue 在 /product/ 前缀下不设置 document.title，避免被覆盖。
+// 注意必须在 title 声明之后调用：useI18nTitle 内部的 watchEffect 会同步执行一次，
+// 若放在 title 声明前会触发 TDZ 错误（Cannot access 'title' before initialization）。
 useI18nTitle(() => title.value)
-const title = computed(() => product.value ? productTitle(product.value, language.locale) : '')
 const description = computed(() => product.value ? productDescription(product.value, language.locale) : '')
 const badge = computed(() => product.value ? productBadge(product.value.badge, language.locale) : '')
 // 预估运费：数据来自后端 shipping_rate 表，按当前语言对应的区域取 fee_cny（人民币），0 表示包邮。
