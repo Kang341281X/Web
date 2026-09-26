@@ -21,7 +21,7 @@ const isAdmin = computed(() => route.path.startsWith('/admin'))
 const SUFFIX = ' · Craftora'
 // 仅列翻译文件里已存在的 key；找不到的路由直接 fallback 到 "Craftora"，避免拼出原始英文 key。
 const STATIC_TITLES = { '/': 'home', '/products': 'products', '/search': 'search', '/favorites': 'favorites', '/cart': 'cart' }
-const ADMIN_TITLES = { '/admin/login': 'signIn', '/admin': 'home', '/admin/products': 'products', '/admin/categories': 'categories', '/admin/reviews': 'reviews', '/admin/orders': 'myOrders', '/admin/intent-orders': 'myOrders', '/admin/customers': 'profile', '/admin/profile': 'profile' }
+const ADMIN_TITLES = { '/admin/login': 'signIn', '/admin': 'home', '/admin/products': 'products', '/admin/categories': 'categories', '/admin/reviews': 'reviews', '/admin/orders': 'myOrders', '/admin/customers': 'profile', '/admin/profile': 'profile' }
 watch(
   [() => route.path, () => language.locale],
   () => {

@@ -98,5 +98,5 @@ const total = computed(() => cart.subtotal + shippingFee.value)
 
 <style scoped>
 /* 与「预计运费」一行错开的灰色小提示，避免与右侧金额重叠 */
-.cart-shipping-hint { margin: -6px 0 8px; font-size: 12px; color: #909399 }
+.cart-shipping-hint { margin: -6px 0 8px; font-size: 12px; color: var(--muted) }
 </style>

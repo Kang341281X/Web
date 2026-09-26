@@ -114,11 +114,6 @@ export async function fetchShippingRates() {
   return data.data
 }
 
-export async function saveIntentOrder(payload) {
-  const { data } = await publicApi.post('/intent-orders', payload)
-  return data.data
-}
-
 // 从 Content-Disposition 中解析文件名（优先 filename*=UTF-8''，兜底返回默认名）
 function resolveFilename(contentDisposition, fallback = '结算清单.xlsx') {
   const utf8 = String(contentDisposition || '').match(/filename\*=UTF-8''([^;]+)/i)

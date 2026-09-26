@@ -38,7 +38,6 @@ const breadcrumb = computed(() => {
   if (route.path === '/admin/categories') return ['首页', '商品分类']
   if (route.path === '/admin/reviews') return ['首页', '商品管理', '商品评论']
   if (route.path === '/admin/orders') return ['首页', '订单管理']
-  if (route.path === '/admin/intent-orders') return ['首页', '订单管理', '访客下载记录']
   if (route.path === '/admin/customers') return ['首页', '用户管理']
   if (route.path === '/admin/settings') return ['首页', '其他设置']
   if (route.path === '/admin/logs') return ['首页', '操作日志']

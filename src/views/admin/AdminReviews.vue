@@ -163,9 +163,6 @@ onMounted(() => {
           <span v-else class="muted">-</span>
         </template>
       </el-table-column>
-      <el-table-column label="购买" :width="COL.BOOL_TAG" align="center">
-        <template #default="{ row }"><el-tag v-if="row.is_purchased" type="success" size="small">已购买</el-tag><span v-else class="muted">-</span></template>
-      </el-table-column>
       <el-table-column label="状态" :width="COL.STATUS_TAG" align="center">
         <template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '显示中' : '已隐藏' }}</el-tag></template>
       </el-table-column>
@@ -191,8 +188,7 @@ onMounted(() => {
       <el-descriptions-item label="联系方式">{{ detail.customer_phone || '账号已注销' }}</el-descriptions-item>
       <el-descriptions-item label="评分"><el-rate :model-value="detail.rating" disabled size="small" /></el-descriptions-item>
       <el-descriptions-item label="状态"><el-tag :type="detail.status ? 'success' : 'info'">{{ detail.status ? '显示中' : '已隐藏' }}</el-tag></el-descriptions-item>
-      <el-descriptions-item label="购买凭证">{{ detail.is_purchased ? (detail.order_no || '已购买') : '普通评价' }}</el-descriptions-item>
-      <el-descriptions-item label="评论时间">{{ formatTime(detail.created_at) }}</el-descriptions-item>
+      <el-descriptions-item label="评论时间" :span="2">{{ formatTime(detail.created_at) }}</el-descriptions-item>
       <el-descriptions-item label="评论内容" :span="2"><p class="detail-content">{{ detail.content }}</p></el-descriptions-item>
       <el-descriptions-item label="评论图片" :span="2">
         <div v-if="detail.images?.length" class="detail-images">

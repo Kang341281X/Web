@@ -14,10 +14,12 @@ import { ElMessage } from 'element-plus'
  * 行为约定：
  *   - success=true 且 truncated 未设 → 不弹任何 toast（让数字 / UI 自然反馈）
  *   - success=true 且 truncated=true → warning toast，使用 result.message
- *   - success=false 或缺失 → error toast，优先用 result.message，缺失时回退到 errorFallback
+ *   - success=false 且 requiresLogin=true → 不弹 toast（store 已弹出登录框，本身即是反馈）
+ *   - success=false（其他情况）→ error toast，优先用 result.message，缺失时回退到 errorFallback
  */
 export function useQuantityFeedback() {
   function handle(result, { errorFallback = '操作失败，请稍后重试' } = {}) {
+    if (result?.requiresLogin) return
     if (!result || result.success !== true) {
       ElMessage.error(result?.message || errorFallback)
       return

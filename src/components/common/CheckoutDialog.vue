@@ -11,15 +11,16 @@ import { useUserStore } from '../../stores/user'
 import { useLanguageStore } from '../../stores/language'
 import { productTitle } from '../../data/translations'
 import { formatAddress } from '../../utils/address'
-import { fetchSettings, saveIntentOrder, exportCheckoutList } from '../../services/publicApi'
+import { fetchSettings, exportCheckoutList } from '../../services/publicApi'
 import { useIsMobile } from '../../composables/useIsMobile'
 import AppImage from '../common/AppImage.vue'
 
 /**
  * 购物清单 / 结算弹窗：两条并行路径，互不替代。
- *  1) 提交订单（仅登录顾客）：选定收货地址后写入 customer_order + order_item，由后台人工确认发货；
- *  2) 下载结算清单（Excel）：无需登录，导出后可与客服核对再下单。
+ *  1) 提交订单：选定收货地址后写入 customer_order + order_item，由后台人工确认发货；
+ *  2) 下载结算清单（Excel）：导出后可与客服核对再下单。
  * 本站不涉及任何在线支付。
+ * 注：游客无法加购，购物车为空，因此本弹窗只有已登录用户才会看到有商品的状态。
  */
 const props = defineProps({
   visible: Boolean,
@@ -108,13 +109,13 @@ async function loadAddresses() {
   if (result.success && address.list.length) selectedAddressId.value = address.list[0].id
 }
 
-// 下载 Excel 并异步保存意向订单
+// 下载 Excel（不再写入意向单：游客无法加购，该功能已下线）
 async function handleDownload() {
   if (downloading.value) return
   downloading.value = true
 
   try {
-    // 1. 调用后端接口，基于 public/assets/结算清单.xlsx 模板生成文件并返回
+    // 调用后端接口，基于 public/assets/结算清单.xlsx 模板生成文件并返回
     const { blob, filename } = await exportCheckoutList(tableRows.value.map(row => ({
       sku: row.product.sku || '',
       name: row.name,
@@ -133,22 +134,6 @@ async function handleDownload() {
 
     downloaded.value = true
     ElMessage.success('购物清单已下载')
-
-    // 2. 异步保存意向订单（失败静默处理，不阻塞下载流程）
-    const payload = {
-      items: tableRows.value.map(row => ({
-        product_id: row.product.id,
-        name: row.name,
-        price: row.price,
-        quantity: row.quantity,
-        subtotal: row.subtotal,
-      })),
-      totalAmount: totalAmount.value,
-      shippingFee: shippingFee.value,
-    }
-    saveIntentOrder(payload).catch(err => {
-      console.error('Failed to save intent order:', err)
-    })
   } catch (error) {
     ElMessage.error('下载失败，请重试')
     console.error('Download error:', error)
@@ -209,7 +194,7 @@ async function handleSubmit() {
       style="margin-bottom: 16px"
     >
       <template #title>
-        本站暂不支持在线支付。{{ customer.isLoggedIn ? '提交订单后我们会人工确认并发货；也可以下载结算清单留存。' : language.t('checkoutLoginNeeded') }}
+        本站暂不支持在线支付。提交订单后我们会人工确认并发货；也可以下载结算清单留存。
       </template>
     </el-alert>
 

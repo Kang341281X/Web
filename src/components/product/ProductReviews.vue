@@ -428,7 +428,7 @@ watch(() => props.productId, () => { expanded.value = false; load() }, { immedia
 .review-write { flex-shrink: 0 }
 
 .review-form { border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 24px; background: var(--cream) }
-.review-form__title { margin: 0 0 16px; font: 600 1.05rem 'Playfair Display', serif; color: var(--ink) }
+.review-form__title { margin: 0 0 16px; font: 700 1.05rem var(--font); color: var(--ink) }
 .review-form__row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px }
 .review-form__row--block { display: block }
 .review-form__label { display: block; margin-bottom: 8px; font-size: .86rem; font-weight: 600; color: var(--ink) }
@@ -450,7 +450,7 @@ watch(() => props.productId, () => { expanded.value = false; load() }, { immedia
 
 .review-overview { display: flex; align-items: center; gap: 42px; padding: 6px 0 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap }
 .review-overview__score { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 120px }
-.review-overview__score strong { font: 600 2.6rem 'Playfair Display', serif; color: var(--ink); line-height: 1 }
+.review-overview__score strong { font: 700 2.6rem var(--font); color: var(--ink); line-height: 1 }
 .review-overview__score small { color: var(--muted); font-size: .82rem }
 .review-stars { color: var(--clay); letter-spacing: 2px; font-size: .95rem }
 .review-overview__bars { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 7px }
@@ -470,7 +470,7 @@ watch(() => props.productId, () => { expanded.value = false; load() }, { immedia
 .review-verified { font-size: .72rem; color: var(--sage); border: 1px solid var(--sage); border-radius: 99px; padding: 1px 8px }
 .review-edited { font-size: .72rem; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px }
 .review-date { margin-left: auto; color: var(--muted); font-size: .78rem }
-.review-text { margin: 9px 0 0; line-height: 1.85; color: #59544e; white-space: pre-wrap }
+.review-text { margin: 9px 0 0; line-height: 1.7; color: var(--ink); white-space: pre-wrap; font-size: .9rem }
 .review-images { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap }
 .review-images :deep(img) { width: 88px; height: 88px; object-fit: cover; border-radius: 8px; background: var(--cream) }
 

@@ -10,8 +10,6 @@ import adminRouter from './routes/admin.js'
 import adminsRouter from './routes/admins.js'
 import adminCustomersRouter from './routes/customers.js'
 import adminOrdersRouter from './routes/orders.js'
-// 访客下载记录（intent_order 只读列表）：仅后台查看访客下载结算清单产生的记录
-import intentOrdersRouter from './routes/intentOrders.js'
 import categoriesRouter from './routes/categories.js'
 import productsRouter from './routes/products.js'
 import importsRouter, { startImportCleanupTask } from './routes/imports.js'
@@ -76,7 +74,6 @@ app.use('/api/admin', adminRouter)
 app.use('/api/admins', adminsRouter)
 app.use('/api/admin-customers', adminCustomersRouter)
 app.use('/api/admin-orders', adminOrdersRouter)
-app.use('/api/admin-intent-orders', intentOrdersRouter)
 app.use('/api/admin-reviews', adminReviewsRouter)
 app.use('/api/categories', categoriesRouter)
 // 批量导入相关接口独立挂在 /api/product-imports，与 productsRouter 的 /:id 路由互不影响

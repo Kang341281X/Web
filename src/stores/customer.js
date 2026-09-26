@@ -71,9 +71,8 @@ export const useCustomerStore = defineStore('customer', {
           ...(email ? { email } : {}),
         })
         this.applySession(data.token, data.user)
-        // 把游客购物车/收藏合并到服务端，合并结果覆盖本地状态；
-        // 两个同步动作内部已各自兜底错误，不影响注册结果
-        await Promise.all([useCartStore().syncAfterLogin(), useFavoritesStore().syncAfterLogin()])
+        // 注册即登录：直接从服务端拉取购物车/收藏（游客没有本地数据可合并）
+        await Promise.all([useCartStore().fetchFromServer(), useFavoritesStore().fetchFromServer()])
         return { success: true, message: data.message || '注册成功', user: data.user }
       } catch (error) {
         return { success: false, message: this.errorMessage(error, '注册失败，请稍后重试') }
@@ -93,9 +92,8 @@ export const useCustomerStore = defineStore('customer', {
           captchaText: captcha.captchaText || '',
         })
         this.applySession(data.token, data.user)
-        // 登录成功后把游客购物车/收藏合并到服务端，合并结果会覆盖本地状态。
-        // 两个同步动作内部已各自兜底错误（失败时保留 localStorage 游客数据），不影响登录结果
-        await Promise.all([useCartStore().syncAfterLogin(), useFavoritesStore().syncAfterLogin()])
+        // 登录成功后从服务端拉取购物车/收藏（游客没有本地数据可合并）
+        await Promise.all([useCartStore().fetchFromServer(), useFavoritesStore().fetchFromServer()])
         return { success: true, message: data.message || '登录成功', user: data.user }
       } catch (error) {
         // 失败时把 code 一并返回：验证码是一次性的，调用方需要据此换一张新图

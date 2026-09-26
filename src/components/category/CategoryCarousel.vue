@@ -138,7 +138,7 @@ onUnmounted(() => { stopTimer() })
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--accent, #b07d56);
+  color: var(--clay);
   margin-bottom: 4px;
 }
 .section-heading h2 {
@@ -179,7 +179,7 @@ onUnmounted(() => { stopTimer() })
   height: calc(var(--card-w) * 2);
   border-radius: 2px;
   overflow: hidden;
-  background: #f1ebe3;
+  background: var(--cream);
 }
 .category-carousel-image img {
   width: 100%;
@@ -192,7 +192,7 @@ onUnmounted(() => { stopTimer() })
   font-size: 14px;
 }
 .category-carousel-label strong {
-  color: #2d2d2d;
+  color: var(--ink);
 }
 
 /* 响应式：移动端调整卡片数量 */

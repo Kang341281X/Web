@@ -1,31 +1,13 @@
 import { defineStore } from 'pinia'
 import customerApi, { isCustomerLoggedIn } from '../services/customerApi'
 import { adaptProduct } from '../services/publicApi'
-
-const STORAGE_KEY = 'craftora-cart'
+import { useUserStore } from './user'
 
 /**
- * 购物车有两种数据源：
- * - 未登录：localStorage（游客可以随便逛随便加，行为与改造前完全一致）
- * - 已登录：服务端 /api/customer/cart（阶段 4 接口），不再写 localStorage
- * 登录成功瞬间把游客购物车合并到服务端，合并成功后清空 localStorage 并改用服务端数据。
+ * 购物车只有一种数据源：服务端 /api/customer/cart。
+ * 未登录访客不能加购（触发操作时弹登录框），也没有本地购物车，
+ * 因此登录后直接从服务端拉取即可，不再需要合并游客数据。
  */
-
-const readLocal = () => {
-  try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    if (!Array.isArray(raw)) return []
-    const items = raw.filter(item => item?.product?.id && Number(item.quantity) > 0)
-    if (items.length !== raw.length) localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-    return items
-  } catch {
-    localStorage.removeItem(STORAGE_KEY)
-    return []
-  }
-}
-
-const writeLocal = items => localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-const clearLocal = () => localStorage.removeItem(STORAGE_KEY)
 
 const errorMessage = (error, fallback) => error.response?.data?.message || fallback
 
@@ -38,15 +20,13 @@ const adaptItem = row => {
 }
 
 export const useCartStore = defineStore('cart', {
-  // 未登录时读游客数据；登录态下由 main.js（刷新恢复）或登录流程从服务端覆盖
-  state: () => ({ items: readLocal(), loading: false }),
+  // 未登录时为空；登录态下由 main.js（刷新恢复）或登录流程从服务端覆盖
+  state: () => ({ items: [], loading: false }),
   getters: {
     count: s => s.items.reduce((n, item) => n + item.quantity, 0),
     subtotal: s => s.items.reduce((n, item) => n + item.product.price * item.quantity, 0)
   },
   actions: {
-    persist() { writeLocal(this.items) },
-
     // ---------- 与服务端同步（仅登录态）----------
     applyServer(rows) { this.items = (rows || []).map(adaptItem) },
 
@@ -64,50 +44,23 @@ export const useCartStore = defineStore('cart', {
       }
     },
 
-    // 把游客购物车合并到服务端，并用返回的完整购物车覆盖本地状态。
-    // 只有合并成功才清空 localStorage：失败时保留游客数据，下次登录会重试合并
-    async mergeGuestCart() {
-      const guest = readLocal()
-      this.loading = true
-      try {
-        const { data } = await customerApi.post('/cart/merge', guest.map(item => ({ product_id: item.product.id, quantity: item.quantity })))
-        this.applyServer(data.data)
-        clearLocal()
-        return { success: true, message: data.message }
-      } catch (error) {
-        return { success: false, message: errorMessage(error, '购物车合并失败') }
-      } finally {
-        this.loading = false
-      }
-    },
-
-    // 登录成功后调用：有游客数据先合并到服务端，没有则直接拉取
-    syncAfterLogin() {
-      if (!isCustomerLoggedIn()) return Promise.resolve({ success: false })
-      return readLocal().length ? this.mergeGuestCart() : this.fetchFromServer()
-    },
-
-    // 带着 token 刷新页面时调用：只以服务端为准，不读 localStorage
+    // 带着 token 刷新页面时调用
     restoreFromServer() {
       if (!isCustomerLoggedIn()) return Promise.resolve({ success: false })
       return this.fetchFromServer()
     },
 
-    // 退出登录：回到游客视图（正常情况下登录时已清空游客数据，故展示为空）。
-    // 不删服务端数据，下次登录会重新拉取
+    // 退出登录：清空前端展示，服务端数据保留，下次登录会重新拉取
     reset() {
-      this.items = readLocal()
+      this.items = []
       this.loading = false
     },
 
-    // ---------- 变更操作：未登录写 localStorage，已登录直接调服务端 ----------
+    // ---------- 变更操作：未登录弹登录框，已登录直接调服务端 ----------
     async add(product, quantity = 1) {
       if (!isCustomerLoggedIn()) {
-        const found = this.items.find(i => i.product.id === product.id)
-        if (found) found.quantity = Math.min(found.quantity + quantity, product.stock)
-        else this.items.push({ product, quantity })
-        this.persist()
-        return { success: true }
+        useUserStore().openLogin()
+        return { success: false, requiresLogin: true }
       }
       try {
         const { data } = await customerApi.post('/cart', { product_id: product.id, quantity })
@@ -127,13 +80,7 @@ export const useCartStore = defineStore('cart', {
       const item = this.items.find(i => i.product.id === id)
       if (!item) return { success: false, message: '购物车中没有该商品' }
 
-      if (!isCustomerLoggedIn()) {
-        item.quantity = Math.max(1, Math.min(quantity, item.product.stock))
-        this.persist()
-        return { success: true }
-      }
-
-      // 与游客行为一致：数量下限为 1（数量为 1 时点「−」是空操作，不发请求）
+      // 数量下限为 1（数量为 1 时点「−」是空操作，不发请求）
       const target = Math.max(1, Math.trunc(Number(quantity)) || 1)
       if (target === item.quantity) return { success: true }
       try {
@@ -146,11 +93,6 @@ export const useCartStore = defineStore('cart', {
     },
 
     async remove(id) {
-      if (!isCustomerLoggedIn()) {
-        this.items = this.items.filter(i => i.product.id !== id)
-        this.persist()
-        return { success: true }
-      }
       try {
         await customerApi.delete(`/cart/${id}`)
       } catch (error) {
@@ -162,11 +104,6 @@ export const useCartStore = defineStore('cart', {
     },
 
     async clear() {
-      if (!isCustomerLoggedIn()) {
-        this.items = []
-        this.persist()
-        return { success: true }
-      }
       try {
         const { data } = await customerApi.delete('/cart')
         this.items = []
