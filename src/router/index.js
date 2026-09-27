@@ -66,14 +66,16 @@ const router = createRouter({
           path: 'orders',
           component: () => import('../views/admin/AdminOrders.vue'),
         },
-        // settings/logs 对普通管理员可见，仅 admins 仍限 super_admin
+        // settings 对普通管理员可见
         {
           path: 'settings',
           component: () => import('../views/admin/AdminSettings.vue'),
         },
+        // 操作日志：仅超级管理员，与后端 /api/logs 的 requireSuperAdmin 对应
         {
           path: 'logs',
           component: () => import('../views/admin/AdminLogs.vue'),
+          meta: { requiresSuperAdmin: true },
         },
         {
           path: 'profile',

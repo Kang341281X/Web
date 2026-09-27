@@ -33,13 +33,13 @@ const curatedSections = computed(() => {
   })
   categoryMap.forEach((items, category) => {
     if (items.length >= 2) {
-      sections.push({ title: language.category(category) || category, products: items.slice(0, 5) })
+      sections.push({ title: language.category(category) || category, products: items.slice(0, 8) })
     }
   })
   // If only 1 section or no grouping, show all as one curated section
   if (sections.length <= 1) {
     return products.value.length > 0
-      ? [{ title: language.t('featured') || 'Editor\'s Picks', products: products.value.slice(0, 10) }]
+      ? [{ title: language.t('featured') || 'Editor\'s Picks', products: products.value.slice(0, 16) }]
       : []
   }
   return sections.slice(0, 4) // Max 4 curated sections

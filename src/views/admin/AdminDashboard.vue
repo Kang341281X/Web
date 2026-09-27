@@ -1,10 +1,13 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../../services/api'
+import { useUserStore } from '../../stores/user'
 import { Goods, Warning, Tickets, Bell, User } from '@element-plus/icons-vue'
 
 const router = useRouter()
+const userStore = useUserStore()
+const isSuperAdmin = computed(() => userStore.adminUser?.role === 'super_admin')
 const loading = ref(false)
 const stats = ref({
   totalProducts: 0, lowStock: 0, lowStockThreshold: 10,
@@ -21,12 +24,15 @@ const trendData = ref([])
 async function loadDashboard() {
   loading.value = true
   try {
-    const [productRes, orderRes, customerRes, logsRes] = await Promise.all([
+    const requests = [
       api.get('/products/stats'),
       api.get('/admin-orders/stats'),
       api.get('/admin-customers/stats'),
-      api.get('/logs', { params: { page: 1, page_size: 8 } }),
-    ])
+    ]
+    // 最近操作日志仅超级管理员可见：/api/logs 已按 requireSuperAdmin 拦截，
+    // 普通管理员若一并请求会得到 403 使 Promise.all 整体失败、连带拖垮整页统计，故按角色跳过。
+    if (isSuperAdmin.value) requests.push(api.get('/logs', { params: { page: 1, page_size: 8 } }))
+    const [productRes, orderRes, customerRes, logsRes] = await Promise.all(requests)
 
     const productStats = productRes.data.data
     const orderStats = orderRes.data.data
@@ -41,7 +47,7 @@ async function loadDashboard() {
       totalCustomers: customerStats.total_customers,
     }
 
-    recentLogs.value = logsRes.data.data
+    recentLogs.value = logsRes?.data?.data || []
 
     // 分类占比 / 近 7 天新增趋势同样来自后端聚合结果（日期轴已由后端补齐）
     categoryData.value = productStats.category_distribution
@@ -140,7 +146,7 @@ onMounted(loadDashboard)
       </el-col>
     </el-row>
 
-    <el-card shadow="never" class="admin-page-card" style="margin-top: 20px">
+    <el-card v-if="isSuperAdmin" shadow="never" class="admin-page-card" style="margin-top: 20px">
       <template #header>
         <div style="display:flex; justify-content:space-between; align-items:center">
           <span style="font-weight:600">最近操作日志</span>

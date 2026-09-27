@@ -1,9 +1,9 @@
 import { Router } from 'express'
 import db from '../config/db.js'
-import { requireAuth, requirePasswordChanged } from '../middleware/auth.js'
+import { requireAuth, requirePasswordChanged, requireSuperAdmin } from '../middleware/auth.js'
 
 const router = Router()
-router.use(requireAuth, requirePasswordChanged)
+router.use(requireAuth, requirePasswordChanged, requireSuperAdmin)
 
 router.get('/', async (req, res, next) => {
   try {

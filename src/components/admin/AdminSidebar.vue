@@ -76,7 +76,7 @@ const activeMenu = computed(() => route.path)
         <template #title>商品评论</template>
       </el-menu-item>
 
-      <el-menu-item index="/admin/logs">
+      <el-menu-item v-if="isSuperAdmin" index="/admin/logs">
         <el-icon><List /></el-icon>
         <template #title>操作日志</template>
       </el-menu-item>

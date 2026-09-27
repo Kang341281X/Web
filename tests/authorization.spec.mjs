@@ -55,6 +55,10 @@ test.describe('越权隔离', () => {
     expect(admins.status).toBe(403)
     expect(admins.data.message).toBe('仅超级管理员可访问')
 
+    const logs = await api('/api/logs', { token: normalAdmin })
+    expect(logs.status).toBe(403)
+    expect(logs.data.message).toBe('仅超级管理员可访问')
+
     // 普通管理员：订单管理属于本职权限 → 200
     const orders = await api('/api/admin-orders?page=1&page_size=1', { token: normalAdmin })
     expect(orders.status).toBe(200)
@@ -64,5 +68,7 @@ test.describe('越权隔离', () => {
     expect(financeSuper.status).toBe(200)
     const adminsSuper = await api('/api/admins', { token: superAdmin })
     expect(adminsSuper.status).toBe(200)
+    const logsSuper = await api('/api/logs', { token: superAdmin })
+    expect(logsSuper.status).toBe(200)
   })
 })

@@ -9,6 +9,7 @@ import OnlineCreateDialog from '../../components/admin/OnlineCreateDialog.vue'
 import ImageCropDialog from '../../components/admin/ImageCropDialog.vue'
 import { IMG_FALLBACK, resolve } from '../../utils/image'
 import { generateSkuCode, normalizeRatingToHalf } from '../../utils/sku'
+import { htmlToPlainText } from '../../utils/text'
 import { useUserStore } from '../../stores/user'
 import { COL, actionColWidth } from '../../constants/tableColumn'
 import { useIsMobile } from '../../composables/useIsMobile'
@@ -42,17 +43,7 @@ const stockDialogVisible = ref(false); const stockSaving = ref(false); const sto
 // 新文件计数器，用于生成临时 ID
 let newFileSeq = 0
 function defaultForm() { return { id: null, name: '', category_id: '', price: 0, original_price: null, stock: 0, sales: 0, unit: '', manufacturer: '', brand: '', sku: '', is_customizable: '0', rating: 5, description: '', detail: '', status: 1, translations: emptyTranslations() } }
-// 富文本 HTML → 纯文本：商品详情按纯文本编辑展示，避免文本框里出现 <p> 等标签对
-function htmlToPlainText(html) {
-  if (!html) return ''
-  const text = String(html)
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(?:p|div|li|ul|ol|h[1-6]|blockquote|tr)>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-  const decoder = document.createElement('textarea')
-  decoder.innerHTML = text
-  return decoder.value.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
-}
+
 const activeCategories = computed(() => categories.value.filter(item => item.status))
 async function loadCategories() { const { data } = await api.get('/categories'); categories.value = data.data }
 async function load() { loading.value = true; try { const { data } = await api.get('/products', { params: query }); products.value = data.data; total.value = data.pagination.total; selected.value = [] } catch (error) { ElMessage.error(error.response?.data?.message || '商品加载失败') } finally { loading.value = false } }
