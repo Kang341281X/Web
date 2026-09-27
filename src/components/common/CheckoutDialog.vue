@@ -133,9 +133,9 @@ async function handleDownload() {
     URL.revokeObjectURL(url)
 
     downloaded.value = true
-    ElMessage.success('购物清单已下载')
+    ElMessage.success(language.t('checkoutDownloadSuccess'))
   } catch (error) {
-    ElMessage.error('下载失败，请重试')
+    ElMessage.error(language.t('checkoutDownloadFailed'))
     console.error('Download error:', error)
   } finally {
     downloading.value = false
@@ -182,7 +182,7 @@ async function handleSubmit() {
 <template>
   <el-dialog
     v-model="dialogVisible"
-    title="购物清单"
+    :title="language.t('checkoutDialogTitle')"
     width="min(860px, calc(100% - 24px))"
     top="4vh"
     destroy-on-close
@@ -194,7 +194,7 @@ async function handleSubmit() {
       style="margin-bottom: 16px"
     >
       <template #title>
-        本站暂不支持在线支付。提交订单后我们会人工确认并发货；也可以下载结算清单留存。
+        {{ language.t('checkoutNoPaymentNotice') }}
       </template>
     </el-alert>
 
@@ -205,7 +205,7 @@ async function handleSubmit() {
       show-icon
       style="margin-bottom: 16px"
     >
-      购物清单已下载，请将该文件发送给以下联系人完成购买。
+      {{ language.t('checkoutDownloadedNotice') }}
     </el-alert>
 
     <!-- 商品明细：桌面端保留表格；移动端换卡片式竖排列表，避免窄屏横向滚动 -->
@@ -297,16 +297,16 @@ async function handleSubmit() {
 
     <div class="checkout-contact">
       <div v-if="settingsError" class="contact-error">
-        联系方式获取失败，请稍后重试。
+        {{ language.t('checkoutContactError') }}
       </div>
       <template v-else>
-        <p class="contact-title">如有疑问，请联系我们：</p>
+        <p class="contact-title">{{ language.t('checkoutContactPrompt') }}</p>
         <p class="contact-info">
           <span v-if="settings.contact_phone" class="contact-item">
-            电话：<a :href="`tel:${settings.contact_phone}`">{{ settings.contact_phone }}</a>
+            {{ language.t('contactPhone') }}：<a :href="`tel:${settings.contact_phone}`">{{ settings.contact_phone }}</a>
           </span>
           <span v-if="settings.contact_email" class="contact-item">
-            邮箱：<a :href="`mailto:${settings.contact_email}`">{{ settings.contact_email }}</a>
+            {{ language.t('contactEmail') }}：<a :href="`mailto:${settings.contact_email}`">{{ settings.contact_email }}</a>
           </span>
         </p>
       </template>

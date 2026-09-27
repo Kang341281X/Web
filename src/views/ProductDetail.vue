@@ -26,6 +26,9 @@ const badge = computed(() => product.value ? productBadge(product.value.badge, l
 // 本站只按界面语言区分用户、不采集收货国家，因此只是近似估算，页面会注明以物流商核算为准。
 const shipping = computed(() => language.shipping)
 const shippingFree = computed(() => shipping.value.feeCny <= 0)
+// 已知简化设计：店铺头像暂用店铺名首字母生成纯色圆块（shopInitial）兜底。
+// 数据模型中没有「店铺头像」字段，seller 信息借用的是商品 brand/manufacturer 文本，
+// 待「店铺」是否做成真正的多商户实体明确后再统一实现真实头像上传，勿在此重复调研。
 const shopInitial = computed(() => (product.value?.seller || '?').trim().charAt(0).toUpperCase())
 // 店铺入口：有真实 brand/manufacturer 时跳转到按 seller 筛选的商品列表，否则退化为普通列表
 const shopTarget = computed(() => {

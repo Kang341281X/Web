@@ -1,6 +1,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useLanguageStore } from '../../stores/language'
 import AppImage from '../common/AppImage.vue'
+
+const language = useLanguageStore()
 
 const props = defineProps({
   categories: { type: Array, default: () => [] },
@@ -140,8 +143,8 @@ onUnmounted(() => { stopTimer() })
     <div class="container">
       <div class="section-heading">
         <div>
-          <span class="eyebrow">精选分类</span>
-          <h2>分类</h2>
+          <span class="eyebrow">{{ language.t('featuredCategoriesEyebrow') }}</span>
+          <h2>{{ language.t('categories') }}</h2>
         </div>
       </div>
       <div

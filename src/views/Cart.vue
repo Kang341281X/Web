@@ -18,9 +18,9 @@ const checkoutVisible = ref(false)
 async function confirmClear() {
   try {
     await ElMessageBox.confirm(
-      '确定要清空购物车吗？清空后购物车内所有商品将被移除，此操作不可恢复。',
-      '清空购物车',
-      { type: 'warning', confirmButtonText: '确定清空', cancelButtonText: '取消' }
+      language.t('clearCartConfirmText'),
+      language.t('clearCartConfirmTitle'),
+      { type: 'warning', confirmButtonText: language.t('clearCartConfirmButton'), cancelButtonText: language.t('cancel') }
     )
   } catch { return } // 用户点取消或关闭弹窗，不做任何操作
   await cart.clear()
