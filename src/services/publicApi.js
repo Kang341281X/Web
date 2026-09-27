@@ -10,6 +10,9 @@ const publicApi = axios.create({ baseURL: '/api/public', timeout: 15000 })
 publicApi.interceptors.request.use(config => {
   const token = customerToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
+  // 将当前界面语言传给后端：公开商品接口据此返回对应译文（无译文回退 zh-CN）
+  const locale = localStorage.getItem('craftora-language')
+  if (locale) config.headers['X-Locale'] = locale
   return config
 })
 

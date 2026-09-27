@@ -1,0 +1,21 @@
+/* ===== 前台店铺区 — Element Plus 主题覆盖 =====
+   把 Element Plus 默认蓝色 #409eff 换成 Craftora 前台的墨黑（--ink）主色，
+   仅在 .storefront 容器内生效；后台的蓝色主题仍由 .admin-layout 的 admin.css 提供，
+   两者互不干扰（CSS 变量按最近祖先的继承规则解析，.storefront 优先级高于 :root）。 */
+
+.storefront {
+  --el-color-primary: var(--ink, #222);
+  --el-color-primary-light-3: #444444;
+  --el-color-primary-light-5: #767676;
+  --el-color-primary-light-7: #a6a6a6;
+  --el-color-primary-light-8: #c2c2c2;
+  --el-color-primary-light-9: #e4e4e4;
+  --el-color-primary-dark-2: #1b1b1b;
+}
+
+/* 前台评价表单的打分星星统一为品牌强调色 --clay，
+   否则 el-rate 会落入默认金黄色，与只读的 .review-stars 橙色不一致 */
+.storefront {
+  --el-rate-fill-color: var(--clay, #F1641E);
+  --el-rate-void-color: var(--line, #e0e0e0);
+}

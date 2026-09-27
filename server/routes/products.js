@@ -11,6 +11,8 @@ const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 10 } })
 router.use(requireAuth, requirePasswordChanged)
 const selectFields = `p.id, p.name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.manufacturer, p.brand, p.description, p.detail, p.main_image, p.sku, p.is_customizable, p.rating, p.review_count, p.status, p.created_by, p.created_by_name, p.created_at, p.updated_at`
+// 可录入译文的目标语言（zh-CN 即 product 主表原文，不写入译文表）
+const TRANSLATABLE_LOCALES = ['zh-TW', 'en', 'ja', 'ko']
 
 function numberValue(value, label, { min = 0, integer = false, nullable = false } = {}) {
   if ((value === '' || value === null || value === undefined) && nullable) return null
@@ -58,6 +60,17 @@ async function validateProduct(body, excludeId = null, adminUsername = '') {
     values.stock = numberValue(body.stock, '库存', { integer: true })
     values.sales = numberValue(body.sales ?? 0, '销量', { integer: true })
   }
+  // 多语言译文：可选，未填写的语言不写入（查询时回退 zh-CN 原文）
+  const rawTranslations = body.translations && typeof body.translations === 'object' ? body.translations : {}
+  const translations = {}
+  for (const locale of TRANSLATABLE_LOCALES) {
+    const tr = rawTranslations[locale] && typeof rawTranslations[locale] === 'object' ? rawTranslations[locale] : {}
+    const name = optionalText(tr.name, 200)
+    const description = optionalText(tr.description, 5000)
+    const detail = optionalText(tr.detail, 1000000)
+    if (name || description || detail) translations[locale] = { name, description, detail }
+  }
+  values.translations = translations
   if (values.originalPrice !== null && values.originalPrice < values.price) throw Object.assign(new Error('原价不能低于售价'), { status: 400 })
   const [categories] = await db.execute('SELECT id FROM category WHERE id = ?', [values.categoryId])
   if (!categories[0]) throw Object.assign(new Error('商品分类不存在'), { status: 400 })
@@ -81,7 +94,27 @@ async function getProduct(id) {
   const [rows] = await db.execute(`SELECT ${selectFields} FROM product p JOIN category c ON c.id = p.category_id WHERE p.id = ?`, [id])
   if (!rows[0]) return null
   const [images] = await db.execute('SELECT id, product_id, image_url, is_main, sort_order, created_at, updated_at FROM product_image WHERE product_id = ? ORDER BY sort_order, id', [id])
-  return { ...publicProduct(rows[0]), images: images.map(image => ({ ...image, image_url_full: storageService.getUrl(image.image_url) })) }
+  const [trRows] = await db.execute('SELECT locale, name, description, detail FROM product_translation WHERE product_id = ? ORDER BY locale', [id])
+  const translations = {}
+  for (const row of trRows) translations[row.locale] = { name: row.name || '', description: row.description || '', detail: row.detail || '' }
+  return { ...publicProduct(rows[0]), images: images.map(image => ({ ...image, image_url_full: storageService.getUrl(image.image_url) })), translations }
+}
+
+// 译文以「删除全部 + 重插非空项」整表覆盖：表单始终携带全部语言 Tab，
+// 历史译文被清空时也能真正删除（而非残留旧数据阻止 zh-CN 回退）。
+async function saveTranslations(productId, translations) {
+  const connection = await db.getConnection()
+  try {
+    await connection.beginTransaction()
+    await connection.execute('DELETE FROM product_translation WHERE product_id = ?', [productId])
+    for (const [locale, tr] of Object.entries(translations || {})) {
+      await connection.execute(
+        'INSERT INTO product_translation (product_id, locale, name, description, detail) VALUES (?, ?, ?, ?, ?)',
+        [productId, locale, tr.name, tr.description, tr.detail]
+      )
+    }
+    await connection.commit()
+  } catch (error) { await connection.rollback(); throw error } finally { connection.release() }
 }
 
 router.get('/', async (req, res, next) => {
@@ -141,6 +174,7 @@ router.post('/', async (req, res, next) => {
   try {
     const item = await validateProduct(req.body, null, req.admin.username)
     const [result] = await db.execute('INSERT INTO product (name, category_id, price, original_price, stock, sales, unit, manufacturer, brand, description, detail, status, sku, is_customizable, rating, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [item.name, item.categoryId, item.price, item.originalPrice, item.stock, item.sales, item.unit, item.manufacturer, item.brand, item.description, item.detail, item.status, item.sku, item.isCustomizable, item.rating, req.admin.id, req.admin.real_name || req.admin.username])
+    await saveTranslations(result.insertId, item.translations)
     await writeOperationLog(req.admin.id, 'create_product', item.name, req)
     res.status(201).json({ success: true, data: await getProduct(result.insertId) })
   } catch (error) {
@@ -156,6 +190,7 @@ router.put('/:id', async (req, res, next) => {
     // PATCH /:id/stock 做增量调整，或由顾客下单的原子扣减推进，杜绝丢失更新
     const [result] = await db.execute('UPDATE product SET name = ?, category_id = ?, price = ?, original_price = ?, unit = ?, manufacturer = ?, brand = ?, description = ?, detail = ?, status = ?, sku = ?, is_customizable = ?, rating = ? WHERE id = ?', [item.name, item.categoryId, item.price, item.originalPrice, item.unit, item.manufacturer, item.brand, item.description, item.detail, item.status, item.sku, item.isCustomizable, item.rating, id])
     if (!result.affectedRows) return res.status(404).json({ success: false, message: '商品不存在' })
+    await saveTranslations(id, item.translations)
     await writeOperationLog(req.admin.id, 'update_product', String(id), req); res.json({ success: true, data: await getProduct(id) })
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE constraint failed/i.test(error.message || '')) return res.status(409).json({ success: false, message: '商品编号已存在' })

@@ -44,12 +44,16 @@ watch(
       <RouterView />
     </template>
     <template v-else>
-      <Header />
-      <main><RouterView /></main>
-      <Footer />
-      <MobileBottomNav />
-      <BackToTop />
-      <LoginModal />
+      <!-- .storefront 容器用于隔离前台 Element Plus 主题（覆盖默认蓝色），
+           避免影响 .admin-layout 下已有的蓝色后台主题 -->
+      <div class="storefront">
+        <Header />
+        <main><RouterView /></main>
+        <Footer />
+        <MobileBottomNav />
+        <BackToTop />
+        <LoginModal />
+      </div>
     </template>
   </el-config-provider>
 </template>

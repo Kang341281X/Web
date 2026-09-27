@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLanguageStore } from '../stores/language'
 import { useCartStore } from '../stores/cart'
@@ -13,7 +13,7 @@ import FavoriteButton from '../components/product/FavoriteButton.vue'
 import ProductReviews from '../components/product/ProductReviews.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 const route = useRoute(), language = useLanguageStore(), cart = useCartStore()
-const product = ref(null); const related = ref([]); const quantity = ref(1); const added = ref(false); const activeTab = ref('description'); const loading = ref(false)
+const product = ref(null); const related = ref([]); const quantity = ref(1); const added = ref(false); const loading = ref(false)
 const title = computed(() => product.value ? productTitle(product.value, language.locale) : '')
 // 商品详情页标题依赖当前商品的多语言标题，由本组件独立设置；
 // App.vue 在 /product/ 前缀下不设置 document.title，避免被覆盖。
@@ -27,12 +27,32 @@ const badge = computed(() => product.value ? productBadge(product.value.badge, l
 const shipping = computed(() => language.shipping)
 const shippingFree = computed(() => shipping.value.feeCny <= 0)
 const shopInitial = computed(() => (product.value?.seller || '?').trim().charAt(0).toUpperCase())
+// 店铺入口：有真实 brand/manufacturer 时跳转到按 seller 筛选的商品列表，否则退化为普通列表
+const shopTarget = computed(() => {
+  const seller = product.value?.seller || ''
+  const real = product.value?.brand || product.value?.manufacturer
+  return real ? { path: '/products', query: { seller } } : '/products'
+})
 
-// 点击评分区跳转到评论 Tab 并滚动到对应位置
+// 商品介绍「查看更多/收起」折叠：仅当文字超过约 5 行时显示按钮
+const descExpanded = ref(false)
+const descOverflow = ref(false)
+const descEl = ref(null)
+const reviewsEl = ref(null)
+
+function measureDesc() {
+  descExpanded.value = false
+  descOverflow.value = false
+  nextTick(() => {
+    const el = descEl.value
+    if (el && el.scrollHeight > el.clientHeight + 1) descOverflow.value = true
+  })
+}
+watch(description, measureDesc)
+
+// 点击评分区直接滚动到页内「买家评价」分区（评价不再是 Tab）
 function scrollToReviews() {
-  activeTab.value = 'reviews'
-  const el = document.querySelector('.detail-tabs')
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  reviewsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 async function loadProduct(id) {
@@ -77,9 +97,9 @@ const add = async () => {
 }
 
 onMounted(() => loadProduct(route.params.id))
-watch(() => route.params.id, (id) => { if (id) { quantity.value = 1; activeTab.value = 'description'; loadProduct(id) } })
+watch(() => route.params.id, (id) => { if (id) { quantity.value = 1; loadProduct(id) } })
 </script>
-<template><section v-if="loading" class="container page detail-page" role="status" aria-busy="true" aria-label="加载中"><div class="breadcrumbs skeleton-shimmer" style="width:140px;height:14px" /><div class="detail-layout"><div class="detail-skeleton-gallery skeleton-shimmer" /><div class="detail-skeleton-info"><div class="skeleton-shimmer skeleton-line" style="width:30%" /><div class="skeleton-shimmer skeleton-line tall" style="width:75%" /><div class="skeleton-shimmer skeleton-line short" style="width:50%" /><div class="skeleton-shimmer skeleton-line short" style="width:40%" /><div class="skeleton-shimmer skeleton-line" style="width:90%" /><div class="skeleton-shimmer skeleton-line" style="width:85%" /><div class="skeleton-shimmer skeleton-line short" style="width:35%" /></div></div></section><section v-else-if="product" class="container page detail-page"><div class="breadcrumbs"><RouterLink to="/products">{{ language.t('products') }}</RouterLink><span>/</span><RouterLink :to="`/category/${product.category}`">{{ language.category(product.category) }}</RouterLink></div><div class="detail-layout"><ProductGallery :product="product" /><div class="detail-info"><RouterLink class="detail-shop" to="/products"><span class="shop-avatar">{{ shopInitial }}</span>{{ product.seller }}</RouterLink><span class="eyebrow" :class="{ 'eyebrow--customizable': product.isCustomizable }">{{ product.isCustomizable ? language.t('customizable') : (badge || language.t('handmade')) }}</span><h1>{{ title }}</h1><div class="detail-rating" role="button" tabindex="0" @click="scrollToReviews" @keydown.enter="scrollToReviews"><span class="star-icon">★</span>{{ product.rating }} <u>{{ product.reviewCount }} {{ language.t('reviewCountUnit') }}</u></div><div class="detail-price"><strong>{{ language.price(product.price) }}</strong><del v-if="product.originalPrice > product.price">{{ language.price(product.originalPrice) }}</del><span v-if="product.originalPrice > product.price" class="discount-badge">-{{ Math.round((1 - product.price / product.originalPrice) * 100) }}%</span></div><p class="stock">● {{ language.t('stock') }} {{ product.stock }} {{ language.t('items') }}</p><div class="purchase-row"><div class="quantity-control"><button @click="quantity=Math.max(1,quantity-1)">−</button><span>{{ quantity }}</span><button @click="quantity=Math.min(product.stock,quantity+1)">+</button></div><button class="button primary" @click="add">{{ added ? language.t('added') : language.t('addCart') }}</button><FavoriteButton :product-id="product.id" /></div><div class="detail-shipping"><p class="shipping-note">✦ {{ shippingFree ? language.t('shippingFree') : `${language.t('shippingEstimate')} ${language.price(shipping.feeCny)}` }}</p><p class="shipping-hint">{{ language.t('shippingEstimateHint') }}</p></div></div></div><section class="detail-tabs"><div class="tab-list"><button v-for="tab in ['description','specifications','shipping','reviews']" :key="tab" :class="{active:activeTab===tab}" @click="activeTab=tab">{{ language.t(tab) }}</button></div><div class="tab-content"><p v-if="activeTab==='description'">{{ description }}</p><p v-else-if="activeTab==='specifications'">{{ language.t('detailSpecs') }}</p><p v-else-if="activeTab==='shipping'">{{ language.t('detailShipping') }}</p><ProductReviews v-else :product-id="product.id" @changed="refreshProductRating" /></div></section><section class="section related-section"><div class="section-heading"><h2>{{ language.t('related') }}</h2></div><ProductGrid :products="related" /></section></section><section v-else-if="!loading" class="container page"><EmptyState :title="language.t('productNotFound')" :action="language.t('backHome')" /></section></template>
+<template><section v-if="loading" class="container page detail-page" role="status" aria-busy="true" aria-label="加载中"><div class="breadcrumbs skeleton-shimmer" style="width:140px;height:14px" /><div class="detail-layout"><div class="detail-skeleton-gallery skeleton-shimmer" /><div class="detail-skeleton-info"><div class="skeleton-shimmer skeleton-line" style="width:30%" /><div class="skeleton-shimmer skeleton-line tall" style="width:75%" /><div class="skeleton-shimmer skeleton-line short" style="width:50%" /><div class="skeleton-shimmer skeleton-line short" style="width:40%" /><div class="skeleton-shimmer skeleton-line" style="width:90%" /><div class="skeleton-shimmer skeleton-line" style="width:85%" /><div class="skeleton-shimmer skeleton-line short" style="width:35%" /></div></div></section><section v-else-if="product" class="container page detail-page"><div class="breadcrumbs"><RouterLink to="/products">{{ language.t('products') }}</RouterLink><span>/</span><RouterLink :to="`/category/${product.category}`">{{ language.category(product.category) }}</RouterLink></div><div class="detail-layout"><ProductGallery :product="product" /><div class="detail-info"><RouterLink class="detail-shop" :to="shopTarget"><span class="shop-avatar">{{ shopInitial }}</span>{{ product.seller }}</RouterLink><span class="eyebrow" :class="{ 'eyebrow--customizable': product.isCustomizable }">{{ product.isCustomizable ? language.t('customizable') : (badge || language.t('handmade')) }}</span><h1>{{ title }}</h1><div class="detail-rating" role="button" tabindex="0" @click="scrollToReviews" @keydown.enter="scrollToReviews"><span class="star-icon">★</span>{{ product.rating }} <u>{{ product.reviewCount }} {{ language.t('reviewCountUnit') }}</u></div><div class="detail-price"><strong>{{ language.price(product.price) }}</strong><del v-if="product.originalPrice > product.price">{{ language.price(product.originalPrice) }}</del><span v-if="product.originalPrice > product.price" class="discount-badge">-{{ Math.round((1 - product.price / product.originalPrice) * 100) }}%</span></div><p class="stock">● {{ language.t('stock') }} {{ product.stock }} {{ language.t('items') }}</p><div class="purchase-row"><div class="quantity-control"><button @click="quantity=Math.max(1,quantity-1)">−</button><span>{{ quantity }}</span><button @click="quantity=Math.min(product.stock,quantity+1)">+</button></div><button class="button primary" @click="add">{{ added ? language.t('added') : language.t('addCart') }}</button><FavoriteButton :product-id="product.id" /></div><div class="detail-shipping"><p class="shipping-note">✦ {{ shippingFree ? language.t('shippingFree') : `${language.t('shippingEstimate')} ${language.price(shipping.feeCny)}` }}</p><p class="shipping-hint">{{ language.t('shippingEstimateHint') }}</p></div></div></div><section class="detail-sections"><section class="detail-section"><h2>{{ language.t('description') }}</h2><p ref="descEl" class="detail-desc" :class="{ 'is-clamped': !descExpanded }">{{ description }}</p><button v-if="descOverflow" type="button" class="text-button detail-more" @click="descExpanded = !descExpanded">{{ descExpanded ? language.t('showLess') : language.t('showMore') }}</button></section><section class="detail-section"><h2>{{ language.t('specifications') }}</h2><p>{{ language.t('detailSpecs') }}</p></section><section class="detail-section"><h2>{{ language.t('shipping') }}</h2><p>{{ language.t('detailShipping') }}</p></section><section class="detail-section" ref="reviewsEl"><h2>{{ language.t('reviews') }}</h2><ProductReviews :product-id="product.id" @changed="refreshProductRating" /></section></section><section class="section related-section"><div class="section-heading"><h2>{{ language.t('related') }}</h2></div><ProductGrid :products="related" /></section></section><section v-else-if="!loading" class="container page"><EmptyState :title="language.t('productNotFound')" :action="language.t('backHome')" /></section></template>
 
 <style scoped>
 /* detail-shipping / shipping-hint styling handled by global main.css */

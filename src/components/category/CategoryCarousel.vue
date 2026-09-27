@@ -26,6 +26,11 @@ const offset = ref(0)
 let stepCount = 0 // 已走过的步数
 let timer = null
 let isPaused = false
+// 触摸滑动：记录起始坐标与起始位移，拖动时暂停自动轮播，松手后吸附到最近卡片
+let touchStartX = 0
+let touchStartY = 0
+let touchStartOffset = 0
+let dragging = false
 
 function stepForward() {
   if (isPaused || !trackRef.value || !shouldCarousel.value) return
@@ -73,6 +78,48 @@ function stopTimer() {
 function handleEnter() { isPaused = true }
 function handleLeave() { isPaused = false }
 
+// 单张卡片步进宽度（卡片宽 + 间距），供触摸吸附与自动轮播共用
+function getStepWidth() {
+  const track = trackRef.value
+  if (!track || !track.firstElementChild) return 0
+  return track.firstElementChild.offsetWidth + 18
+}
+
+function onTouchStart(e) {
+  if (!shouldCarousel.value || !trackRef.value || !e.touches.length) return
+  isPaused = true
+  dragging = true
+  touchStartX = e.touches[0].clientX
+  touchStartY = e.touches[0].clientY
+  touchStartOffset = offset.value
+  trackRef.value.style.transition = 'none'
+}
+function onTouchMove(e) {
+  if (!dragging || !trackRef.value || !e.touches.length) return
+  const dx = e.touches[0].clientX - touchStartX
+  const dy = e.touches[0].clientY - touchStartY
+  // 横向意图明显时阻止页面纵向滚动，让手势专注切换分类
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 6) e.preventDefault()
+  offset.value = touchStartOffset + dx
+  trackRef.value.style.transform = `translateX(${offset.value}px)`
+}
+function onTouchEnd() {
+  if (!dragging) return
+  dragging = false
+  const track = trackRef.value
+  const stepWidth = getStepWidth()
+  const originalCount = carouselList.value.length
+  if (!track || !stepWidth || originalCount < 1) { isPaused = false; return }
+  // 松手后吸附到最近的一张卡片，并把 stepCount 对齐，保证后续自动轮播无缝衔接
+  const nearest = Math.max(0, Math.min(originalCount - 1, Math.round(-offset.value / stepWidth)))
+  offset.value = -nearest * stepWidth
+  stepCount = nearest
+  track.style.transition = 'transform .35s ease'
+  track.style.transform = `translateX(${offset.value}px)`
+  // 短暂停顿后恢复自动轮播
+  setTimeout(() => { isPaused = false }, 1600)
+}
+
 // 数据变化时重置
 watch(() => props.categories, () => {
   offset.value = 0
@@ -101,6 +148,10 @@ onUnmounted(() => { stopTimer() })
         class="category-carousel"
         @mouseenter="handleEnter"
         @mouseleave="handleLeave"
+        @touchstart.passive="onTouchStart"
+        @touchmove="onTouchMove"
+        @touchend="onTouchEnd"
+        @touchcancel="onTouchEnd"
       >
         <div ref="trackRef" class="category-carousel-track" :class="{ 'is-static': !shouldCarousel }">
           <RouterLink

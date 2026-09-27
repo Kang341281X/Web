@@ -7,7 +7,10 @@ import { useCustomerStore } from './stores/customer'
 import { useFavoritesStore } from './stores/favorites'
 import { useLanguageStore } from './stores/language'
 import './styles/main.css'
+// 前台店铺区 Element Plus 主题覆盖需在 admin.css 之后引入，
+// 用 .storefront 容器隔离，避免覆盖后台蓝色主题
 import './styles/admin.css'
+import './styles/element-theme.css'
 
 // Element Plus 已改为按需引入（见 vite.config.js 的 unplugin-vue-components）：
 // 模板组件与图标在用到的文件里自动 import，中文 locale 由 App.vue 的 <el-config-provider> 提供。

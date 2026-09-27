@@ -4,7 +4,26 @@ import storageService from '../services/storageService.js'
 
 const router = Router()
 
-const selectFields = `p.id, p.name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.manufacturer, p.brand, p.description, p.detail, p.main_image, p.sku, p.is_customizable, p.rating, p.review_count, p.created_at`
+// 按当前语言取译文的字段列表：COALESCE 保证无译文时回退到 product 的 zh-CN 原文
+const localizedSelectFields = `p.id, COALESCE(t.name, p.name) AS name, p.category_id, c.name AS category_name, p.price, p.original_price, p.stock, p.sales, p.unit, p.manufacturer, p.brand, COALESCE(t.description, p.description) AS description, COALESCE(t.detail, p.detail) AS detail, p.main_image, p.sku, p.is_customizable, p.rating, p.review_count, p.created_at`
+
+// 把界面语言归一化为受支持的语言代码；无法识别时回退 zh-CN。
+function normalizeLocale(raw) {
+  if (!raw) return 'zh-CN'
+  const lower = String(raw).split(',')[0].trim().replace('_', '-').toLowerCase()
+  if (lower === 'zh-cn') return 'zh-CN'
+  if (lower === 'zh-tw') return 'zh-TW'
+  if (lower === 'en' || lower.startsWith('en-')) return 'en'
+  if (lower === 'ja' || lower.startsWith('ja-')) return 'ja'
+  if (lower === 'ko' || lower.startsWith('ko-')) return 'ko'
+  return 'zh-CN'
+}
+
+// 从查询参数 / 请求头解析界面语言：支持 ?locale=xx、X-Locale 请求头与 Accept-Language。
+function resolveLocale(req) {
+  const raw = req.query.locale || req.headers['x-locale'] || req.headers['accept-language']
+  return normalizeLocale(raw)
+}
 
 function publicProduct(product) {
   return {
@@ -37,6 +56,7 @@ router.get('/products', async (req, res, next) => {
     const sort = String(req.query.sort || 'recommended')
     const minPrice = req.query.min_price != null && req.query.min_price !== '' ? Number(req.query.min_price) : null
     const maxPrice = req.query.max_price != null && req.query.max_price !== '' ? Number(req.query.max_price) : null
+    const seller = String(req.query.seller || '').trim()
 
     const clauses = ['p.status = 1']
     const params = []
@@ -57,7 +77,12 @@ router.get('/products', async (req, res, next) => {
       clauses.push('p.price <= ?')
       params.push(maxPrice)
     }
+    if (seller) {
+      clauses.push('(p.brand = ? OR p.manufacturer = ?)')
+      params.push(seller, seller)
+    }
     const where = `WHERE ${clauses.join(' AND ')}`
+    const locale = resolveLocale(req)
 
     let orderClause = 'ORDER BY p.created_at DESC, p.id DESC'
     if (sort === 'popular') {
@@ -70,8 +95,8 @@ router.get('/products', async (req, res, next) => {
 
     const [[{ total }]] = await db.execute(`SELECT COUNT(*) AS total FROM product p ${where}`, params)
     const [rows] = await db.execute(
-      `SELECT ${selectFields} FROM product p JOIN category c ON c.id = p.category_id ${where} ${orderClause} LIMIT ? OFFSET ?`,
-      [...params, pageSize, (page - 1) * pageSize]
+      `SELECT ${localizedSelectFields} FROM product p JOIN category c ON c.id = p.category_id LEFT JOIN product_translation t ON t.product_id = p.id AND t.locale = ? ${where} ${orderClause} LIMIT ? OFFSET ?`,
+      [locale, ...params, pageSize, (page - 1) * pageSize]
     )
     res.json({
       success: true,
@@ -88,9 +113,10 @@ router.get('/products/:id', async (req, res, next) => {
   try {
     const id = Number(req.params.id)
     if (!Number.isInteger(id)) return res.status(404).json({ success: false, message: '商品不存在' })
+    const locale = resolveLocale(req)
     const [rows] = await db.execute(
-      `SELECT ${selectFields} FROM product p JOIN category c ON c.id = p.category_id WHERE p.id = ? AND p.status = 1`,
-      [id]
+      `SELECT ${localizedSelectFields} FROM product p JOIN category c ON c.id = p.category_id LEFT JOIN product_translation t ON t.product_id = p.id AND t.locale = ? WHERE p.id = ? AND p.status = 1`,
+      [locale, id]
     )
     if (!rows[0]) return res.status(404).json({ success: false, message: '商品不存在' })
     const [images] = await db.execute(

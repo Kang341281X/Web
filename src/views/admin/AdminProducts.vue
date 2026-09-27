@@ -13,6 +13,17 @@ import { useUserStore } from '../../stores/user'
 import { COL, actionColWidth } from '../../constants/tableColumn'
 import { useIsMobile } from '../../composables/useIsMobile'
 
+// 商品名称/描述/详情的多语言 Tab：zh-CN 直接落在商品主表，其余语言写入 product_translation 表
+const ALT_LOCALES = ['zh-TW', 'en', 'ja', 'ko']
+const localeTabs = [
+  { code: 'zh-CN', label: '简体中文' },
+  { code: 'zh-TW', label: '繁體中文' },
+  { code: 'en', label: 'English' },
+  { code: 'ja', label: '日本語' },
+  { code: 'ko', label: '한국어' },
+]
+const emptyTranslations = () => Object.fromEntries(ALT_LOCALES.map(locale => [locale, { name: '', description: '', detail: '' }]))
+
 const userStore = useUserStore()
 const route = useRoute(); const loading = ref(false); const products = ref([]); const categories = ref([]); const total = ref(0); const selected = ref([])
 // 移动端去掉操作列 fixed，避免固定列吃掉窄屏本就稀缺的可视宽度
@@ -22,13 +33,15 @@ const isMobile = useIsMobile()
 const query = reactive({ keyword: '', category_id: route.query.category_id ? Number(route.query.category_id) : '', stock: route.query.stock === 'low' ? 'low' : '', page: 1, page_size: 20 })
 const dialogVisible = ref(false); const saving = ref(false); const formRef = ref(); const form = reactive(defaultForm()); const images = ref([]); const editing = computed(() => Boolean(form.id)); const importDialogVisible = ref(false); const onlineDialogVisible = ref(false)
 const rules = { name: [{ required: true, message: '请输入商品名称', trigger: 'blur' }], category_id: [{ required: true, message: '请选择分类', trigger: 'change' }], price: [{ required: true, message: '请输入售价', trigger: 'blur' }] }
+// 多语言 Tab 当前选中的语言
+const activeLocaleTab = ref('zh-CN')
 // 裁剪对话框状态
 const cropVisible = ref(false); const cropSrc = ref(''); const cropImageId = ref(null); const cropNewUid = ref(null)
 // 库存调整弹窗状态：编辑商品时库存不随表单提交（防丢失更新），改为独立的增量调整接口
 const stockDialogVisible = ref(false); const stockSaving = ref(false); const stockForm = reactive({ delta: 1, reason: '' })
 // 新文件计数器，用于生成临时 ID
 let newFileSeq = 0
-function defaultForm() { return { id: null, name: '', category_id: '', price: 0, original_price: null, stock: 0, sales: 0, unit: '', manufacturer: '', brand: '', sku: '', is_customizable: '0', rating: 5, description: '', detail: '', status: 1 } }
+function defaultForm() { return { id: null, name: '', category_id: '', price: 0, original_price: null, stock: 0, sales: 0, unit: '', manufacturer: '', brand: '', sku: '', is_customizable: '0', rating: 5, description: '', detail: '', status: 1, translations: emptyTranslations() } }
 // 富文本 HTML → 纯文本：商品详情按纯文本编辑展示，避免文本框里出现 <p> 等标签对
 function htmlToPlainText(html) {
   if (!html) return ''
@@ -47,11 +60,11 @@ function search() { query.page = 1; load() }
 function clearFilter() { query.category_id = ''; query.stock = ''; search() }
 function handleSelection(rows) { selected.value = rows }
 function pageIndex(index) { return (query.page - 1) * query.page_size + index + 1 }
-function resetForm() { Object.assign(form, defaultForm()); images.value = [] }
+function resetForm() { Object.assign(form, defaultForm()); images.value = []; activeLocaleTab.value = 'zh-CN' }
 function openCreate() { resetForm(); form.sku = generateSkuCode(userStore.adminUser?.username); dialogVisible.value = true }
 // SKU 一律由系统按规则生成，管理员只能「生成/重新生成」，不能手动输入
 function regenerateSku() { form.sku = generateSkuCode(userStore.adminUser?.username) }
-async function openEdit(row) { try { const { data } = await api.get(`/products/${row.id}`); const product = data.data; Object.assign(form, product, { sku: product.sku || '', is_customizable: product.is_customizable ? '1' : '0', rating: Number(product.rating) || 5, detail: htmlToPlainText(product.detail || '') }); images.value = data.data.images; dialogVisible.value = true } catch (error) { ElMessage.error(error.response?.data?.message || '商品详情加载失败') } }
+async function openEdit(row) { try { const { data } = await api.get(`/products/${row.id}`); const product = data.data; const serverTr = product.translations || {}; const translations = emptyTranslations(); for (const locale of ALT_LOCALES) { const tr = serverTr[locale]; if (tr) translations[locale] = { name: tr.name || '', description: tr.description || '', detail: tr.detail || '' } } Object.assign(form, product, { sku: product.sku || '', is_customizable: product.is_customizable ? '1' : '0', rating: Number(product.rating) || 5, detail: htmlToPlainText(product.detail || ''), translations }); images.value = data.data.images; activeLocaleTab.value = 'zh-CN'; dialogVisible.value = true } catch (error) { ElMessage.error(error.response?.data?.message || '商品详情加载失败') } }
 async function uploadNewFiles(productId) {
   const newImgs = images.value.filter(img => img.is_new)
   if (!newImgs.length) return null
@@ -251,9 +264,6 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
         <div class="form-section__title">基础信息</div>
         <el-row :gutter="24">
           <el-col :xs="24" :md="12" :lg="8">
-            <el-form-item label="商品名称" prop="name"><el-input v-model="form.name" placeholder="请输入商品名称" /></el-form-item>
-          </el-col>
-          <el-col :xs="24" :md="12" :lg="8">
             <el-form-item label="商品编号（SKU）">
               <div class="sku-row">
                 <el-input v-model="form.sku" readonly class="sku-input" :class="{ 'is-locked': editing }" placeholder="系统自动生成" />
@@ -323,11 +333,31 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
         </div>
       </div>
 
-      <!-- 商品描述 -->
+      <!-- 名称与描述（多语言） -->
       <div class="form-section">
-        <div class="form-section__title">商品描述</div>
-        <el-form-item label="简要描述"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="商品详情"><el-input v-model="form.detail" type="textarea" :rows="4" placeholder="请输入商品详情（纯文本，会自动去除 HTML 标签）" /></el-form-item>
+        <div class="form-section__title">名称与描述（多语言）</div>
+        <el-tabs v-model="activeLocaleTab" class="translation-tabs">
+          <el-tab-pane v-for="loc in localeTabs" :key="loc.code" :label="loc.label" :name="loc.code">
+            <el-form-item v-if="loc.code === 'zh-CN'" label="商品名称" prop="name">
+              <el-input v-model="form.name" placeholder="请输入商品名称" />
+            </el-form-item>
+            <el-form-item v-else label="商品名称">
+              <el-input v-model="form.translations[loc.code].name" placeholder="未填写时使用简体中文" />
+            </el-form-item>
+            <el-form-item v-if="loc.code === 'zh-CN'" label="简要描述">
+              <el-input v-model="form.description" type="textarea" :rows="2" />
+            </el-form-item>
+            <el-form-item v-else label="简要描述">
+              <el-input v-model="form.translations[loc.code].description" type="textarea" :rows="2" placeholder="未填写时使用简体中文" />
+            </el-form-item>
+            <el-form-item v-if="loc.code === 'zh-CN'" label="商品详情">
+              <el-input v-model="form.detail" type="textarea" :rows="4" placeholder="请输入商品详情（纯文本，会自动去除 HTML 标签）" />
+            </el-form-item>
+            <el-form-item v-else label="商品详情">
+              <el-input v-model="form.translations[loc.code].detail" type="textarea" :rows="4" placeholder="未填写时使用简体中文" />
+            </el-form-item>
+          </el-tab-pane>
+        </el-tabs>
       </div>
 
       <!-- 商品图片 -->

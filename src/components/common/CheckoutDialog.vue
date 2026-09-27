@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Download, ShoppingCart } from '@element-plus/icons-vue'
+import { Download } from '@element-plus/icons-vue'
 import { useCartStore } from '../../stores/cart'
 import { useCustomerStore } from '../../stores/customer'
 import { useAddressStore } from '../../stores/address'
@@ -316,8 +316,10 @@ async function handleSubmit() {
       <div class="dialog-footer">
         <el-button @click="dialogVisible = false">{{ language.t('close') }}</el-button>
         <el-button :icon="Download" :loading="downloading" @click="handleDownload">{{ language.t('checkoutDownload') }}</el-button>
-        <el-button v-if="customer.isLoggedIn" type="primary" :icon="ShoppingCart" :loading="submitting" :disabled="!canSubmit" @click="handleSubmit">{{ language.t('checkoutSubmit') }}</el-button>
-        <el-button v-else type="primary" @click="goLogin">{{ language.t('goLogin') }}</el-button>
+        <button v-if="customer.isLoggedIn" type="button" class="button primary checkout-submit" :disabled="submitting || !canSubmit" @click="handleSubmit">
+          {{ submitting ? language.t('submitting') : language.t('checkoutSubmit') }}
+        </button>
+        <button v-else type="button" class="button primary" @click="goLogin">{{ language.t('goLogin') }}</button>
       </div>
     </template>
   </el-dialog>
@@ -413,6 +415,8 @@ async function handleSubmit() {
   gap: 10px;
   flex-wrap: wrap;
 }
+/* 「提交订单」改用全站 .button.primary 黑色胶囊按钮后，补上禁用态与移动端宽度 */
+.checkout-submit[disabled] { opacity: .6; cursor: progress; transform: none }
 
 /* 移动端商品明细卡片（替代 el-table）：视觉与 Orders.vue 的 .order-items 移动端卡片保持一致 */
 .checkout-items-mobile { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line) }
@@ -434,7 +438,7 @@ async function handleSubmit() {
   .checkout-addresses { grid-template-columns: 1fr }
   /* 移动端把按钮铺满一行、点击区域加大，避免误触 */
   .dialog-footer { flex-direction: column-reverse; gap: 8px }
-  .dialog-footer :deep(.el-button) { width: 100%; margin-left: 0; min-height: 44px }
+  .dialog-footer :deep(.el-button), .dialog-footer .button { width: 100%; margin-left: 0; min-height: 44px }
   .checkout-remark textarea { font-size: 16px }
 }
 </style>

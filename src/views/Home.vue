@@ -5,6 +5,7 @@ import { fetchProducts, fetchCategories } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
 import ProductGridSkeleton from '../components/product/ProductGridSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
+import CategoryCarousel from '../components/category/CategoryCarousel.vue'
 
 const PAGE_SIZE = 60
 
@@ -87,6 +88,9 @@ onMounted(async () => {
       </div>
       <img src="/assets/images/banners/craft-hero.svg" alt="Handcrafted pottery and flowers" fetchpriority="high" />
     </section>
+
+    <!-- Shop by Category 图片化分类轮播：Hero 之后第一屏，比纯文字胶囊入口更醒目 -->
+    <CategoryCarousel :categories="categories" />
 
     <!-- Category Quick-Entry Horizontal Row -->
     <section v-if="categories.length" class="container etsy-categories">

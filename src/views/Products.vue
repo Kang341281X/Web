@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { toCny } from '../data/currency'
 import { useLanguageStore } from '../stores/language'
+import { useRoute } from 'vue-router'
 import { fetchProducts, fetchCategories } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
 import ProductGridSkeleton from '../components/product/ProductGridSkeleton.vue'
@@ -13,6 +14,10 @@ import EmptyState from '../components/common/EmptyState.vue'
 const PAGE_SIZE = 60
 
 const language = useLanguageStore()
+const route = useRoute()
+const seller = computed(() => String(route.query.seller || '').trim())
+const introTitle = computed(() => seller.value ? language.t('sellerWorks').replace('{seller}', seller.value) : language.t('products'))
+const emptyTitle = computed(() => seller.value ? language.t('sellerEmpty') : language.t('noResults'))
 const filters = ref({ category: null, minPriceInput: '', maxPriceInput: '' })
 const sort = ref('recommended')
 const appliedPrice = ref({ min: null, max: null })
@@ -41,6 +46,7 @@ async function load() {
     const params = { page: page.value, page_size: PAGE_SIZE, sort: sort.value }
     if (selectedCategory.value != null) params.category_id = selectedCategory.value
     if (filters.value.keyword) params.keyword = filters.value.keyword
+    if (seller.value) params.seller = seller.value
     const { minCny, maxCny } = priceBounds.value
     if (minCny != null) params.min_price = minCny
     if (maxCny != null) params.max_price = maxCny
@@ -86,5 +92,6 @@ onMounted(async () => {
 })
 
 watch(sort, () => search())
+watch(() => route.query.seller, () => { page.value = 1; load() })
 </script>
-<template><section class="container page products-page"><div class="page-intro"><h1>{{ language.t('products') }}</h1></div><div class="catalog-toolbar"><button class="filter-toggle" @click="$refs.filter?.classList.toggle('open')">☷ {{ language.t('filters') }}</button><p><strong>{{ total }}</strong> {{ language.t('items') }}</p><SortSelect v-model="sort" /></div><div class="catalog-layout"><div ref="filter"><FilterPanel v-model="filters" :categories="categories" @apply-price="onApplyPrice" @select-category="onSelectCategory" /></div><ProductGridSkeleton v-if="loading" /><ProductGrid v-else-if="filtered.length" :products="filtered" /><EmptyState v-else :title="language.t('noResults')" :action="language.t('continueShopping')">{{ language.t('craftedDescription') }}</EmptyState></div><div v-if="totalPages > 1" class="catalog-pagination"><el-pagination v-model:current-page="page" :page-size="PAGE_SIZE" :total="total" :pager-count="5" layout="prev, pager, next" background @current-change="changePage" /><p class="catalog-pagination__summary" aria-live="polite">{{ pageSummary }}</p></div></section></template>
+<template><section class="container page products-page"><div class="page-intro"><h1>{{ introTitle }}</h1></div><div class="catalog-toolbar"><button class="filter-toggle" @click="$refs.filter?.classList.toggle('open')">☷ {{ language.t('filters') }}</button><p><strong>{{ total }}</strong> {{ language.t('items') }}</p><SortSelect v-model="sort" /></div><div class="catalog-layout"><div ref="filter"><FilterPanel v-model="filters" :categories="categories" @apply-price="onApplyPrice" @select-category="onSelectCategory" /></div><ProductGridSkeleton v-if="loading" /><ProductGrid v-else-if="filtered.length" :products="filtered" /><EmptyState v-else :title="emptyTitle" :action="language.t('continueShopping')">{{ language.t('craftedDescription') }}</EmptyState></div><div v-if="totalPages > 1" class="catalog-pagination"><el-pagination v-model:current-page="page" :page-size="PAGE_SIZE" :total="total" :pager-count="5" layout="prev, pager, next" background @current-change="changePage" /><p class="catalog-pagination__summary" aria-live="polite">{{ pageSummary }}</p></div></section></template>
