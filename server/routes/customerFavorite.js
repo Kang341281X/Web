@@ -25,37 +25,6 @@ router.get('/', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
-// 合并本地收藏：兼容 product_id 数组与 { product_ids: [...] } 两种入参
-// 注意：必须注册在 /:productId 之前，否则 /merge 会被当成商品 id
-router.post('/merge', async (req, res, next) => {
-  const connection = await db.getConnection()
-  try {
-    const raw = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.product_ids) ? req.body.product_ids : [])
-    const ids = [...new Set(raw.map(parseProductId).filter(Boolean))]
-
-    let added = 0
-    if (ids.length) {
-      await connection.beginTransaction()
-      try {
-        for (const productId of ids) {
-          // 已删除的商品直接跳过，不阻断整体合并
-          if (!await findProduct(productId, connection)) continue
-          const [result] = await connection.execute('INSERT OR IGNORE INTO customer_favorite (customer_id, product_id) VALUES (?, ?)', [req.customer.id, productId])
-          added += result.affectedRows
-        }
-        await connection.commit()
-      } catch (error) { await connection.rollback(); throw error }
-    }
-
-    res.json({
-      success: true,
-      message: added ? `已合并 ${added} 个收藏` : '没有新增的收藏',
-      merged: added,
-      data: await listFavorites(req.customer.id),
-    })
-  } catch (error) { next(error) } finally { connection.release() }
-})
-
 // 收藏（幂等：重复收藏不报错，由唯一索引 + INSERT OR IGNORE 兜底）
 router.post('/:productId', async (req, res, next) => {
   try {

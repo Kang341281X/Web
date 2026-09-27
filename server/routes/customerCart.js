@@ -60,57 +60,6 @@ router.post('/', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
-// 合并游客购物车：兼容 [{ product_id, quantity }] 与 { items: [...] } 两种入参
-// 同商品先在本函数内求和，再与服务端已有数量相加并按库存截断
-router.post('/merge', async (req, res, next) => {
-  const connection = await db.getConnection()
-  try {
-    const raw = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.items) ? req.body.items : [])
-    // 先归并前端数组里重复的商品，避免同一商品被覆盖成单条
-    const merged = new Map()
-    for (const item of raw) {
-      const productId = parseProductId(item?.product_id)
-      if (!productId) continue
-      const quantity = Math.max(1, Math.trunc(Number(item?.quantity)) || 1)
-      merged.set(productId, (merged.get(productId) || 0) + quantity)
-    }
-
-    let added = 0
-    const truncated = []
-    if (merged.size) {
-      await connection.beginTransaction()
-      try {
-        for (const [productId, quantity] of merged) {
-          const product = await findProduct(productId, connection)
-          // 商品不存在 / 已下架 / 无库存的直接跳过，不阻断整体合并
-          if (!product || !product.status || product.stock < 1) continue
-          const [existing] = await connection.execute('SELECT quantity FROM cart_item WHERE customer_id = ? AND product_id = ?', [req.customer.id, productId])
-          const requested = Number(existing[0]?.quantity || 0) + quantity
-          const target = Math.min(requested, product.stock)
-          if (target < 1) continue
-          if (target < requested) truncated.push({ product_id: productId, stock: product.stock, quantity: target })
-          await connection.execute(
-            "INSERT INTO cart_item (customer_id, product_id, quantity) VALUES (?, ?, ?) ON CONFLICT (customer_id, product_id) DO UPDATE SET quantity = ?, updated_at = datetime('now')",
-            [req.customer.id, productId, target, target]
-          )
-          added++
-        }
-        await connection.commit()
-      } catch (error) { await connection.rollback(); throw error }
-    }
-
-    res.json({
-      success: true,
-      message: added
-        ? `已合并 ${added} 种商品${truncated.length ? `，其中 ${truncated.length} 种因库存不足已按库存调整` : ''}`
-        : '没有可合并的购物车商品',
-      merged: added,
-      truncated,
-      data: await listCart(req.customer.id),
-    })
-  } catch (error) { next(error) } finally { connection.release() }
-})
-
 // 修改某个商品的数量（同样按库存封顶）
 router.put('/:productId', async (req, res, next) => {
   try {
