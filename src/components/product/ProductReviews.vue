@@ -108,6 +108,11 @@ const FIRST_PAGE_SIZE = 3
 const MAX_PAGE_SIZE = 50
 const expanded = ref(false)
 
+// 展开后评论总数超过 10 条时，列表改为内部滚动容器（高度约等于 10 条评论），
+// 避免长评论列表把整个详情页无限撑高；收起态（只显示 3 条）和展开但 ≤10 条时仍随页面滚动
+const SCROLL_THRESHOLD = 10
+const reviewsScrollable = computed(() => expanded.value && summary.value.total > SCROLL_THRESHOLD)
+
 async function fetchPage(page, pageSize) {
   // 已登录时请求会带上顾客 token，后端据此标出哪些评论是自己写的、有没有评价资格
   const { reviews: list, summary: overview, pagination, canReview: eligible } = await fetchProductReviews(props.productId, { page, page_size: pageSize })
@@ -195,7 +200,16 @@ function openCreate() {
   scrollToForm()
 }
 
+// 未登录 / token 失效时，评价相关操作（编辑 / 删除 / 提交）的统一引导：
+// 弹登录框 + 轻提示，口径与上方「写评价」入口一致，不静默失败、也不直接报错
+function promptLogin() {
+  user.openLogin()
+  ElMessage.info(language.t('reviewLoginNeeded'))
+}
+
 function openEdit(review) {
+  // 兜底：未登录时按钮本就不该出现，但存在「刚退出登录、列表尚未刷新完成」的窗口期
+  if (!customer.isLoggedIn) { promptLogin(); return }
   // 24 小时后按钮本就不展示，这里再挡一次，防止通过其它方式触发
   if (!isEditable(review)) return
   revokePreview(form.files)
@@ -241,10 +255,7 @@ function removeKeptImage(index) { form.keepImages.splice(index, 1) }
 // 提交（发布 / 修改共用）
 async function submit() {
   formError.value = ''
-  if (!customer.isLoggedIn) {
-    user.openLogin()
-    return
-  }
+  if (!customer.isLoggedIn) { promptLogin(); return }
   const content = form.content.trim()
   if (!form.rating) { formError.value = language.t('reviewRatingRequired'); return }
   if (!content) { formError.value = language.t('reviewContentRequired'); return }
@@ -264,6 +275,9 @@ async function submit() {
     // 评分与评论数变了，通知商品详情页刷新顶部数据
     emit('changed')
   } catch (error) {
+    // token 失效（401）：axios 拦截器已清空本地登录态，这里统一引导重新登录，不展示原始报错；
+    // 表单保持打开，重新登录后可直接重新提交
+    if (error?.response?.status === 401) { promptLogin(); return }
     formError.value = error?.response?.data?.message || error?.message || language.t('operationFailed')
   } finally {
     submitting.value = false
@@ -272,6 +286,8 @@ async function submit() {
 
 // 删除：不限时间，只校验归属
 async function remove(review) {
+  // 兜底：未登录时按钮本就不该出现，但存在「刚退出登录、列表尚未刷新完成」的窗口期
+  if (!customer.isLoggedIn) { promptLogin(); return }
   try {
     await ElMessageBox.confirm(language.t('deleteReviewConfirm'), language.t('deleteReview'), {
       type: 'warning',
@@ -288,6 +304,8 @@ async function remove(review) {
     await load()
     emit('changed')
   } catch (error) {
+    // token 失效（401）：拦截器已清空本地登录态，统一引导重新登录，不展示原始报错
+    if (error?.response?.status === 401) { promptLogin(); return }
     ElMessage.error(error?.response?.data?.message || error?.message || language.t('operationFailed'))
   }
 }
@@ -377,7 +395,8 @@ watch(() => props.productId, () => { expanded.value = false; load() }, { immedia
       </div>
     </div>
 
-    <ul v-if="reviews.length" class="review-list">
+    <!-- 展开且评论总数 > 10 时，列表内部滚动（见 .review-list--scroll）；其余情况随页面滚动 -->
+    <ul v-if="reviews.length" class="review-list" :class="{ 'review-list--scroll': reviewsScrollable }">
       <li v-for="review in reviews" :key="review.id" class="review-item">
         <div class="review-avatar">
           <span>{{ initial(review.customerName) }}</span>
@@ -460,6 +479,11 @@ watch(() => props.productId, () => { expanded.value = false; load() }, { immedia
 .review-bar__track i { display: block; height: 100%; background: var(--clay); border-radius: 99px }
 .review-bar__count { width: 26px; text-align: right; flex-shrink: 0 }
 .review-list { list-style: none; margin: 0; padding: 0 }
+/* 展开且评论总数 > 10 时启用的内部滚动容器：max-height 约等于 10 条评论的展示高度
+   （单条约 100-150px：上下内边距 44px + 头部一行 + 正文 1-3 行），
+   原生滚动条沿用 .gallery-thumbs 的视觉隐藏写法（scrollbar-width + ::webkit-scrollbar） */
+.review-list--scroll { max-height: 1200px; overflow-y: auto; scrollbar-width: none }
+.review-list--scroll::-webkit-scrollbar { display: none }
 .review-item { display: flex; gap: 16px; padding: 22px 0; border-bottom: 1px solid var(--line) }
 .review-item:last-child { border-bottom: none }
 .review-avatar { position: relative; width: 44px; height: 44px; border-radius: 50%; background: var(--cream); color: var(--clay); display: flex; align-items: center; justify-content: center; font-weight: 600; flex-shrink: 0; overflow: hidden }
@@ -470,7 +494,10 @@ watch(() => props.productId, () => { expanded.value = false; load() }, { immedia
 .review-verified { font-size: .72rem; color: var(--sage); border: 1px solid var(--sage); border-radius: 99px; padding: 1px 8px }
 .review-edited { font-size: .72rem; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px }
 .review-date { margin-left: auto; color: var(--muted); font-size: .78rem }
-.review-text { margin: 9px 0 0; line-height: 1.7; color: var(--ink); white-space: pre-wrap; font-size: .9rem }
+/* 覆盖全局 .detail-section p 的 max-width:780px：本组件嵌套在详情页 .detail-section 内，
+   那条规则只应约束「商品描述」的阅读宽度，不该限制评论正文；
+   scoped 属性选择器（.review-text[data-v-x]）优先级高于全局类规则，换行交由 .review-body 的实际可用宽度决定 */
+.review-text { margin: 9px 0 0; line-height: 1.7; color: var(--ink); white-space: pre-wrap; font-size: .9rem; max-width: none }
 .review-images { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap }
 .review-images :deep(img) { width: 88px; height: 88px; object-fit: cover; border-radius: 8px; background: var(--cream) }
 
