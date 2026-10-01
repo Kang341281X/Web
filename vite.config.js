@@ -27,11 +27,15 @@ export default defineConfig({
     }),
   ],
   build: {
-    // 与 package.json 的 browserslist 保持同一套目标（最新两版 Chrome / Firefox / Edge）。
+    // 与 package.json 的 browserslist 保持同一套目标：
+    // 最新两版 Chrome / Firefox / Edge，外加 iOS 15 / Safari 15 / Android Chrome 100 / Samsung 20。
+    // 其中 Android Chrome 与 Samsung 浏览器走 Chrome 内核（esbuild 无独立 target 名），
+    // 已被更高的 chrome120 覆盖，故此处仅补充 WebKit 侧的 safari15 / ios15。
+    target: ['chrome120', 'firefox120', 'edge120', 'safari15', 'ios15'],
     // esbuild 压缩 CSS 时会依据 cssTarget 决定是否转换语法（如 inset 展开、颜色写法改写），
     // 不显式声明就会跟随 build.target 的默认值（含更老的 edge88 / safari14），
     // 与 autoprefixer 的目标不一致，可能把刚补好的写法再改回去。
-    cssTarget: ['chrome120', 'firefox120', 'edge120']
+    cssTarget: ['chrome120', 'firefox120', 'edge120', 'safari15', 'ios15']
   },
   server: {
     proxy: {

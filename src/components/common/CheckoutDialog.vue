@@ -210,7 +210,7 @@ async function handleSubmit() {
 
     <!-- 商品明细：桌面端保留表格；移动端换卡片式竖排列表，避免窄屏横向滚动 -->
     <el-table v-if="!isMobile" :data="tableRows" border style="width: 100%" :max-height="360">
-      <el-table-column label="商品图片" width="100">
+      <el-table-column :label="language.t('colImage')" width="100">
         <template #default="{ row }">
           <AppImage
             :src="row.image"
@@ -219,12 +219,12 @@ async function handleSubmit() {
           />
         </template>
       </el-table-column>
-      <el-table-column prop="name" label="商品名称" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="quantity" label="数量" width="80" align="center" />
-      <el-table-column label="单价" width="110" align="right">
+      <el-table-column prop="name" :label="language.t('colName')" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="quantity" :label="language.t('colQuantity')" width="80" align="center" />
+      <el-table-column :label="language.t('colUnitPrice')" width="110" align="right">
         <template #default="{ row }">¥{{ row.price.toFixed(2) }}</template>
       </el-table-column>
-      <el-table-column label="小计" width="120" align="right">
+      <el-table-column :label="language.t('colSubtotal')" width="120" align="right">
         <template #default="{ row }">¥{{ row.subtotal.toFixed(2) }}</template>
       </el-table-column>
     </el-table>

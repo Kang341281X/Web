@@ -39,5 +39,12 @@ export async function removeDirectory(folder) {
   if (relative(base, target).startsWith('..') || target === base) return
   try { await rm(target, { recursive: true, force: true }) } catch (error) { console.error(`无法清理上传目录 ${folder}`, error) }
 }
-export function getUrl(path) { return path ? `${String(process.env.PUBLIC_BASE_URL || 'http://localhost:3001').replace(/\/$/, '')}${path}` : null }
+// 仅 /uploads/ 开头的路径由后端托管，需要拼 PUBLIC_BASE_URL 完整地址；
+// /assets/ 等前端内置资源（如种子数据的占位图）后端并不托管，拼上后端地址只会 404，保持相对路径。
+export function getUrl(path) {
+  if (!path) return null
+  const text = String(path)
+  if (!text.startsWith('/uploads/')) return text
+  return `${String(process.env.PUBLIC_BASE_URL || 'http://localhost:3001').replace(/\/$/, '')}${text}`
+}
 export default { save, delete: remove, deleteDirectory: removeDirectory, getUrl, validateImage }

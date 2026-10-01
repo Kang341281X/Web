@@ -104,7 +104,7 @@ Web/
 | 浏览 | 首页（Hero + 分类入口 + 分类聚合的推荐区块 + 分页）、商品列表、分类页、搜索（含搜索建议与本地搜索历史） | ✅ 可用 |
 | 商品详情 | 图集轮播、价格/折扣、库存、数量选择、加入购物车、收藏、预估运费、Tab 切换（描述/规格/物流/评价）、相关商品 | ✅ 可用（风格与交互细节见第 10 节） |
 | 购物车 | 增删改数量、清空（二次确认）、金额与运费小计 | ✅ 可用 |
-| 结算 | 选择收货地址、买家备注、提交订单（人工确认发货）、下载结算清单 Excel（无需登录） | ✅ 可用 |
+| 结算 | 选择收货地址、买家备注、提交订单（人工确认发货）、下载结算清单 Excel（需登录加购） | ✅ 可用 |
 | 收藏 | 收藏/取消收藏、收藏列表页 | ✅ 可用 |
 | 账户 | 注册（用户名+手机号+密码）、登录（用户名+密码+图形验证码）、个人资料/头像、改密 | ✅ 可用 |
 | 收货地址 | 增删改、设默认 | ✅ 可用 |
@@ -188,7 +188,7 @@ SQLite，共 **20 张业务表**（不含内部的 `schema_migrations`）：
 | GET | `/api/public/settings` | 站点设置 + 社交媒体二维码 |
 | GET | `/api/public/exchange-rates` / `shipping-rates` | 汇率 / 运费（各 5 条） |
 | GET | `/api/customer/captcha` / `/api/captcha` | 顾客端 / 后台登录验证码（同一实现挂两次） |
-| POST | `/api/public/checkout/export` | 导出结算清单 Excel（无需登录，限流 20 次/分钟） |
+| POST | `/api/public/checkout/export` | 导出结算清单 Excel（需登录加购，限流 20 次/分钟） |
 
 ### 6.2 顾客接口（需 `Authorization: Bearer <customer_token>`，注册/登录除外）
 
@@ -199,8 +199,8 @@ SQLite，共 **20 张业务表**（不含内部的 `schema_migrations`）：
 | GET/PUT | `/api/customer/profile` | 个人资料（PUT 为 multipart，可改头像） |
 | PUT | `/api/customer/password` | 改密 |
 | 地址 | `/api/customer/addresses` 系列 | 增删改、设默认 |
-| 购物车 | `/api/customer/cart` 系列 | 增删改、合并（游客购物车登录后合并） |
-| 收藏 | `/api/customer/favorites` 系列 | 增删、合并 |
+| 购物车 | `/api/customer/cart` 系列 | 增删改（需登录，登录后从服务端拉取，无游客购物车） |
+| 收藏 | `/api/customer/favorites` 系列 | 增删（需登录，登录后从服务端拉取，无游客收藏） |
 | 订单 | `/api/customer/orders` 系列 | 下单、列表、详情、取消 |
 | 评价 | `/api/customer/products/:id/reviews`、`/api/customer/reviews/:id` | 发布/改/删 |
 

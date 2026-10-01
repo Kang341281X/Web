@@ -254,6 +254,8 @@ onMounted(() => {
 .order-card__amount { font-size: 1.05rem; color: var(--clay) }
 .order-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line) }
 .order-card__address { font-size: .76rem; color: var(--muted); line-height: 1.5; word-break: break-word }
+/* 390px 窄屏下「订单详情」按钮不换行、不被地址挤压（地址侧允许换行收缩） */
+.order-card__foot .text-button { white-space: nowrap; flex: none }
 
 .order-status { flex: none; font-size: .72rem; font-weight: 600; padding: 4px 10px; border-radius: 99px; background: #eee7df; color: #574d43 }
 .order-status.is-pending { background: #fdf0d9; color: #a86b12 }

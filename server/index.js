@@ -66,6 +66,13 @@ await mkdir(resolve(uploadDir, 'settings'), { recursive: true })
 await mkdir(resolve(uploadDir, 'import-temp'), { recursive: true })
 // helmet：安全响应头。本服务只提供 API 与 /uploads 静态文件（无 SPA 静态托管），默认配置即可
 app.use(helmet())
+// helmet 默认给所有响应加 Cross-Origin-Resource-Policy: same-origin，会阻止 5173 前端跨源加载
+// 3001 后端的 /uploads 图片（ERR_BLOCKED_BY_RESPONSE.NotSameOrigin）。仅对 /uploads 放开为
+// cross-origin，其余 API 响应保持 helmet 默认。
+app.use('/uploads', (_req, res, next) => {
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin')
+  next()
+})
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') || true }))
 app.use(express.json({ limit: '1mb' }))
 app.use('/uploads', express.static(uploadDir, { fallthrough: false, maxAge: '1d' }))
