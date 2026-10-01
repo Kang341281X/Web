@@ -38,10 +38,22 @@ const app = express()
 const port = Number(process.env.PORT || 3001)
 const uploadDir = resolve(process.env.UPLOAD_DIR || './uploads')
 
-// trust proxy：生产环境挂在 Nginx 等反向代理后面时，让 req.ip 取 X-Forwarded-For 里的真实客户端 IP；
-// 不设置的话 req.ip 恒为 127.0.0.1，middleware/rateLimit.js 的登录/注册限流会退化成全站共用额度。
-// TRUST_PROXY 默认 1（只信任一层代理）；本地直连开发（不挂代理）可在 .env.development 设 TRUST_PROXY=false。
-app.set('trust proxy', process.env.TRUST_PROXY === 'false' ? false : Number(process.env.TRUST_PROXY) || 1)
+// trust proxy：生产环境挂在 Nginx 等反向代理后面时，让 req.ip 取 X-Forwarded-For 里的真实客户端 IP。
+// 未设置 TRUST_PROXY 时默认不信任任何代理（false），避免把「伪造的 X-Forwarded-For」当成真实客户端 IP。
+// 只有显式设置才启用：false/0 表示不信任，正整数 n 表示信任 n 层代理。
+function resolveTrustProxy() {
+  const raw = process.env.TRUST_PROXY
+  if (raw === undefined || raw === '') {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('[Config] 未设置 TRUST_PROXY：挂在反向代理（如 Nginx）后面时请设为 1，否则登录/注册限流会退化为按代理 IP 计数。')
+    }
+    return false
+  }
+  if (raw === 'false') return false
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : false
+}
+app.set('trust proxy', resolveTrustProxy())
 
 if (!process.env.JWT_SECRET) {
   if (process.env.NODE_ENV === 'production') {
@@ -71,6 +83,15 @@ app.use(helmet())
 // cross-origin，其余 API 响应保持 helmet 默认。
 app.use('/uploads', (_req, res, next) => {
   res.set('Cross-Origin-Resource-Policy', 'cross-origin')
+  next()
+})
+// 禁止通过 HTTP 访问导入临时目录：import-temp 存放后台批量导入尚未确认的图片，
+// 属于内部临时文件，不应对外暴露（返回 404，不泄漏目录是否存在）。
+app.use('/uploads', (req, res, next) => {
+  const path = String(req.originalUrl || '').split('?')[0]
+  if (path === '/uploads/import-temp' || path.startsWith('/uploads/import-temp/')) {
+    return res.status(404).json({ success: false, message: '资源不存在' })
+  }
   next()
 })
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') || true }))
@@ -108,7 +129,11 @@ app.use('/api/customer', customerReviewRouter)
 app.use((err, _req, res, _next) => {
   console.error(err)
   if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ success: false, message: '图片大小不能超过 5MB' })
-  res.status(err.status || 500).json({ success: false, message: err.message || '服务器内部错误' })
+  const status = Number(err.status) || 500
+  // 生产环境 5xx 一律回传笼统文案，不回传 err.message（避免泄漏内部细节）；完整错误仍记录在 console.error。
+  // 4xx 保持现状，继续返回 err.message 以便前端/用户看到具体原因。
+  const message = status >= 500 && process.env.NODE_ENV === 'production' ? '服务器内部错误' : (err.message || '服务器内部错误')
+  res.status(status).json({ success: false, message })
 })
 app.listen(port, () => {
   console.log(`[Server] API service: http://localhost:${port}`)

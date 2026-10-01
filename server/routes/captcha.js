@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { issueCaptcha } from '../services/captchaService.js'
+import { captchaLimiter } from '../middleware/rateLimit.js'
 
 const router = Router()
 
@@ -24,15 +25,16 @@ const router = Router()
  * 验证码本身不携带任何身份，与「是谁在登录」无关，所以不需要做两套实现与两份存储；
  * 详见 server/services/captchaService.js 顶部说明。
  */
-router.get('/captcha', (_req, res) => {
+router.get('/captcha', captchaLimiter, (_req, res) => {
   const { captchaId, svg, expiresIn, text } = issueCaptcha()
   res.json({
     success: true,
     captchaId,
     image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
     expiresIn,
-    // 仅供自动化测试（playwright 接口用例）读取验证码文本；生产/开发环境未设置该变量时绝不回显。
-    ...(process.env.CAPTCHA_TEST_ECHO === '1' ? { text } : {}),
+    // 仅供自动化测试（playwright 接口用例）读取验证码文本。
+    // 生产环境（NODE_ENV=production）无视该变量，永不回显；开发/测试未设置该变量时同样不回显。
+    ...(process.env.NODE_ENV !== 'production' && process.env.CAPTCHA_TEST_ECHO === '1' ? { text } : {}),
   })
 })
 

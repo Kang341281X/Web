@@ -121,6 +121,15 @@ const applyMigration = db.transaction((filename, sql) => {
   markMigrationApplied.run(filename)
 })
 
+// 演示数据迁移：这些文件是「清空分类/商品表 + 重新插入演示数据」。
+// 生产环境默认不应注入演示数据（由运营在后台维护真实商品/分类），
+// 但迁移本身要标记为「已执行」，避免后续启动反复进入这段逻辑。
+const DEMO_SEED_MIGRATIONS = new Set(['006_seed_catalog.sql', '009_reseed_catalog.sql'])
+
+function isTruthyEnv(value) {
+  return value != null && ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase())
+}
+
 try {
   const sqlDirectory = new URL('./sql/', import.meta.url)
   const migrations = (await readdir(sqlDirectory)).filter(file => file.endsWith('.sql')).sort()
@@ -132,6 +141,14 @@ try {
     }
 
     const sql = await readFile(new URL(`./sql/${migration}`, import.meta.url), 'utf8')
+
+    // 生产环境默认跳过演示数据迁移（仍标记为已执行，后续迁移照常进行）；
+    // 显式设置 SEED_DEMO_DATA=1 才会在生产注入演示数据。开发环境保持不变。
+    if (DEMO_SEED_MIGRATIONS.has(migration) && process.env.NODE_ENV === 'production' && !isTruthyEnv(process.env.SEED_DEMO_DATA)) {
+      markMigrationApplied.run(migration)
+      console.log(`Skipped ${migration} (demo data disabled in production; set SEED_DEMO_DATA=1 to seed)`)
+      continue
+    }
 
     // 历史兼容（仅限第一次从老机制升级）：目标表在升级前就已有数据 →
     // 该「清空整表」脚本早已执行过，只补记标记，绝不重跑，

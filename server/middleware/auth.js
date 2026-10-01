@@ -5,15 +5,23 @@ export async function requireAuth(req, res, next) {
   const header = req.get('authorization') || ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : null
   if (!token) return res.status(401).json({ success: false, message: '请先登录' })
+
+  // token 校验单独 try/catch：无效/过期 → 401；数据库异常不能混进 401，交给 next(error) → 500
+  let payload
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET)
+    payload = jwt.verify(token, process.env.JWT_SECRET)
+  } catch {
+    return res.status(401).json({ success: false, message: '登录已失效，请重新登录' })
+  }
+
+  try {
     const [rows] = await db.execute('SELECT id, username, role, real_name, status, must_change_password FROM admin WHERE id = ?', [payload.id])
     const admin = rows[0]
     if (!admin || !admin.status) return res.status(401).json({ success: false, message: '账号不存在或已被禁用' })
     req.admin = admin
     next()
-  } catch {
-    return res.status(401).json({ success: false, message: '登录已失效，请重新登录' })
+  } catch (error) {
+    next(error)
   }
 }
 

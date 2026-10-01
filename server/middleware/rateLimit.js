@@ -43,3 +43,16 @@ export const publicWriteLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: '操作过于频繁，请稍后再试' }
 })
+
+/**
+ * 验证码签发限流：每 IP 每分钟最多 30 次。
+ * 签发验证码本身有成本（生成 SVG + base64 编码），且无任何身份门槛，
+ * 用限流防止匿名客户端高频刷验证码接口占用资源。计数不区分成败。
+ */
+export const captchaLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: '验证码请求过于频繁，请稍后再试' }
+})

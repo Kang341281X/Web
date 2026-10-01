@@ -29,6 +29,8 @@ export default defineConfig({
         NODE_ENV: 'test',
         DB_PATH: './server/test.db',
         PORT: String(BACKEND_PORT),
+        // 测试用随机 X-Forwarded-For 区分虚拟客户端 IP（见 tests/helpers.mjs），需信任一层代理才能按该头计数
+        TRUST_PROXY: '1',
         JWT_SECRET: 'playwright-test-only-jwt-secret',
         CUSTOMER_JWT_SECRET: 'playwright-test-only-customer-jwt-secret',
         UPLOAD_DIR: './uploads',
