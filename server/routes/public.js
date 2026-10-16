@@ -57,13 +57,17 @@ router.get('/products', async (req, res, next) => {
     const minPrice = req.query.min_price != null && req.query.min_price !== '' ? Number(req.query.min_price) : null
     const maxPrice = req.query.max_price != null && req.query.max_price !== '' ? Number(req.query.max_price) : null
     const seller = String(req.query.seller || '').trim()
+    const locale = resolveLocale(req)
 
     const clauses = ['p.status = 1']
     const params = []
     if (keyword) {
-      clauses.push('(p.name LIKE ? OR p.manufacturer LIKE ? OR p.brand LIKE ? OR p.description LIKE ?)')
+      clauses.push(`(p.name LIKE ? OR p.manufacturer LIKE ? OR p.brand LIKE ? OR p.description LIKE ?
+        OR EXISTS (SELECT 1 FROM product_translation search_t
+          WHERE search_t.product_id = p.id AND search_t.locale = ?
+            AND (search_t.name LIKE ? OR search_t.description LIKE ? OR search_t.detail LIKE ?)))`)
       const like = `%${keyword}%`
-      params.push(like, like, like, like)
+      params.push(like, like, like, like, locale, like, like, like)
     }
     if (categoryId && Number.isFinite(categoryId)) {
       clauses.push('p.category_id = ?')
@@ -82,8 +86,6 @@ router.get('/products', async (req, res, next) => {
       params.push(seller, seller)
     }
     const where = `WHERE ${clauses.join(' AND ')}`
-    const locale = resolveLocale(req)
-
     let orderClause = 'ORDER BY p.created_at DESC, p.id DESC'
     if (sort === 'popular') {
       orderClause = 'ORDER BY p.sales DESC, p.id DESC'

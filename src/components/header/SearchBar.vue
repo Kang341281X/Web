@@ -62,7 +62,7 @@ const scheduleSuggestions = keyword => {
   suggestTimer = setTimeout(() => loadSuggestions(keyword, seq), SUGGEST_DEBOUNCE)
 }
 
-watch(normalizedQuery, () => scheduleSuggestions(query.value.trim()))
+watch([normalizedQuery, () => language.locale], () => scheduleSuggestions(query.value.trim()))
 
 const visibleHistory = computed(() => showAllHistory.value ? history.value : history.value.slice(0, 5))
 const keyboardOptions = computed(() => normalizedQuery.value

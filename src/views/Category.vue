@@ -26,6 +26,7 @@ const total = ref(0)
 const sort = ref('recommended')
 const filters = ref({ category: null, minPriceInput: '', maxPriceInput: '' })
 const appliedPrice = ref({ min: null, max: null })
+let productsRequestId = 0
 // 总页数由接口返回的 pagination.total 推算，至少 1 页
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 // 「第 x / y 页」：文案里用 {page} / {total} 占位，这里统一替换，5 种语言都能正确组句
@@ -43,22 +44,26 @@ const filtered = computed(() => {
 })
 
 async function load() {
+  const requestId = ++productsRequestId
   loading.value = true
   try {
     // categoryName is the category name (string slug from URL), find matching category
     const allCategories = await fetchCategories()
+    if (requestId !== productsRequestId) return
     categories.value = allCategories
     const cat = allCategories.find(c => c.name === categoryName.value)
     if (!cat) { items.value = []; total.value = 0; return }
     const { products, pagination } = await fetchProducts({ page: page.value, page_size: PAGE_SIZE, category_id: cat.id, sort: sort.value })
+    if (requestId !== productsRequestId) return
     items.value = products
     total.value = Number(pagination?.total) || products.length
   } catch (error) {
+    if (requestId !== productsRequestId) return
     console.error('Failed to load category products:', error)
     items.value = []
     total.value = 0
   } finally {
-    loading.value = false
+    if (requestId === productsRequestId) loading.value = false
   }
 }
 
@@ -81,6 +86,7 @@ async function changePage(next) {
 // 切换分类时回到第 1 页，否则会拿着上一个分类的页码去请求新分类
 watch(() => route.params.category, () => { page.value = 1; appliedPrice.value = { min: null, max: null }; filters.value = { category: null, minPriceInput: '', maxPriceInput: '' }; load() })
 watch(sort, () => load())
+watch(() => language.locale, () => { page.value = 1; load() })
 onMounted(load)
 </script>
 

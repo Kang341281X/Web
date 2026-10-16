@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useLanguageStore } from '../stores/language'
 import { fetchProducts, fetchCategories } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
@@ -15,6 +15,7 @@ const categories = ref([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
+let productsRequestId = 0
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
@@ -46,17 +47,20 @@ const curatedSections = computed(() => {
 })
 
 async function load() {
+  const requestId = ++productsRequestId
   loading.value = true
   try {
     const { products: list, pagination } = await fetchProducts({ page: page.value, page_size: PAGE_SIZE })
+    if (requestId !== productsRequestId) return
     products.value = list
     total.value = Number(pagination?.total) || list.length
   } catch (error) {
+    if (requestId !== productsRequestId) return
     console.error('Failed to load home products:', error)
     products.value = []
     total.value = 0
   } finally {
-    loading.value = false
+    if (requestId === productsRequestId) loading.value = false
   }
 }
 
@@ -74,6 +78,8 @@ onMounted(async () => {
   }
   await load()
 })
+
+watch(() => language.locale, () => { page.value = 1; load() })
 </script>
 
 <template>

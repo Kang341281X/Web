@@ -74,6 +74,11 @@ watch(query, () => {
   }
   searchTimer = setTimeout(search, SEARCH_DEBOUNCE)
 })
+watch(() => language.locale, () => {
+  clearTimeout(searchTimer)
+  page.value = 1
+  search()
+})
 onMounted(search)
 </script>
 

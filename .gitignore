@@ -1,2 +1,10 @@
 # 依赖（npm install 生成，不入库）
 node_modules
+
+# Local runtime output and reproducible test artifacts
+*.log
+dist/
+test-results/
+playwright-report/
+server/test.db*
+server/tmp*.db*

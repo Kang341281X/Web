@@ -27,6 +27,7 @@ const categories = ref([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
+let productsRequestId = 0
 // 总页数由接口返回的 pagination.total 推算，至少 1 页
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 // 「第 x / y 页」：文案里用 {page} / {total} 占位，这里统一替换，5 种语言都能正确组句
@@ -41,6 +42,7 @@ const priceBounds = computed(() => {
 })
 
 async function load() {
+  const requestId = ++productsRequestId
   loading.value = true
   try {
     const params = { page: page.value, page_size: PAGE_SIZE, sort: sort.value }
@@ -51,13 +53,16 @@ async function load() {
     if (minCny != null) params.min_price = minCny
     if (maxCny != null) params.max_price = maxCny
     const { products: list, pagination } = await fetchProducts(params)
+    if (requestId !== productsRequestId) return
     total.value = pagination.total
     products.value = list
   } catch (error) {
+    if (requestId !== productsRequestId) return
     console.error('Failed to load products:', error)
     products.value = []
+    total.value = 0
   } finally {
-    loading.value = false
+    if (requestId === productsRequestId) loading.value = false
   }
 }
 
