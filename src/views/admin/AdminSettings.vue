@@ -4,12 +4,19 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
 import { IMG_FALLBACK, resolve } from '../../utils/image'
 import { COL } from '../../constants/tableColumn'
+import { useResponsiveTableWidths } from '../../composables/useResponsiveTableWidths'
 
 const formRef = ref(null); const loading = ref(false); const saving = ref(false)
 const form = reactive({ contact_email: '', contact_email2: '', contact_phone: '', contact_phone2: '' })
 const labels = { contact_email: '联系邮箱', contact_email2: '联系邮箱2', contact_phone: '联系电话', contact_phone2: '联系电话2' }
 
 const activeTab = ref('general')
+const socialTableWrap = ref(null)
+const rateTableWrap = ref(null)
+const shippingTableWrap = ref(null)
+const socialColWidths = useResponsiveTableWidths(socialTableWrap, [0.3, 0.16, 0.2, 0.34], [260, 100, 120, 240])
+const rateColWidths = useResponsiveTableWidths(rateTableWrap, [0.16, 0.12, 0.12, 0.34, 0.26], [110, 90, 84, 260, COL.DATETIME])
+const shippingColWidths = useResponsiveTableWidths(shippingTableWrap, [0.18, 0.12, 0.3, 0.2, 0.2], [150, 100, 280, 180, COL.DATETIME])
 
 // 汇率设置：商品价格以人民币为基准，这里维护「1 人民币可兑换的目标货币数量」
 const rates = ref([])
@@ -283,25 +290,26 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
       </el-tab-pane>
 
       <el-tab-pane label="社交媒体" name="socials">
+    <div ref="socialTableWrap" class="admin-table-fit">
     <el-table :data="socials" v-loading="socialLoading" style="width: 100%" empty-text="尚未添加社交媒体，请点击下方按钮新增">
-      <el-table-column label="平台名称" min-width="260">
+      <el-table-column label="平台名称" :width="socialColWidths[0]">
         <template #default="{ row }">
           <el-input v-model="row.name" maxlength="30" :disabled="row.removed" placeholder="平台名称" style="max-width: 240px" />
         </template>
       </el-table-column>
-      <el-table-column label="状态" min-width="100" align="center">
+      <el-table-column label="状态" :width="socialColWidths[1]" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.removed" type="danger" size="small" effect="light">将删除</el-tag>
           <el-tag v-else-if="isRowDirty(row)" type="warning" size="small" effect="light">未保存</el-tag>
           <el-tag v-else type="info" size="small" effect="light">已保存</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="二维码" width="120" align="center">
+      <el-table-column label="二维码" :width="socialColWidths[2]" align="center">
         <template #default="{ row }">
           <el-image :src="resolve(displayImage(row))" fit="cover" class="qr-image"><template #error><img class="image-fallback" :src="IMG_FALLBACK" alt="" /></template></el-image>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="240">
+      <el-table-column label="操作" :width="socialColWidths[3]">
         <template #default="{ row }">
           <div class="social-actions">
             <template v-if="!row.removed">
@@ -318,6 +326,7 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <div class="social-bar">
       <span class="social-bar-hint" :class="{ 'is-active': hasChanges }">
@@ -331,12 +340,12 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
 
       <el-tab-pane label="汇率设置" name="rates">
 
+        <div ref="rateTableWrap" class="admin-table-fit">
         <el-table :data="rates" v-loading="ratesLoading" style="width: 100%">
-          <el-table-column prop="locale" label="语言" width="110" />
-          <el-table-column prop="currency_code" label="币种" width="90" />
-          <el-table-column prop="currency_symbol" label="符号" width="84" />
-          <!-- 汇率输入框为主内容列（min-width 吸收多余宽度），其余列固定宽度 -->
-          <el-table-column label="汇率（1 人民币 =）" min-width="300">
+          <el-table-column prop="locale" label="语言" :width="rateColWidths[0]" />
+          <el-table-column prop="currency_code" label="币种" :width="rateColWidths[1]" />
+          <el-table-column prop="currency_symbol" label="符号" :width="rateColWidths[2]" />
+          <el-table-column label="汇率（1 人民币 =）" :width="rateColWidths[3]">
             <template #default="{ row }">
               <!-- 主内容列会吸收多余宽度，这里限制输入框自身宽度，避免在 2K/4K 屏上被拉成一条超长输入框 -->
               <el-input v-model="rateDrafts[row.locale]" type="number" min="0" step="0.01" style="max-width: 320px">
@@ -344,27 +353,29 @@ onBeforeUnmount(() => { socials.value.forEach(clearDraft) })
               </el-input>
             </template>
           </el-table-column>
-          <el-table-column prop="updated_at" label="更新时间" :width="COL.DATETIME" />
+          <el-table-column prop="updated_at" label="更新时间" :width="rateColWidths[4]" />
         </el-table>
+        </div>
       </el-tab-pane>
 
       <el-tab-pane label="运费设置" name="shipping">
+        <div ref="shippingTableWrap" class="admin-table-fit">
         <el-table :data="shippingRates" v-loading="shippingLoading" style="width: 100%">
-          <el-table-column label="区域" width="150">
+          <el-table-column label="区域" :width="shippingColWidths[0]">
             <template #default="{ row }">{{ REGION_LABELS[row.region_key] || row.region_key }}</template>
           </el-table-column>
-          <el-table-column prop="locale" label="语言" width="100" />
-          <!-- 运费输入框 / 说明为弹性列（min-width），两者按比例分摊剩余宽度，输入框自身限宽防止拉成超长输入框 -->
-          <el-table-column label="预估运费（人民币）" min-width="280">
+          <el-table-column prop="locale" label="语言" :width="shippingColWidths[1]" />
+          <el-table-column label="预估运费（人民币）" :width="shippingColWidths[2]">
             <template #default="{ row }">
               <el-input v-model="shippingDrafts[row.region_key]" type="number" min="0" step="1" style="max-width: 320px">
                 <template #append>¥</template>
               </el-input>
             </template>
           </el-table-column>
-          <el-table-column prop="note" label="说明" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="updated_at" label="更新时间" :width="COL.DATETIME" />
+          <el-table-column prop="note" label="说明" :width="shippingColWidths[3]" show-overflow-tooltip />
+          <el-table-column prop="updated_at" label="更新时间" :width="shippingColWidths[4]" />
         </el-table>
+        </div>
         <p class="shipping-tip">提示：未单独列出的国家和地区，统一使用「其他海外地区」这一行估算运费。</p>
       </el-tab-pane>
     </el-tabs>

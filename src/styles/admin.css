@@ -460,6 +460,14 @@
   flex-direction: column;
   overflow: hidden;
 }
+.admin-table-fit {
+  width: 100%;
+  min-width: 0;
+}
+.admin-table-page > .el-card__body > .admin-table-fit {
+  flex: 1;
+  min-height: 0;
+}
 .admin-table-page .toolbar,
 .admin-table-page .list-toolbar,
 .admin-table-page .pagination {

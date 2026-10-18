@@ -3,7 +3,7 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useUserStore } from '../../stores/user'
-import { Fold, Expand, Back, ArrowDown, User, SwitchButton, UserFilled } from '@element-plus/icons-vue'
+import { Fold, Expand, ArrowDown, User, SwitchButton, UserFilled } from '@element-plus/icons-vue'
 import AdminSidebar from '../../components/admin/AdminSidebar.vue'
 import { resolve } from '../../utils/image'
 
@@ -99,11 +99,6 @@ function handleMenuSelect(index) {
           </el-breadcrumb>
         </div>
         <div class="admin-header-right">
-          <el-tooltip content="返回前台" placement="bottom">
-            <span class="admin-header-icon" @click="router.push('/')">
-              <el-icon><Back /></el-icon>
-            </span>
-          </el-tooltip>
           <el-dropdown @command="handleUserCommand">
             <span class="admin-user-trigger">
               <el-avatar :size="32" :src="resolve(userStore.adminUser?.avatar_url)" :icon="UserFilled" />

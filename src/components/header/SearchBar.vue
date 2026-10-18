@@ -213,7 +213,12 @@ onBeforeUnmount(() => {
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     </button>
-    <button type="submit" class="search-submit" :aria-label="language.t('search')">⌕</button>
+    <button type="submit" class="search-submit" :aria-label="language.t('search')">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="10.8" cy="10.8" r="6.3" />
+        <path d="m15.5 15.5 4.2 4.2" />
+      </svg>
+    </button>
     <Teleport to="body">
       <section
         v-if="showPopover"

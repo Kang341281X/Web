@@ -3,11 +3,10 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { toCny } from '../data/currency'
 import { useLanguageStore } from '../stores/language'
 import { useRoute } from 'vue-router'
-import { fetchProducts, fetchCategories } from '../services/publicApi'
+import { fetchProducts } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
 import ProductGridSkeleton from '../components/product/ProductGridSkeleton.vue'
 import FilterPanel from '../components/product/FilterPanel.vue'
-import SortSelect from '../components/product/SortSelect.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
 // 每页显示 60 个商品，超出部分自动分到后续页
@@ -16,14 +15,11 @@ const PAGE_SIZE = 60
 const language = useLanguageStore()
 const route = useRoute()
 const seller = computed(() => String(route.query.seller || '').trim())
-const introTitle = computed(() => seller.value ? language.t('sellerWorks').replace('{seller}', seller.value) : language.t('products'))
 const emptyTitle = computed(() => seller.value ? language.t('sellerEmpty') : language.t('noResults'))
 const filters = ref({ category: null, minPriceInput: '', maxPriceInput: '' })
 const sort = ref('recommended')
 const appliedPrice = ref({ min: null, max: null })
-const selectedCategory = ref(null)
 const products = ref([])
-const categories = ref([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
@@ -46,7 +42,6 @@ async function load() {
   loading.value = true
   try {
     const params = { page: page.value, page_size: PAGE_SIZE, sort: sort.value }
-    if (selectedCategory.value != null) params.category_id = selectedCategory.value
     if (filters.value.keyword) params.keyword = filters.value.keyword
     if (seller.value) params.seller = seller.value
     const { minCny, maxCny } = priceBounds.value
@@ -82,21 +77,25 @@ function onApplyPrice(event) {
   search()
 }
 
-function onSelectCategory(value) {
-  selectedCategory.value = value
-  search()
-}
-
-onMounted(async () => {
-  try {
-    categories.value = (await fetchCategories()).map(c => ({ ...c, icon: '✦' }))
-  } catch (error) {
-    console.error('Failed to load categories:', error)
-  }
-  await load()
-})
+onMounted(load)
 
 watch(sort, () => search())
 watch(() => route.query.seller, () => { page.value = 1; load() })
 </script>
-<template><section class="container page products-page"><div class="page-intro"><h1>{{ introTitle }}</h1></div><div class="catalog-toolbar"><button class="filter-toggle" @click="$refs.filter?.classList.toggle('open')">☷ {{ language.t('filters') }}</button><p><strong>{{ total }}</strong> {{ language.t('items') }}</p><SortSelect v-model="sort" /></div><div class="catalog-layout"><div ref="filter"><FilterPanel v-model="filters" :categories="categories" @apply-price="onApplyPrice" @select-category="onSelectCategory" /></div><ProductGridSkeleton v-if="loading" /><ProductGrid v-else-if="filtered.length" :products="filtered" /><EmptyState v-else :title="emptyTitle" :action="language.t('continueShopping')">{{ language.t('craftedDescription') }}</EmptyState></div><div v-if="totalPages > 1" class="catalog-pagination"><el-pagination v-model:current-page="page" :page-size="PAGE_SIZE" :total="total" :pager-count="5" layout="prev, pager, next" background @current-change="changePage" /><p class="catalog-pagination__summary" aria-live="polite">{{ pageSummary }}</p></div></section></template>
+<template>
+  <section class="container page products-page">
+    <button class="filter-toggle" @click="$refs.filter?.classList.toggle('open')">☷ {{ language.t('filters') }}</button>
+    <div class="catalog-layout">
+      <div ref="filter">
+        <FilterPanel v-model="filters" v-model:sort="sort" @apply-price="onApplyPrice" />
+      </div>
+      <ProductGridSkeleton v-if="loading" />
+      <ProductGrid v-else-if="filtered.length" :products="filtered" />
+      <EmptyState v-else :title="emptyTitle" :action="language.t('continueShopping')">{{ language.t('craftedDescription') }}</EmptyState>
+    </div>
+    <div v-if="totalPages > 1" class="catalog-pagination">
+      <el-pagination v-model:current-page="page" :page-size="PAGE_SIZE" :total="total" :pager-count="5" layout="prev, pager, next" background @current-change="changePage" />
+      <p class="catalog-pagination__summary" aria-live="polite">{{ pageSummary }}</p>
+    </div>
+  </section>
+</template>

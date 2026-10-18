@@ -85,9 +85,6 @@ async function handleLogin() {
   })
 }
 
-function goHome() {
-  router.push('/')
-}
 </script>
 
 <template>
@@ -178,9 +175,6 @@ function goHome() {
         </el-form-item>
       </el-form>
 
-      <div class="login-footer">
-        <span class="login-back" @click="goHome">← 返回前台首页</span>
-      </div>
     </div>
   </div>
 </template>
@@ -216,12 +210,6 @@ function goHome() {
   color: #909399;
   margin: 0;
 }
-.login-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 20px;
-}
 /* 图形验证码：输入框 + 可点击刷新的图片同一行 */
 .login-captcha {
   display: flex;
@@ -246,16 +234,6 @@ function goHome() {
   cursor: pointer;
   object-fit: cover;
 }
-.login-back {
-  font-size: 13px;
-  color: #606266;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-.login-back:hover {
-  color: #409eff;
-}
-
 /* iOS 聚焦小于 16px 的输入框会自动放大页面：手机上把后台登录的 el-input 字号提到 16px */
 @media (max-width: 760px) {
   .login-page :deep(.el-input__inner) { font-size: 16px }

@@ -3,8 +3,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../services/api'
 import { IMG_FALLBACK, resolve } from '../../utils/image'
-import { COL, actionColWidth } from '../../constants/tableColumn'
+import { actionColWidth } from '../../constants/tableColumn'
+import { useResponsiveTableWidths } from '../../composables/useResponsiveTableWidths'
 
+const tableWrap = ref(null)
+const colWidths = useResponsiveTableWidths(tableWrap, [0.07, 0.18, 0.16, 0.09, 0.1, 0.14, 0.09, 0.17], [56, 160, 140, 80, 84, 120, 72, actionColWidth(2)])
 const categories = ref([])
 const loading = ref(false)
 const dialogVisible = ref(false)
@@ -153,16 +156,18 @@ onMounted(load)
 <template>
   <el-card shadow="never" class="admin-page-card admin-table-page">
     <template #header><div class="page-header"><span>商品分类</span><el-button type="primary" @click="create">新增分类</el-button></div></template>
-    <el-table v-loading="loading" :data="categories" row-key="id" height="100%" stripe>
-      <el-table-column type="index" label="序号" :width="COL.INDEX" align="center" />
-      <el-table-column prop="name" label="分类名称" min-width="160" show-overflow-tooltip />
-      <el-table-column label="父级分类" min-width="100" show-overflow-tooltip><template #default="{ row }">{{ parentName(row.parent_id) }}</template></el-table-column>
-      <el-table-column prop="sort_order" label="排序" width="80" align="center" />
-      <el-table-column label="状态" :width="COL.STATUS_TAG" align="center"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
-      <el-table-column label="添加人" width="104"><template #default="{ row }">{{ row.created_by_name || '未知' }}</template></el-table-column>
-      <el-table-column label="图片" width="72" align="center"><template #default="{ row }"><el-image :src="resolve(row.image_url)" fit="cover" class="cat-thumb" :preview-src-list="[resolve(row.image_url)]" preview-teleported><template #error><img class="image-fallback" :src="IMG_FALLBACK" alt="" /></template></el-image></template></el-table-column>
-      <el-table-column label="操作" :width="actionColWidth(2)"><template #default="{ row }"><el-button link type="primary" @click="edit(row)">编辑</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template></el-table-column>
-    </el-table>
+    <div ref="tableWrap" class="admin-table-fit">
+      <el-table v-loading="loading" :data="categories" row-key="id" height="100%" stripe style="width: 100%">
+        <el-table-column type="index" label="序号" :width="colWidths[0]" align="center" />
+        <el-table-column prop="name" label="分类名称" :width="colWidths[1]" show-overflow-tooltip />
+        <el-table-column label="父级分类" :width="colWidths[2]" show-overflow-tooltip><template #default="{ row }">{{ parentName(row.parent_id) }}</template></el-table-column>
+        <el-table-column prop="sort_order" label="排序" :width="colWidths[3]" align="center" />
+        <el-table-column label="状态" :width="colWidths[4]" align="center"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'info'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
+        <el-table-column label="添加人" :width="colWidths[5]"><template #default="{ row }">{{ row.created_by_name || '未知' }}</template></el-table-column>
+        <el-table-column label="图片" :width="colWidths[6]" align="center"><template #default="{ row }"><el-image :src="resolve(row.image_url)" fit="cover" class="cat-thumb" :preview-src-list="[resolve(row.image_url)]" preview-teleported><template #error><img class="image-fallback" :src="IMG_FALLBACK" alt="" /></template></el-image></template></el-table-column>
+        <el-table-column label="操作" :width="colWidths[7]"><template #default="{ row }"><el-button link type="primary" @click="edit(row)">编辑</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template></el-table-column>
+      </el-table>
+    </div>
   </el-card>
   <el-dialog v-model="dialogVisible" :title="editingId ? '编辑分类' : '新增分类'" width="min(500px, calc(100% - 32px))" @closed="reset">
     <el-form ref="formRef" :model="form" :rules="rules" label-width="88px">

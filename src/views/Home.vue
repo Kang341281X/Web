@@ -1,17 +1,15 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useLanguageStore } from '../stores/language'
-import { fetchProducts, fetchCategories } from '../services/publicApi'
+import { fetchProducts } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
 import ProductGridSkeleton from '../components/product/ProductGridSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
-import CategoryCarousel from '../components/category/CategoryCarousel.vue'
 
 const PAGE_SIZE = 60
 
 const language = useLanguageStore()
 const products = ref([])
-const categories = ref([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
@@ -23,27 +21,21 @@ const pageSummary = computed(() => language.t('pageSummary')
   .replace('{page}', String(page.value))
   .replace('{total}', String(totalPages.value)))
 
-// Group products by category for curated sections
+// Build full two-row collections from the sales, rating, price, and date fields already returned by the API.
 const curatedSections = computed(() => {
-  const sections = []
-  const categoryMap = new Map()
-  products.value.forEach(product => {
-    const cat = product.category || 'Other'
-    if (!categoryMap.has(cat)) categoryMap.set(cat, [])
-    categoryMap.get(cat).push(product)
-  })
-  categoryMap.forEach((items, category) => {
-    if (items.length >= 2) {
-      sections.push({ title: language.category(category) || category, products: items.slice(0, 8) })
-    }
-  })
-  // If only 1 section or no grouping, show all as one curated section
-  if (sections.length <= 1) {
-    return products.value.length > 0
-      ? [{ title: language.t('featured') || 'Editor\'s Picks', products: products.value.slice(0, 16) }]
-      : []
-  }
-  return sections.slice(0, 4) // Max 4 curated sections
+  const list = products.value
+  const bestSelling = [...list].sort((a, b) => (b.sales || 0) - (a.sales || 0))
+  const topRated = [...list].sort((a, b) => (b.rating || 0) - (a.rating || 0) || (b.reviewCount || 0) - (a.reviewCount || 0))
+  const offers = [...list]
+    .filter(product => product.originalPrice > product.price)
+    .sort((a, b) => (1 - b.price / b.originalPrice) - (1 - a.price / a.originalPrice))
+  const newArrivals = [...list].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+  return [
+    { title: language.t('bestSelling'), products: bestSelling.slice(0, 8) },
+    { title: language.t('topRated'), products: topRated.slice(0, 8) },
+    { title: language.t('specialOffers'), products: offers.slice(0, 8) },
+    { title: language.t('newArrivals'), products: newArrivals.slice(0, 8) }
+  ].filter(section => section.products.length === 8)
 })
 
 async function load() {
@@ -70,14 +62,7 @@ async function changePage(next) {
   await load()
 }
 
-onMounted(async () => {
-  try {
-    categories.value = await fetchCategories()
-  } catch (error) {
-    console.error('Failed to load categories:', error)
-  }
-  await load()
-})
+onMounted(load)
 
 watch(() => language.locale, () => { page.value = 1; load() })
 </script>
@@ -93,27 +78,6 @@ watch(() => language.locale, () => { page.value = 1; load() })
         <RouterLink class="button primary" to="/products">{{ language.t('explore') }} <span>&rarr;</span></RouterLink>
       </div>
       <img src="/assets/images/banners/craft-hero.svg" alt="Handcrafted pottery and flowers" fetchpriority="high" />
-    </section>
-
-    <!-- Shop by Category 图片化分类轮播：Hero 之后第一屏，比纯文字胶囊入口更醒目 -->
-    <CategoryCarousel :categories="categories" />
-
-    <!-- Category Quick-Entry Horizontal Row -->
-    <section v-if="categories.length" class="container etsy-categories">
-      <div class="section-heading">
-        <h2>{{ language.t('categories') || 'Shop by Category' }}</h2>
-      </div>
-      <div class="etsy-category-row">
-        <RouterLink
-          v-for="cat in categories.slice(0, 8)"
-          :key="cat.id"
-          :to="`/category/${cat.name}`"
-          class="etsy-category-chip"
-        >
-          <span class="etsy-category-icon">{{ cat.icon || '✦' }}</span>
-          <span>{{ cat.name }}</span>
-        </RouterLink>
-      </div>
     </section>
 
     <!-- Curated Collection Sections -->
@@ -159,49 +123,6 @@ watch(() => language.locale, () => { page.value = 1; load() })
 </template>
 
 <style scoped>
-.etsy-categories {
-  padding: 28px 0 12px;
-}
-
-.etsy-category-row {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  scrollbar-width: none;
-}
-
-.etsy-category-row::-webkit-scrollbar {
-  display: none;
-}
-
-.etsy-category-chip {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: var(--paper);
-  color: var(--ink);
-  font-size: .85rem;
-  font-weight: 500;
-  transition: border-color .18s, background .18s, box-shadow .18s;
-  white-space: nowrap;
-}
-
-.etsy-category-chip:hover {
-  border-color: var(--ink);
-  background: var(--cream);
-  box-shadow: 0 2px 8px rgba(0,0,0,.06);
-}
-
-.etsy-category-icon {
-  font-size: 1.1rem;
-  color: var(--clay);
-}
-
 .curated-section {
   padding-top: 40px;
 }
@@ -209,4 +130,5 @@ watch(() => language.locale, () => { page.value = 1; load() })
 .curated-section:first-of-type {
   padding-top: 24px;
 }
+
 </style>

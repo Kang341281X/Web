@@ -7,7 +7,6 @@ import { fetchProducts, fetchCategories } from '../services/publicApi'
 import ProductGrid from '../components/product/ProductGrid.vue'
 import ProductGridSkeleton from '../components/product/ProductGridSkeleton.vue'
 import FilterPanel from '../components/product/FilterPanel.vue'
-import SortSelect from '../components/product/SortSelect.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
 // 每页显示 60 个商品，超出部分自动分到后续页
@@ -92,15 +91,10 @@ onMounted(load)
 
 <template>
   <section class="container page category-page">
-    <div class="page-intro"><h1>{{ language.category(categoryName) }}</h1></div>
-    <div class="catalog-toolbar">
-      <button class="filter-toggle" @click="$refs.filter?.classList.toggle('open')">☷ {{ language.t('filters') }}</button>
-      <p><strong>{{ total }}</strong> {{ language.t('items') }}</p>
-      <SortSelect v-model="sort" />
-    </div>
+    <button class="filter-toggle" @click="$refs.filter?.classList.toggle('open')">☷ {{ language.t('filters') }}</button>
     <div class="catalog-layout">
       <div ref="filter">
-        <FilterPanel v-model="filters" :categories="categories" @apply-price="onApplyPrice" @select-category="onSelectCategory" />
+        <FilterPanel v-model="filters" v-model:sort="sort" @apply-price="onApplyPrice" />
       </div>
       <ProductGridSkeleton v-if="loading" />
       <ProductGrid v-else-if="filtered.length" :products="filtered" />

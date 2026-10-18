@@ -2,13 +2,13 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { getCurrency, parsePriceInput } from '../../data/currency'
 import { useLanguageStore } from '../../stores/language'
-import PanelSelect from './PanelSelect.vue'
+import SortSelect from './SortSelect.vue'
 
 const props = defineProps({
-  modelValue: Object,
-  categories: { type: Array, default: () => [] }
+  modelValue: Object
 })
-const emit = defineEmits(['update:modelValue', 'applyPrice', 'selectCategory'])
+const emit = defineEmits(['update:modelValue', 'applyPrice'])
+const sort = defineModel('sort', { type: String, default: 'recommended' })
 const language = useLanguageStore()
 const filters = ref({ ...props.modelValue })
 const priceError = ref('')
@@ -27,24 +27,10 @@ watch(() => props.modelValue, async value => {
 
 const currency = computed(() => getCurrency(language.locale))
 
-const categoryOptions = computed(() => {
-  const allOption = { value: null, label: language.t('all') }
-  const catOptions = props.categories.map(c => ({ value: c.id, label: c.name }))
-  return [allOption, ...catOptions]
-})
-const categoryOrder = computed(() => [null, ...props.categories.map(c => c.id)])
-
-const onCategoryChange = value => {
-  filters.value.category = value
-  emit('update:modelValue', { ...filters.value })
-  emit('selectCategory', value)
-}
-
 const clear = () => {
   filters.value = { category: null, minPriceInput: '', maxPriceInput: '' }
   priceError.value = ''
   emit('applyPrice', { min: null, max: null })
-  emit('selectCategory', null)
 }
 
 const applyPrice = () => {
@@ -73,17 +59,10 @@ const applyPrice = () => {
       <h3>{{ language.t('filters') }}</h3>
       <button @click="clear">{{ language.t('clear') }}</button>
     </div>
-    <label class="filter-field">
-      <span>{{ language.t('category') }}</span>
-      <PanelSelect
-        :model-value="filters.category"
-        :options="categoryOptions"
-        :order="categoryOrder"
-        :aria-label="language.t('category')"
-        full-width
-        @update:model-value="onCategoryChange"
-      />
-    </label>
+    <div class="filter-field filter-sort">
+      <span>{{ language.t('sort') }}</span>
+      <SortSelect v-model="sort" />
+    </div>
     <div class="filter-field filter-price">
       <span>{{ language.t('priceRange') }}</span>
       <div class="price-input-grid">

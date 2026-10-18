@@ -8,6 +8,7 @@ import { resolve } from '../../utils/image'
 import { formatAddress } from '../../utils/address'
 import { formatAmount, orderStatusTag } from '../../utils/order'
 import { COL, actionColWidth } from '../../constants/tableColumn'
+import { useResponsiveTableWidths } from '../../composables/useResponsiveTableWidths'
 
 /**
  * 后台「用户管理」：顾客列表 + 详情（收货地址、历史订单概览）+ 启用/禁用。
@@ -24,6 +25,8 @@ const loading = ref(false)
 const list = ref([])
 const total = ref(0)
 const query = reactive({ keyword: '', status: '', page: 1, page_size: 20 })
+const tableWrap = ref(null)
+const colWidths = useResponsiveTableWidths(tableWrap, [0.06, 0.19, 0.15, 0.25, 0.08, 0.19, 0.08], [64, 180, 120, 180, 84, COL.DATETIME, actionColWidth(1)])
 
 // 详情弹窗：/admin-customers/:id 只返回地址与订单统计，
 // 历史订单列表复用后台订单接口按手机号查最近 5 笔（完整列表跳「订单管理」）。
@@ -192,10 +195,11 @@ onMounted(load)
       <el-button @click="resetFilter">重置</el-button>
     </div>
 
-    <!-- 列宽：顾客 / 邮箱为弹性列（min-width），两者按比例分摊剩余宽度；其余短内容列统一引用 COL 常量 -->
+    <!-- 各列按表格区域宽度比例分配，视口变化时同步调整，避免右侧留白 -->
+    <div ref="tableWrap" class="admin-table-fit">
     <el-table v-loading="loading" :data="list" height="100%" stripe style="width: 100%">
-      <el-table-column label="序号" :width="COL.INDEX" align="center"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
-      <el-table-column label="顾客" min-width="160">
+      <el-table-column label="序号" :width="colWidths[0]" align="center"><template #default="{ $index }">{{ pageIndex($index) }}</template></el-table-column>
+      <el-table-column label="顾客" :width="colWidths[1]">
         <template #default="{ row }">
           <div class="user-cell">
             <el-avatar :src="resolve(row.avatar_url)"><template #default>{{ displayName(row).slice(0, 1) }}</template></el-avatar>
@@ -203,16 +207,17 @@ onMounted(load)
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="手机号" :width="COL.PHONE" align="center"><template #default="{ row }">{{ row.phone || '-' }}</template></el-table-column>
-      <el-table-column label="邮箱" min-width="200" show-overflow-tooltip><template #default="{ row }">{{ row.email || '-' }}</template></el-table-column>
-      <el-table-column label="状态" :width="COL.STATUS_TAG" align="center"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'danger'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
-      <el-table-column label="注册时间" :width="COL.DATETIME" align="center"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-      <el-table-column label="操作" :width="actionColWidth(1)" align="center">
+      <el-table-column label="手机号" :width="colWidths[2]" align="center"><template #default="{ row }">{{ row.phone || '-' }}</template></el-table-column>
+      <el-table-column label="邮箱" :width="colWidths[3]" show-overflow-tooltip><template #default="{ row }">{{ row.email || '-' }}</template></el-table-column>
+      <el-table-column label="状态" :width="colWidths[4]" align="center"><template #default="{ row }"><el-tag :type="row.status ? 'success' : 'danger'">{{ row.status ? '启用' : '禁用' }}</el-tag></template></el-table-column>
+      <el-table-column label="注册时间" :width="colWidths[5]" align="center"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+      <el-table-column label="操作" :width="colWidths[6]" align="center">
         <template #default="{ row }">
           <el-button link type="primary" @click="openDetail(row)">查看</el-button>
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <div class="pagination">
       <el-pagination v-model:current-page="query.page" v-model:page-size="query.page_size" :total="total" :page-sizes="[20, 50, 100]" layout="total, sizes, prev, pager, next, jumper" @current-change="load" @size-change="query.page = 1; load()" />

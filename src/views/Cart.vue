@@ -9,6 +9,17 @@ import AppImage from '../components/common/AppImage.vue'
 import CheckoutDialog from '../components/common/CheckoutDialog.vue'
 import { productTitle } from '../data/translations'
 const cart = useCartStore(), language = useLanguageStore()
+const shopGroups = computed(() => {
+  const groups = new Map()
+  cart.items.forEach(item => {
+    const shop = item.product.seller || 'Craftora maker'
+    if (!groups.has(shop)) groups.set(shop, { name: shop, items: [], subtotal: 0 })
+    const group = groups.get(shop)
+    group.items.push(item)
+    group.subtotal += item.product.price * item.quantity
+  })
+  return [...groups.values()]
+})
 // 数量修改后的失败 / 截断 toast 与商品详情页对齐（共用 composables/useQuantityFeedback.js）
 const { handle: handleQuantityFeedback } = useQuantityFeedback()
 const checkoutVisible = ref(false)
@@ -55,23 +66,29 @@ const total = computed(() => cart.subtotal + shippingFee.value)
     />
     <div v-else class="cart-layout">
       <div class="cart-list">
-        <article v-for="item in cart.items" :key="item.product.id" class="cart-item">
-          <RouterLink :to="`/product/${item.product.id}`">
-            <AppImage :src="item.product.image" :alt="productTitle(item.product, language.locale)" />
-          </RouterLink>
-          <div class="cart-item-copy">
-            <RouterLink :to="`/product/${item.product.id}`">{{ productTitle(item.product, language.locale) }}</RouterLink>
-            <p>{{ item.product.seller }}</p>
-            <strong>{{ language.price(item.product.price) }}</strong>
-            <div class="quantity-control">
-              <button aria-label="decrease" @click="adjustQuantity(item.product.id, item.quantity - 1)">−</button>
-              <span>{{ item.quantity }}</span>
-              <button aria-label="increase" @click="adjustQuantity(item.product.id, item.quantity + 1)">+</button>
+        <section v-for="group in shopGroups" :key="group.name" class="cart-shop-group">
+          <header class="cart-shop-heading">
+            <h2><span aria-hidden="true">◉</span> {{ group.name }}</h2>
+            <span>{{ language.t('subtotal') }} · {{ language.price(group.subtotal) }}</span>
+          </header>
+          <article v-for="item in group.items" :key="item.product.id" class="cart-item">
+            <RouterLink :to="`/product/${item.product.id}`">
+              <AppImage :src="item.product.image" :alt="productTitle(item.product, language.locale)" />
+            </RouterLink>
+            <div class="cart-item-copy">
+              <RouterLink :to="`/product/${item.product.id}`">{{ productTitle(item.product, language.locale) }}</RouterLink>
+              <p>{{ item.product.seller }}</p>
+              <strong>{{ language.price(item.product.price) }}</strong>
+              <div class="quantity-control">
+                <button aria-label="decrease" @click="adjustQuantity(item.product.id, item.quantity - 1)">−</button>
+                <span>{{ item.quantity }}</span>
+                <button aria-label="increase" @click="adjustQuantity(item.product.id, item.quantity + 1)">+</button>
+              </div>
+              <button class="text-button" @click="cart.remove(item.product.id)">{{ language.t('remove') }}</button>
             </div>
-            <button class="text-button" @click="cart.remove(item.product.id)">{{ language.t('remove') }}</button>
-          </div>
-          <strong class="cart-line-price">{{ language.price(item.product.price * item.quantity) }}</strong>
-        </article>
+            <strong class="cart-line-price">{{ language.price(item.product.price * item.quantity) }}</strong>
+          </article>
+        </section>
       </div>
       <aside class="order-summary">
         <h2>{{ language.t('total') }}</h2>
