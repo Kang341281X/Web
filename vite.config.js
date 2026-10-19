@@ -9,6 +9,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 // 模板里裸用的图标组件做按需解析（unplugin 没有内置 icons-vue 的 resolver，这里手写一个）
 const iconNames = new Set(Object.keys(ElementPlusIconsVue))
 const iconsResolver = name => (iconNames.has(name) ? { name, from: '@element-plus/icons-vue' } : undefined)
+const apiTarget = process.env.API_PROXY_TARGET || 'http://localhost:3001'
 
 export default defineConfig({
   plugins: [
@@ -40,7 +41,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: apiTarget,
         changeOrigin: true
       }
     }
@@ -49,7 +50,7 @@ export default defineConfig({
   preview: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: apiTarget,
         changeOrigin: true
       }
     }

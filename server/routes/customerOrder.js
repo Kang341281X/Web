@@ -4,6 +4,7 @@ import { requireCustomerAuth } from '../middleware/customerAuth.js'
 import { optionalText } from '../utils/customer.js'
 import { publicOrder, findOrderDetail, changeOrderStatus, orderStatusLabel, isValidOrderStatus, createCustomerOrder } from '../utils/order.js'
 import { isUniqueConstraintError } from '../utils/orderNo.js'
+import { SHIPPING_COUNTRIES } from '../../src/data/address-countries.js'
 
 // 顾客端「我的订单」：下单 + 列表 + 详情 + 取消。
 // 下单/取消的库存处理都收敛在 utils/order.js，与管理端订单接口共用同一份实现。
@@ -30,7 +31,7 @@ async function findOwnOrder(connection, customerId, id) {
 // 读取一条收货地址快照（下单用）：必须属于当前顾客
 async function findOwnAddress(connection, customerId, id) {
   const [rows] = await connection.execute(
-    'SELECT id, receiver_name, receiver_phone, province, city, district, detail_address FROM customer_address WHERE id = ? AND customer_id = ?',
+    'SELECT id, country_code, receiver_name, receiver_phone, province, city, district, detail_address, address_line1, address_line2, state_code, postal_code FROM customer_address WHERE id = ? AND customer_id = ?',
     [id, customerId]
   )
   return rows[0] || null
@@ -50,12 +51,13 @@ router.post('/', async (req, res, next) => {
       if (!address) return res.status(404).json({ success: false, message: '收货地址不存在' })
     } else {
       const [rows] = await db.execute(
-        'SELECT id, receiver_name, receiver_phone, province, city, district, detail_address FROM customer_address WHERE customer_id = ? ORDER BY is_default DESC, id DESC LIMIT 1',
+        'SELECT id, country_code, receiver_name, receiver_phone, province, city, district, detail_address, address_line1, address_line2, state_code, postal_code FROM customer_address WHERE customer_id = ? ORDER BY is_default DESC, id DESC LIMIT 1',
         [req.customer.id]
       )
       address = rows[0] || null
     }
     if (!address) return res.status(400).json({ success: false, message: '请先添加收货地址' })
+    if (!SHIPPING_COUNTRIES.includes(address.country_code || 'CN')) return res.status(400).json({ success: false, message: '该国家/地区暂不支持配送' })
 
     // 商品来源：前端传入的选中商品优先，否则用购物车全部商品
     let items = Array.isArray(body.items) ? body.items : null

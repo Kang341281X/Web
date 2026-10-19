@@ -16,6 +16,9 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: `http://localhost:${BACKEND_PORT}`,
+    // Prefer the machine's installed Chrome, which keeps CI and desktop runs from
+    // requiring a separate Playwright browser download.
+    channel: 'chrome',
   },
   webServer: [
     {
@@ -46,6 +49,7 @@ export default defineConfig({
       url: `http://localhost:${FRONTEND_PORT}`,
       reuseExistingServer: false,
       timeout: 120_000,
+      env: { API_PROXY_TARGET: `http://localhost:${BACKEND_PORT}` },
     },
   ],
 })

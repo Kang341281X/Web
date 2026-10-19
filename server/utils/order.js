@@ -211,7 +211,9 @@ export async function createCustomerOrder({ customer, address, items, remark = n
 
     // total_amount = 商品小计 + 运费，便于后台「订单金额」一眼看到最终应付；明细拆分靠 shipping_fee 拆分
     const totalAmount = Math.round((goodsAmount + shippingFeeNormalized) * 100) / 100
-    const receiverAddress = [address.province, address.city, address.district, address.detail_address].filter(Boolean).join(' ')
+    const receiverAddress = address.country_code && address.country_code !== 'CN'
+      ? [address.address_line1, address.address_line2, address.city, address.state_code, address.postal_code, address.country_code].filter(Boolean).join(', ')
+      : [address.province, address.city, address.district, address.address_line1 || address.detail_address].filter(Boolean).join(' ')
     // customer_username 为登录用户名快照（030 起 username 必填且唯一），后台按「顾客用户名」语义展示；
     // 不再退化为昵称/手机号，避免与后台展示口径不一致。
     const [orderResult] = await connection.execute(

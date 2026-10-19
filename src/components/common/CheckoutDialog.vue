@@ -10,7 +10,8 @@ import { useCustomerOrderStore } from '../../stores/customerOrder'
 import { useUserStore } from '../../stores/user'
 import { useLanguageStore } from '../../stores/language'
 import { productTitle } from '../../data/translations'
-import { formatAddress } from '../../utils/address'
+import AddressManager from '../address/AddressManager.vue'
+import { SHIPPING_COUNTRIES } from '../../data/address-countries'
 import { fetchSettings, exportCheckoutList } from '../../services/publicApi'
 import { useIsMobile } from '../../composables/useIsMobile'
 import AppImage from '../common/AppImage.vue'
@@ -89,7 +90,9 @@ const totalAmount = computed(() =>
   tableRows.value.reduce((sum, row) => sum + row.subtotal, 0) + shippingFee.value
 )
 
-const canSubmit = computed(() => customer.isLoggedIn && !!selectedAddressId.value && tableRows.value.length > 0)
+const selectedAddress = computed(() => address.list.find(item => item.id === Number(selectedAddressId.value)) || null)
+const addressBlocked = computed(() => !!selectedAddress.value && !SHIPPING_COUNTRIES.includes(selectedAddress.value.country_code || 'CN'))
+const canSubmit = computed(() => customer.isLoggedIn && !!selectedAddressId.value && tableRows.value.length > 0 && !addressBlocked.value)
 
 // 加载联系方式
 async function loadSettings() {
@@ -153,6 +156,7 @@ async function handleSubmit() {
   if (submitting.value) return
   if (!customer.isLoggedIn) return goLogin()
   if (!selectedAddressId.value) return ElMessage.warning(language.t('checkoutAddressEmpty'))
+  if (addressBlocked.value) return ElMessage.warning('该国家/地区暂不支持配送，请选择其他地址。')
   if (!tableRows.value.length) return ElMessage.warning(language.t('checkoutNoItems'))
 
   submitting.value = true
@@ -259,36 +263,8 @@ async function handleSubmit() {
         <h4>{{ language.t('checkoutAddress') }}</h4>
         <RouterLink class="text-button" to="/account/addresses" @click="dialogVisible = false">{{ language.t('manageAddress') }}</RouterLink>
       </div>
-
-      <p v-if="address.loading" class="checkout-muted">{{ language.t('loading') }}</p>
-      <ul v-else-if="address.list.length" class="checkout-addresses">
-        <li
-          v-for="item in address.list"
-          :key="item.id"
-          class="checkout-address"
-          :class="{ selected: selectedAddressId === item.id }"
-          role="radio"
-          :aria-checked="selectedAddressId === item.id"
-          tabindex="0"
-          @click="selectedAddressId = item.id"
-          @keydown.enter.prevent="selectedAddressId = item.id"
-          @keydown.space.prevent="selectedAddressId = item.id"
-        >
-          <span class="checkout-address__radio" aria-hidden="true"></span>
-          <div class="checkout-address__body">
-            <p>
-              <strong>{{ item.receiver_name }}</strong>
-              <span class="checkout-address__phone">{{ item.receiver_phone }}</span>
-              <span v-if="item.is_default" class="checkout-address__badge">{{ language.t('defaultAddress') }}</span>
-            </p>
-            <p class="checkout-address__text">{{ formatAddress(item) }}</p>
-          </div>
-        </li>
-      </ul>
-      <div v-else class="checkout-empty-address">
-        <p>{{ language.t('checkoutAddressEmpty') }}</p>
-        <RouterLink class="button primary" to="/account/addresses" @click="dialogVisible = false">{{ language.t('checkoutGoAddAddress') }}</RouterLink>
-      </div>
+      <AddressManager mode="select" :selected-id="selectedAddressId" @update:selected-id="selectedAddressId=$event" />
+      <p v-if="addressBlocked" class="checkout-address-blocked" role="alert">该国家/地区暂不支持配送，请选择其他地址。</p>
 
       <label class="checkout-remark">{{ language.t('checkoutRemark') }}
         <textarea v-model="remark" rows="2" maxlength="200" :placeholder="language.t('checkoutRemarkPlaceholder')"></textarea>
@@ -316,7 +292,7 @@ async function handleSubmit() {
       <div class="dialog-footer">
         <el-button @click="dialogVisible = false">{{ language.t('close') }}</el-button>
         <el-button :icon="Download" :loading="downloading" @click="handleDownload">{{ language.t('checkoutDownload') }}</el-button>
-        <button v-if="customer.isLoggedIn" type="button" class="button primary checkout-submit" :disabled="submitting || !canSubmit" @click="handleSubmit">
+        <button v-if="customer.isLoggedIn" type="button" class="button primary checkout-submit" :disabled="submitting || !canSubmit || addressBlocked" @click="handleSubmit">
           {{ submitting ? language.t('submitting') : language.t('checkoutSubmit') }}
         </button>
         <button v-else type="button" class="button primary" @click="goLogin">{{ language.t('goLogin') }}</button>
@@ -371,6 +347,7 @@ async function handleSubmit() {
 .checkout-address__phone { color: #746f68; margin-left: 6px }
 .checkout-address__badge { margin-left: 8px; font-size: .66rem; font-weight: 700; color: var(--clay, #c75f3e); background: rgba(199, 95, 62, .12); border-radius: 99px; padding: 2px 8px }
 .checkout-address__text { color: #55504a }
+.checkout-address-blocked { margin: 8px 0; color: #b42318; font-size: .84rem }
 
 .checkout-empty-address { padding: 16px; background: #f7f4ee; text-align: center; margin-bottom: 12px }
 .checkout-empty-address p { margin: 0 0 12px; font-size: .84rem; color: #746f68 }

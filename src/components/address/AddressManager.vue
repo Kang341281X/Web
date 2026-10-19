@@ -16,7 +16,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useAddressStore } from '../../stores/address'
 import { useCustomerStore } from '../../stores/customer'
 import { useLanguageStore } from '../../stores/language'
-import { regionText } from '../../utils/address'
+import { formatAddress, displayPhone } from '../../utils/address'
 import AddressFormDialog from './AddressFormDialog.vue'
 
 const props = defineProps({
@@ -41,6 +41,7 @@ const setNote = (type, text) => { note.value = { type, text } }
 
 const select = item => {
   if (!isSelect.value) return
+  if (Number(props.selectedId) !== item.id) address.markUsed(item.id)
   emit('update:selectedId', item.id)
   emit('select', item)
 }
@@ -56,9 +57,10 @@ const openEdit = item => {
 }
 
 // 列表已由 store 重新拉取，这里只负责提示与关闭弹窗
-const onSaved = () => {
+const onSaved = item => {
   formVisible.value = false
   setNote('success', language.t('addressSaved'))
+  if (isSelect.value && item?.id) select(item)
 }
 
 const toggleDefault = async item => {
@@ -84,6 +86,7 @@ onMounted(async () => {
   }
   // 列表按「默认地址优先」排序，所以第一条就是默认地址
   if (isSelect.value && props.selectedId == null && address.list.length) select(address.list[0])
+  else if (isSelect.value && address.list.some(item => item.id === Number(props.selectedId))) address.markUsed(Number(props.selectedId))
 })
 </script>
 
@@ -91,7 +94,7 @@ onMounted(async () => {
   <div class="address-manager">
     <div class="address-toolbar">
       <p v-if="isSelect">{{ language.t('selectAddress') }}</p>
-      <button type="button" class="button primary" @click="openCreate">+ {{ language.t('addAddress') }}</button>
+      <button type="button" class="button primary" :disabled="address.list.length>=address.maxAddresses" @click="openCreate">+ {{ language.t('addAddress') }}</button>
     </div>
 
     <p v-if="note" class="account-note" :class="note.type" role="status">{{ note.text }}</p>
@@ -114,11 +117,11 @@ onMounted(async () => {
           <div class="address-head">
             <span class="address-name">{{ item.receiver_name }}</span>
             <span v-if="item.is_default" class="address-badge">{{ language.t('defaultAddress') }}</span>
-            <span class="address-phone">{{ item.receiver_phone }}</span>
+            <span v-if="item.label" class="address-badge">{{ item.label }}</span>
+            <span class="address-phone">{{ displayPhone(item) }}</span>
           </div>
           <p class="address-line">
-            <span v-if="regionText(item)" class="address-region">{{ regionText(item) }}</span>
-            <span class="address-detail">{{ item.detail_address }}</span>
+            <span class="address-detail">{{ formatAddress(item) }}</span>
           </p>
         </div>
 
@@ -128,7 +131,7 @@ onMounted(async () => {
           <button v-if="!isSelect" type="button" class="text-button danger" @click.stop="pendingDeleteId = item.id">{{ language.t('delete') }}</button>
         </div>
         <div v-else class="address-confirm">
-          <span>{{ language.t('deleteAddressConfirm') }}</span>
+          <span>{{ language.t(item.is_default ? 'deleteDefaultAddressConfirm' : 'deleteAddressConfirm') }}</span>
           <button type="button" class="text-button" :disabled="address.saving" @click.stop="remove(item.id)">{{ language.t('delete') }}</button>
           <button type="button" class="text-button" @click.stop="pendingDeleteId = null">{{ language.t('cancel') }}</button>
         </div>

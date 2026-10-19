@@ -4,12 +4,23 @@ import customerApi from '../services/customerApi'
 // 表单模型（camelCase）→ 接口字段（snake_case），字段名与 server/routes/customerAddress.js 一一对应
 function toPayload(form = {}) {
   return {
-    receiver_name: (form.receiverName || '').trim(),
-    receiver_phone: (form.receiverPhone || '').trim(),
-    province: (form.province || '').trim(),
+    country_code: form.countryCode || 'CN',
+    recipient_name: (form.recipientName || '').trim(),
+    phone_e164: (form.phone || '').trim(),
+    receiver_name: (form.recipientName || '').trim(),
+    receiver_phone: (form.phone || '').trim(),
+    address_line1: (form.addressLine1 || form.detailAddress || '').trim(),
+    address_line2: (form.addressLine2 || '').trim(),
+    province: (form.province || form.stateCode || '').trim(),
+    state_code: (form.stateCode || form.province || '').trim(),
     city: (form.city || '').trim(),
     district: (form.district || '').trim(),
-    detail_address: (form.detailAddress || '').trim(),
+    detail_address: (form.addressLine1 || form.detailAddress || '').trim(),
+    postal_code: (form.postalCode || '').trim(),
+    street: (form.addressLine1 || form.detailAddress || '').trim(),
+    region_codes: form.regionCodes || {},
+    label: form.label || '',
+    delivery_instructions: (form.deliveryInstructions || '').trim(),
     is_default: form.isDefault ? 1 : 0,
   }
 }
@@ -21,7 +32,7 @@ function toPayload(form = {}) {
  * 最终顺序与默认项一律以服务端返回为准，前端不再自行推算。
  */
 export const useAddressStore = defineStore('address', {
-  state: () => ({ list: [], loading: false, saving: false, loaded: false }),
+  state: () => ({ list: [], loading: false, saving: false, loaded: false, maxAddresses: 10 }),
   getters: {
     defaultAddress: state => state.list.find(item => item.is_default) || null,
   },
@@ -43,6 +54,7 @@ export const useAddressStore = defineStore('address', {
       try {
         const { data } = await customerApi.get('/addresses')
         this.list = data.data || []
+        this.maxAddresses = data.max_addresses || 10
         this.loaded = true
         return { success: true, data: this.list }
       } catch (error) {
@@ -75,7 +87,11 @@ export const useAddressStore = defineStore('address', {
     },
 
     setDefault(id) {
-      return this.write(() => customerApi.put(`/addresses/${id}/set-default`), '设置默认地址失败，请稍后重试')
+      return this.write(() => customerApi.patch(`/addresses/${id}/default`), '设置默认地址失败，请稍后重试')
+    },
+
+    async markUsed(id) {
+      try { await customerApi.patch(`/addresses/${id}/used`) } catch { /* Address selection remains usable if usage tracking fails. */ }
     },
 
     remove(id) {
