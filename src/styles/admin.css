@@ -512,3 +512,82 @@
   font-weight: 600;
   background: rgba(255, 255, 255, 0.22) !important;
 }
+
+/* ===== 移动端加固（后台）=====
+   1) 100dvh 动态视口，避免 iOS 地址栏收起后底部被裁；
+   2) 顶部抽屉按钮 / 用户菜单 44px 触控；
+   3) 表单调成上下结构、表格横向滚动、分页换行；
+   4) 日期范围弹层不溢出视口。 */
+.admin-layout {
+  height: 100vh;
+  height: 100dvh;
+}
+
+@media (max-width: 768px) {
+  .admin-header { height: 56px; padding: 0 12px; }
+  .admin-header-trigger {
+    width: 44px; height: 44px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .admin-user-trigger { min-height: 44px; padding: 4px 6px; }
+  .admin-main { padding: 12px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .admin-layout .el-button { min-height: 36px; }
+  .admin-layout .el-pagination {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    white-space: normal;
+    justify-content: flex-start;
+  }
+  .admin-layout .el-pagination button,
+  .admin-layout .el-pagination .el-pager li { min-width: 36px; height: 36px; line-height: 36px; }
+  .admin-layout .el-pagination__jump { margin-left: 0; }
+  .el-drawer { max-width: 86vw; }
+  .el-drawer__body { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+@media (max-width: 480px) {
+  /* 表单标签改为上下结构：92px 固定标签会把输入框挤到只剩一小截 */
+  .admin-layout .el-form-item { display: block; }
+  .admin-layout .el-form-item__label {
+    width: auto !important;
+    height: auto;
+    line-height: 1.4;
+    margin-bottom: 4px;
+    padding: 0;
+    justify-content: flex-start;
+  }
+  .admin-layout .el-form-item__content { margin-left: 0 !important; }
+  .admin-layout .el-descriptions { overflow-x: auto; }
+  .admin-layout .el-tabs__item { padding: 0 12px; font-size: 13px; }
+}
+
+/* Element Plus 输入框：小屏统一 16px，避免 iOS Safari 聚焦时自动放大页面
+   （组件内 14px 的 .el-input__inner 优先级高于全局 input 规则，必须单独覆盖） */
+@media (max-width: 760px) {
+  .el-input__inner,
+  .el-textarea__inner,
+  .el-input__inner::placeholder,
+  .el-textarea__inner::placeholder { font-size: 16px; }
+  .el-select__placeholder { font-size: 16px; }
+}
+
+/* ===== Element Plus 弹层（前后台共用）小屏修正 ===== */
+@media (max-width: 480px) {
+  /* 默认 420px 的确认框在 320/360 屏会溢出 */
+  .el-message-box {
+    width: calc(100vw - 32px) !important;
+    max-width: calc(100vw - 32px);
+  }
+  .el-dialog { max-width: calc(100vw - 16px); }
+  .el-message { max-width: calc(100vw - 24px); }
+}
+
+/* 日期范围面板固定 646px 宽，小屏改为在弹层内横向滚动 */
+@media (max-width: 768px) {
+  .el-picker__popper.el-popper {
+    max-width: calc(100vw - 12px);
+    overflow-x: auto;
+    overscroll-behavior: contain;
+  }
+  .el-date-range-picker { max-width: none; }
+}

@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Download } from '@element-plus/icons-vue'
+import { Download, Message, Phone } from '@element-plus/icons-vue'
 import { useCartStore } from '../../stores/cart'
 import { useCustomerStore } from '../../stores/customer'
 import { useAddressStore } from '../../stores/address'
@@ -14,6 +14,7 @@ import AddressManager from '../address/AddressManager.vue'
 import { SHIPPING_COUNTRIES } from '../../data/address-countries'
 import { fetchSettings, exportCheckoutList } from '../../services/publicApi'
 import { useIsMobile } from '../../composables/useIsMobile'
+import { resolveContact } from '../../data/siteContact'
 import AppImage from '../common/AppImage.vue'
 
 /**
@@ -42,10 +43,11 @@ const language = useLanguageStore()
 
 const dialogVisible = ref(props.visible)
 const settings = ref({})
-const settingsError = ref(false)
 const downloaded = ref(false)
 const downloading = ref(false)
 const submitting = ref(false)
+// 下单成功后的订单快照：非空时弹窗切换为「已创建订单」成功态，展示成功文案与联系卡片
+const submittedOrder = ref(null)
 const selectedAddressId = ref(null)
 const remark = ref('')
 
@@ -57,12 +59,18 @@ const isMobile = useIsMobile(760)
 const shippingFree = computed(() => (Number(props.shippingFee) || 0) <= 0)
 const shippingFee = computed(() => Number(props.shippingFee) || 0)
 
+// 联系卡片：优先用后台设置里的 contact_email / contact_phone，缺失时回退到
+// src/data/siteContact.js 的默认值（联系方式只在那一处配置，组件不写死）
+const contact = computed(() => resolveContact(settings.value))
+const isSubmitted = computed(() => !!submittedOrder.value)
+
 watch(() => props.visible, val => {
   dialogVisible.value = val
   if (val) {
     downloaded.value = false
     remark.value = ''
     selectedAddressId.value = null
+    submittedOrder.value = null
     loadSettings()
     loadAddresses()
   }
@@ -94,14 +102,12 @@ const selectedAddress = computed(() => address.list.find(item => item.id === Num
 const addressBlocked = computed(() => !!selectedAddress.value && !SHIPPING_COUNTRIES.includes(selectedAddress.value.country_code || 'CN'))
 const canSubmit = computed(() => customer.isLoggedIn && !!selectedAddressId.value && tableRows.value.length > 0 && !addressBlocked.value)
 
-// 加载联系方式
+// 加载联系方式：失败时不阻断下单，联系卡片沿用 siteContact.js 的兜底值继续展示
 async function loadSettings() {
-  settingsError.value = false
   try {
     settings.value = await fetchSettings()
   } catch (error) {
     console.error('Failed to load settings:', error)
-    settingsError.value = true
   }
 }
 
@@ -172,26 +178,35 @@ async function handleSubmit() {
       items: tableRows.value.map(row => ({ product_id: row.product.id, quantity: row.quantity })),
     })
     if (!result.success) return ElMessage.error(result.message)
+    // 订单已在服务端事务内创建（接口返回 201 + 订单详情），这里切换为成功态，
+    // 不立即关窗跳转，让顾客能看到「后台已创建订单」的说明和联系方式
+    submittedOrder.value = result.data || {}
     ElMessage.success(language.t('checkoutSubmitted'))
-    dialogVisible.value = false
     // 服务端已在事务内清掉已下单的购物车项，这里同步最新购物车
     await cart.fetchFromServer()
-    router.push('/orders')
   } finally {
     submitting.value = false
   }
+}
+
+// 成功态下的「查看我的订单」：关窗后跳转订单列表
+function goOrders() {
+  dialogVisible.value = false
+  router.push('/orders')
 }
 </script>
 
 <template>
   <el-dialog
     v-model="dialogVisible"
+    class="checkout-dialog"
     :title="language.t('checkoutDialogTitle')"
     width="min(860px, calc(100% - 24px))"
     top="4vh"
     destroy-on-close
   >
     <el-alert
+      v-if="!isSubmitted"
       type="warning"
       :closable="false"
       show-icon
@@ -203,7 +218,7 @@ async function handleSubmit() {
     </el-alert>
 
     <el-alert
-      v-if="downloaded"
+      v-if="!isSubmitted && downloaded"
       type="success"
       :closable="false"
       show-icon
@@ -212,90 +227,127 @@ async function handleSubmit() {
       {{ language.t('checkoutDownloadedNotice') }}
     </el-alert>
 
-    <!-- 商品明细：桌面端保留表格；移动端换卡片式竖排列表，避免窄屏横向滚动 -->
-    <el-table v-if="!isMobile" :data="tableRows" border style="width: 100%" :max-height="360">
-      <el-table-column :label="language.t('colImage')" width="100">
-        <template #default="{ row }">
-          <AppImage
-            :src="row.image"
-            :alt="row.name"
-            style="width: 64px; height: 64px; object-fit: cover; border-radius: 2px"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column prop="name" :label="language.t('colName')" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="quantity" :label="language.t('colQuantity')" width="80" align="center" />
-      <el-table-column :label="language.t('colUnitPrice')" width="110" align="right">
-        <template #default="{ row }">¥{{ row.price.toFixed(2) }}</template>
-      </el-table-column>
-      <el-table-column :label="language.t('colSubtotal')" width="120" align="right">
-        <template #default="{ row }">¥{{ row.subtotal.toFixed(2) }}</template>
-      </el-table-column>
-    </el-table>
-    <ul v-else class="checkout-items-mobile">
-      <li v-for="row in tableRows" :key="row.product.id">
-        <AppImage :src="row.image" :alt="row.name" class="checkout-item__thumb" />
-        <div class="checkout-item__main">
-          <p class="checkout-item__name">{{ row.name }}</p>
-          <p class="checkout-item__meta">¥{{ row.price.toFixed(2) }} × {{ row.quantity }}</p>
-        </div>
-        <strong class="checkout-item__subtotal">¥{{ row.subtotal.toFixed(2) }}</strong>
-      </li>
-    </ul>
+    <!-- 下单成功：订单已在服务端事务内创建（接口返回 201），明确告知顾客无需另行「提交」 -->
+    <el-alert
+      v-if="isSubmitted"
+      type="success"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 16px"
+    >
+      <template #title>
+        {{ language.t('checkoutSubmitted') }}
+      </template>
+    </el-alert>
 
-    <div class="checkout-total">
-      <span>{{ language.t('subtotal') }}</span>
-      <b>¥{{ tableRows.reduce((s, r) => s + r.subtotal, 0).toFixed(2) }}</b>
-    </div>
-    <div class="checkout-total checkout-total--shipping">
-      <span>{{ language.t('shippingEstimate') }}</span>
-      <b>{{ shippingFree ? language.t('shippingFree') : `¥${shippingFee.toFixed(2)}` }}</b>
-    </div>
-    <p v-if="!shippingFree" class="checkout-shipping-hint">{{ language.t('shippingEstimateHint') }}</p>
-    <div class="checkout-total checkout-total--grand">
-      <span>{{ language.t('total') }}</span>
-      <strong>¥{{ totalAmount.toFixed(2) }}</strong>
-    </div>
-
-    <!-- 已登录：选择收货地址 + 买家备注，用于提交订单 -->
-    <section v-if="customer.isLoggedIn" class="checkout-section">
-      <div class="checkout-section__head">
-        <h4>{{ language.t('checkoutAddress') }}</h4>
-        <RouterLink class="text-button" to="/account/addresses" @click="dialogVisible = false">{{ language.t('manageAddress') }}</RouterLink>
+    <!-- 联系方式卡片：位于结算页顶部，只展示邮箱与电话两项，
+         手机上直接点按即可发邮件 / 拨号 -->
+    <section class="contact-card" :aria-label="language.t('checkoutContactTitle')">
+      <h4 class="contact-card__title">{{ language.t('checkoutContactTitle') }}</h4>
+      <p class="contact-card__hint">
+        {{ language.t(isSubmitted ? 'checkoutContactHintSubmitted' : 'checkoutContactHint') }}
+      </p>
+      <div class="contact-card__links">
+        <a class="contact-card__link" :href="contact.emailHref">
+          <span class="contact-card__icon"><el-icon><Message /></el-icon></span>
+          <span class="contact-card__text">
+            <span class="contact-card__label">{{ language.t('contactEmail') }}</span>
+            <span class="contact-card__value">{{ contact.email }}</span>
+          </span>
+        </a>
+        <a class="contact-card__link" :href="contact.phoneHref">
+          <span class="contact-card__icon"><el-icon><Phone /></el-icon></span>
+          <span class="contact-card__text">
+            <span class="contact-card__label">{{ language.t('contactPhone') }}</span>
+            <span class="contact-card__value">{{ contact.phone }}</span>
+          </span>
+        </a>
       </div>
-      <AddressManager mode="select" :selected-id="selectedAddressId" @update:selected-id="selectedAddressId=$event" />
-      <p v-if="addressBlocked" class="checkout-address-blocked" role="alert">该国家/地区暂不支持配送，请选择其他地址。</p>
-
-      <label class="checkout-remark">{{ language.t('checkoutRemark') }}
-        <textarea v-model="remark" rows="2" maxlength="200" :placeholder="language.t('checkoutRemarkPlaceholder')"></textarea>
-      </label>
     </section>
 
-    <div class="checkout-contact">
-      <div v-if="settingsError" class="contact-error">
-        {{ language.t('checkoutContactError') }}
+    <!-- 未提交：商品明细 + 金额 + 地址；提交成功后切换为下面的成功态 -->
+    <template v-if="!isSubmitted">
+      <!-- 商品明细：桌面端保留表格；移动端换卡片式竖排列表，避免窄屏横向滚动 -->
+      <el-table v-if="!isMobile" :data="tableRows" border style="width: 100%" :max-height="360">
+        <el-table-column :label="language.t('colImage')" width="100">
+          <template #default="{ row }">
+            <AppImage
+              :src="row.image"
+              :alt="row.name"
+              style="width: 64px; height: 64px; object-fit: cover; border-radius: 2px"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" :label="language.t('colName')" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="quantity" :label="language.t('colQuantity')" width="80" align="center" />
+        <el-table-column :label="language.t('colUnitPrice')" width="110" align="right">
+          <template #default="{ row }">¥{{ row.price.toFixed(2) }}</template>
+        </el-table-column>
+        <el-table-column :label="language.t('colSubtotal')" width="120" align="right">
+          <template #default="{ row }">¥{{ row.subtotal.toFixed(2) }}</template>
+        </el-table-column>
+      </el-table>
+      <ul v-else class="checkout-items-mobile">
+        <li v-for="row in tableRows" :key="row.product.id">
+          <AppImage :src="row.image" :alt="row.name" class="checkout-item__thumb" />
+          <div class="checkout-item__main">
+            <p class="checkout-item__name">{{ row.name }}</p>
+            <p class="checkout-item__meta">¥{{ row.price.toFixed(2) }} × {{ row.quantity }}</p>
+          </div>
+          <strong class="checkout-item__subtotal">¥{{ row.subtotal.toFixed(2) }}</strong>
+        </li>
+      </ul>
+
+      <div class="checkout-total">
+        <span>{{ language.t('subtotal') }}</span>
+        <b>¥{{ tableRows.reduce((s, r) => s + r.subtotal, 0).toFixed(2) }}</b>
       </div>
-      <template v-else>
-        <p class="contact-title">{{ language.t('checkoutContactPrompt') }}</p>
-        <p class="contact-info">
-          <span v-if="settings.contact_phone" class="contact-item">
-            {{ language.t('contactPhone') }}：<a :href="`tel:${settings.contact_phone}`">{{ settings.contact_phone }}</a>
-          </span>
-          <span v-if="settings.contact_email" class="contact-item">
-            {{ language.t('contactEmail') }}：<a :href="`mailto:${settings.contact_email}`">{{ settings.contact_email }}</a>
-          </span>
-        </p>
-      </template>
+      <div class="checkout-total checkout-total--shipping">
+        <span>{{ language.t('shippingEstimate') }}</span>
+        <b>{{ shippingFree ? language.t('shippingFree') : `¥${shippingFee.toFixed(2)}` }}</b>
+      </div>
+      <p v-if="!shippingFree" class="checkout-shipping-hint">{{ language.t('shippingEstimateHint') }}</p>
+      <div class="checkout-total checkout-total--grand">
+        <span>{{ language.t('total') }}</span>
+        <strong>¥{{ totalAmount.toFixed(2) }}</strong>
+      </div>
+
+      <!-- 已登录：选择收货地址 + 买家备注，用于提交订单 -->
+      <section v-if="customer.isLoggedIn" class="checkout-section">
+        <div class="checkout-section__head">
+          <h4>{{ language.t('checkoutAddress') }}</h4>
+          <RouterLink class="text-button" to="/account/addresses" @click="dialogVisible = false">{{ language.t('manageAddress') }}</RouterLink>
+        </div>
+        <AddressManager mode="select" :selected-id="selectedAddressId" @update:selected-id="selectedAddressId=$event" />
+        <p v-if="addressBlocked" class="checkout-address-blocked" role="alert">该国家/地区暂不支持配送，请选择其他地址。</p>
+
+        <label class="checkout-remark">{{ language.t('checkoutRemark') }}
+          <textarea v-model="remark" rows="2" maxlength="200" :placeholder="language.t('checkoutRemarkPlaceholder')"></textarea>
+        </label>
+      </section>
+    </template>
+
+    <div v-else class="checkout-success">
+      <p v-if="submittedOrder.order_no" class="checkout-success__order">
+        {{ language.t('orderNo') }}: {{ submittedOrder.order_no }}
+      </p>
+      <p class="checkout-success__hint">{{ language.t('checkoutSuccessHint') }}</p>
     </div>
 
     <template #footer>
       <div class="dialog-footer">
-        <el-button @click="dialogVisible = false">{{ language.t('close') }}</el-button>
-        <el-button :icon="Download" :loading="downloading" @click="handleDownload">{{ language.t('checkoutDownload') }}</el-button>
-        <button v-if="customer.isLoggedIn" type="button" class="button primary checkout-submit" :disabled="submitting || !canSubmit || addressBlocked" @click="handleSubmit">
-          {{ submitting ? language.t('submitting') : language.t('checkoutSubmit') }}
-        </button>
-        <button v-else type="button" class="button primary" @click="goLogin">{{ language.t('goLogin') }}</button>
+        <template v-if="isSubmitted">
+          <el-button @click="dialogVisible = false">{{ language.t('close') }}</el-button>
+          <button type="button" class="button primary" @click="goOrders">{{ language.t('checkoutViewOrders') }}</button>
+        </template>
+        <template v-else>
+          <el-button @click="dialogVisible = false">{{ language.t('close') }}</el-button>
+          <el-button :icon="Download" :loading="downloading" @click="handleDownload">{{ language.t('checkoutDownload') }}</el-button>
+          <button v-if="customer.isLoggedIn" type="button" class="button primary checkout-submit" :disabled="submitting || !canSubmit || addressBlocked" @click="handleSubmit">
+            {{ submitting ? language.t('submitting') : language.t('checkoutSubmit') }}
+          </button>
+          <button v-else type="button" class="button primary" @click="goLogin">{{ language.t('goLogin') }}</button>
+        </template>
       </div>
     </template>
   </el-dialog>
@@ -303,7 +355,7 @@ async function handleSubmit() {
 
 <style scoped>
 /* 全局 .text-button 是零内边距的小号文字按钮，移动端点击区域不足，这里补足 */
-.text-button { display: inline-flex; align-items: center; min-height: 36px; padding: 8px 4px }
+.text-button { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 4px }
 
 .checkout-total {
   display: flex;
@@ -356,35 +408,87 @@ async function handleSubmit() {
 .checkout-remark textarea { display: block; width: 100%; margin-top: 8px; padding: 10px; border: 1px solid #e7e0d6; background: #fff; color: #292622; resize: vertical; font: inherit; min-height: 62px }
 .checkout-remark textarea:focus { outline: 2px solid var(--clay, #c75f3e); outline-offset: 1px }
 
-.checkout-contact {
-  margin-top: 8px;
-  padding: 16px;
-  background: #f5f0e9;
-  border-radius: 4px;
+/* 联系方式卡片：只放邮箱 / 电话两项，沿用主题橙作强调，与下方商品明细形成区分 */
+.contact-card {
+  margin: 0 0 18px;
+  padding: 18px 20px 20px;
+  background: #fff7f2;
+  border: 1px solid rgba(241, 100, 30, .25);
+  border-left: 4px solid var(--clay, #F1641E);
+  border-radius: 6px;
 }
-.contact-title {
-  margin: 0 0 8px;
-  font-size: 0.85rem;
+.contact-card__title {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  color: var(--ink, #222);
+}
+.contact-card__hint {
+  margin: 0 0 14px;
+  font-size: .84rem;
+  line-height: 1.6;
   color: #5e5750;
 }
-.contact-info {
-  margin: 0;
+.contact-card__links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.contact-card__link {
   display: flex;
-  gap: 28px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid rgba(241, 100, 30, .22);
+  border-radius: 8px;
+  transition: border-color .18s, box-shadow .18s;
 }
-.contact-item {
-  font-size: 0.88rem;
-  color: #4e4944;
+.contact-card__link:hover,
+.contact-card__link:focus-visible {
+  border-color: var(--clay, #F1641E);
+  box-shadow: 0 2px 10px rgba(241, 100, 30, .16);
+  outline: none;
 }
-.contact-item a {
+.contact-card__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(241, 100, 30, .12);
+  color: var(--clay, #F1641E);
+  font-size: 20px;
+}
+.contact-card__text { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+.contact-card__label {
+  font-size: .72rem;
+  letter-spacing: .04em;
+  color: var(--muted, #595959);
+}
+.contact-card__value {
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--clay, #F1641E);
+  overflow-wrap: anywhere;
+}
+
+.checkout-success { padding: 4px 0 8px }
+.checkout-success__order {
+  margin: 0 0 8px;
+  font-size: .92rem;
   font-weight: 600;
-  color: var(--clay, #c75f3e);
-  text-decoration: none;
+  color: var(--ink, #222);
+  word-break: break-all;
 }
-.contact-error {
-  font-size: 0.85rem;
-  color: #909399;
+.checkout-success__hint {
+  margin: 0;
+  font-size: .88rem;
+  line-height: 1.65;
+  color: #5e5750;
 }
 .dialog-footer {
   display: flex;
@@ -413,6 +517,11 @@ async function handleSubmit() {
 
 @media (max-width: 760px) {
   .checkout-addresses { grid-template-columns: 1fr }
+  /* 360px 窄屏：联系方式改为单列竖排，图标与字号略微收紧，长邮箱自动换行 */
+  .contact-card { padding: 14px 14px 16px }
+  .contact-card__links { grid-template-columns: 1fr; gap: 10px }
+  .contact-card__link { min-height: 56px; padding: 10px 12px; gap: 10px }
+  .contact-card__icon { width: 36px; height: 36px; font-size: 18px }
   /* 移动端把按钮铺满一行、点击区域加大，避免误触 */
   .dialog-footer { flex-direction: column-reverse; gap: 8px }
   .dialog-footer :deep(.el-button), .dialog-footer .button { width: 100%; margin-left: 0; min-height: 44px }

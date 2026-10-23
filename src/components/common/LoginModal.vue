@@ -125,7 +125,7 @@ const submit = async () => {
 }
 </script>
 <template>
-  <Teleport to="body"><div v-if="user.isLoginOpen" class="modal-backdrop" @click.self="user.closeLogin()"><section class="login-modal" role="dialog" aria-modal="true" :aria-label="language.t('account')"><button class="icon-button modal-close" :aria-label="language.t('close')" @click="user.closeLogin()">×</button><span class="eyebrow">CRAFTORA</span>
+  <Teleport to="body"><div v-if="user.isLoginOpen" class="modal-backdrop" @click.self="user.closeLogin()"><section class="login-modal" role="dialog" aria-modal="true" :aria-label="language.t('account')"><button class="icon-button modal-close" :aria-label="language.t('close')" @click="user.closeLogin()">×</button><span class="eyebrow">{{ language.t('brand.name') }}</span>
     <div class="auth-tabs" role="tablist">
       <button type="button" role="tab" :class="{ active: tab === 'login' }" :aria-selected="tab === 'login'" @click="switchTab('login')">{{ language.t('login') }}</button>
       <button type="button" role="tab" :class="{ active: tab === 'register' }" :aria-selected="tab === 'register'" @click="switchTab('register')">{{ language.t('register') }}</button>

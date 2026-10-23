@@ -86,14 +86,20 @@ router.get('/products', async (req, res, next) => {
       params.push(seller, seller)
     }
     const where = `WHERE ${clauses.join(' AND ')}`
-    let orderClause = 'ORDER BY p.created_at DESC, p.id DESC'
+    let primaryOrder = 'p.created_at DESC'
     if (sort === 'popular') {
-      orderClause = 'ORDER BY p.sales DESC, p.id DESC'
+      primaryOrder = 'p.sales DESC'
     } else if (sort === 'newest') {
-      orderClause = 'ORDER BY p.created_at DESC, p.id DESC'
+      primaryOrder = 'p.created_at DESC'
     } else if (sort === 'rating') {
-      orderClause = 'ORDER BY p.rating DESC, p.review_count DESC, p.id DESC'
+      primaryOrder = 'p.rating DESC, p.review_count DESC'
     }
+    // price_order：价格（实际售卖价 p.price，不是 original_price）是用户显式选择的第二种排列方式，
+    // 选中时价格主导排序，上面的 sort 退为同价商品之间的次序；未选中时完全按 sort 排列。
+    const priceOrder = String(req.query.price_order || '').toLowerCase()
+    const orderClause = priceOrder === 'asc' || priceOrder === 'desc'
+      ? `ORDER BY p.price ${priceOrder === 'asc' ? 'ASC' : 'DESC'}, ${primaryOrder}, p.id DESC`
+      : `ORDER BY ${primaryOrder}, p.id DESC`
 
     const [[{ total }]] = await db.execute(`SELECT COUNT(*) AS total FROM product p ${where}`, params)
     const [rows] = await db.execute(

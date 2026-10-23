@@ -3,15 +3,19 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Goods, DataLine, Setting, Document, User, List, Avatar, Tickets, ChatDotRound, Money } from '@element-plus/icons-vue'
 import { useUserStore } from '../../stores/user'
+import { useLanguageStore } from '../../stores/language'
 
 const props = defineProps({
   collapsed: { type: Boolean, default: false },
-  title: { type: String, default: 'Craftora Admin' },
+  title: { type: String, default: '' },
 })
 const emit = defineEmits(['select'])
 
 const route = useRoute()
 const userStore = useUserStore()
+const language = useLanguageStore()
+// 品牌名统一走语言包；title 仅用于个别页面需要自定义标题的场景
+const brandTitle = computed(() => props.title || language.t('brand.name'))
 
 const isSuperAdmin = computed(() => userStore.adminUser?.role === 'super_admin')
 // 菜单全部是一级路径，按 path 高亮，避免链接带上查询参数（如 ?category_id=）时菜单失去选中态
@@ -22,7 +26,7 @@ const activeMenu = computed(() => route.path)
   <div class="admin-aside" :class="{ 'admin-aside--collapsed': props.collapsed }" :style="{ width: props.collapsed ? '64px' : '210px' }">
     <div class="admin-aside-logo">
       <el-icon class="logo-icon"><Goods /></el-icon>
-      <span v-if="!props.collapsed">{{ props.title }}</span>
+      <span v-if="!props.collapsed">{{ brandTitle }}</span>
     </div>
     <el-menu
       :default-active="activeMenu"

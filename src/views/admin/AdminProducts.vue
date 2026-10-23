@@ -464,7 +464,7 @@ onMounted(async () => { try { await loadCategories(); await load() } catch (erro
 </style>
 <style>
 /* el-dialog 内部结构（teleport 到 body）用唯一类前缀的全局样式覆写 */
-.product-dialog .el-dialog__body { padding:10px 26px 26px; max-height:calc(100vh - 190px); overflow-y:auto }
+.product-dialog .el-dialog__body { padding:10px 26px 26px; max-height:calc(100vh - 190px); max-height:calc(100dvh - 190px); overflow-y:auto; overscroll-behavior:contain }
 .product-dialog .el-form-item { margin-bottom:22px }
 .product-dialog .el-form-item__label { line-height:20px; padding-bottom:8px; color:#606266 }
 .product-dialog .el-dialog__footer { padding-top:4px }

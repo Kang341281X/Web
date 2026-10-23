@@ -9,7 +9,7 @@
     "last 2 Edge versions",
     "iOS >= 15",
     "Safari >= 15",
-    "ChromeAndroid >= 100",
+    "last 2 ChromeAndroid versions",
     "Samsung >= 20"
   ],
   "scripts": {

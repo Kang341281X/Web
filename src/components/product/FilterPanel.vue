@@ -27,10 +27,20 @@ watch(() => props.modelValue, async value => {
 
 const currency = computed(() => getCurrency(language.locale))
 
+// 价格的第二排列方式：都不选时沿用上方「排序」的规则，选中后商品区按价格排列（同价再按「排序」）
+const priceOrderOptions = computed(() => [
+  { value: 'desc', label: language.t('highPrice') },
+  { value: 'asc', label: language.t('lowPrice') }
+])
+
+const togglePriceOrder = value => {
+  filters.value.priceOrderInput = filters.value.priceOrderInput === value ? '' : value
+}
+
 const clear = () => {
-  filters.value = { category: null, minPriceInput: '', maxPriceInput: '' }
+  filters.value = { category: null, minPriceInput: '', maxPriceInput: '', priceOrderInput: '' }
   priceError.value = ''
-  emit('applyPrice', { min: null, max: null })
+  emit('applyPrice', { min: null, max: null, priceOrder: '' })
 }
 
 const applyPrice = () => {
@@ -50,14 +60,17 @@ const applyPrice = () => {
     priceError.value = language.t('priceErrorMinGreater')
     return
   }
-  emit('applyPrice', { min, max })
+  const priceOrder = filters.value.priceOrderInput === 'asc' || filters.value.priceOrderInput === 'desc'
+    ? filters.value.priceOrderInput
+    : ''
+  emit('applyPrice', { min, max, priceOrder })
 }
 </script>
 <template>
   <aside class="filter-panel">
     <div class="filter-heading">
       <h3>{{ language.t('filters') }}</h3>
-      <button @click="clear">{{ language.t('clear') }}</button>
+      <button @click="clear">{{ language.t('reset') }}</button>
     </div>
     <div class="filter-field filter-sort">
       <span>{{ language.t('sort') }}</span>
@@ -94,6 +107,20 @@ const applyPrice = () => {
             />
           </div>
         </label>
+      </div>
+      <div class="price-order-group" role="group" :aria-label="language.t('priceOrderLabel')">
+        <button
+          v-for="option in priceOrderOptions"
+          :key="option.value"
+          class="price-order-button"
+          :class="{ 'is-active': filters.priceOrderInput === option.value }"
+          type="button"
+          :aria-pressed="filters.priceOrderInput === option.value"
+          @click="togglePriceOrder(option.value)"
+        >
+          <span class="price-order-dot" aria-hidden="true"></span>
+          <span>{{ option.label }}</span>
+        </button>
       </div>
       <button class="price-confirm-button" type="button" @click="applyPrice">{{ language.t('confirmPrice') }}</button>
       <p v-if="priceError" class="price-error">{{ priceError }}</p>

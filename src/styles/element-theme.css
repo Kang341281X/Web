@@ -1,5 +1,5 @@
 /* ===== 前台店铺区 — Element Plus 主题覆盖 =====
-   把 Element Plus 默认蓝色 #409eff 换成 Craftora 前台的墨黑（--ink）主色，
+   把 Element Plus 默认蓝色 #409eff 换成丹康园前台的墨黑（--ink）主色，
    仅在 .storefront 容器内生效；后台的蓝色主题仍由 .admin-layout 的 admin.css 提供，
    两者互不干扰（CSS 变量按最近祖先的继承规则解析，.storefront 优先级高于 :root）。 */
 

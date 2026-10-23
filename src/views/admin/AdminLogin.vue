@@ -3,6 +3,7 @@ import { onMounted, ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '../../stores/user'
+import { useLanguageStore } from '../../stores/language'
 import { fetchAdminCaptcha } from '../../services/captcha'
 import {
   User, Lock, View, Hide, Key
@@ -10,6 +11,7 @@ import {
 
 const router = useRouter()
 const userStore = useUserStore()
+const language = useLanguageStore()
 
 const loginForm = reactive({
   username: localStorage.getItem('admin_saved_username') || '',
@@ -92,7 +94,7 @@ async function handleLogin() {
     <div class="login-container">
       <div class="login-header">
         <el-icon :size="48" color="#409eff"><User /></el-icon>
-        <h1>Craftora Admin</h1>
+        <h1>{{ language.t('brand.name') }} Admin</h1>
         <p>后台管理系统</p>
       </div>
 
@@ -182,6 +184,7 @@ async function handleLogin() {
 <style scoped>
 .login-page {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;

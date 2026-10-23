@@ -21,7 +21,7 @@ onMounted(async () => {
   <footer class="site-footer">
     <div class="container footer-grid">
       <div>
-        <RouterLink to="/" class="logo"><span>✦</span>craftora</RouterLink>
+        <RouterLink to="/" class="logo"><span>✦</span>{{ language.t('brand.name') }}</RouterLink>
         <p>{{ language.t('footerText') }}</p>
       </div>
       <div>
@@ -53,6 +53,6 @@ onMounted(async () => {
         </div>
       </div>
     </div>
-    <div class="footer-bottom container">© 2026 {{ language.t('rights') }}</div>
+    <div class="footer-bottom container">© 2026 {{ language.t('brand.name') }} · {{ language.t('rights') }}</div>
   </footer>
 </template>

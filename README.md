@@ -1,6 +1,6 @@
-# Craftora 购物网站
+# 丹康园（Dankangyuan）购物网站
 
-Craftora 是一个面向手作商品的单店铺购物网站，采用 Vue 3、Vite、Express 和 SQLite。顾客可以浏览商品、管理购物车和地址、提交订单及发布评价；管理员通过独立后台维护商品、订单和站点数据。
+丹康园是一个面向手作商品的单店铺购物网站，采用 Vue 3、Vite、Express 和 SQLite。顾客可以浏览商品、管理购物车和地址、提交订单及发布评价；管理员通过独立后台维护商品、订单和站点数据。
 
 本站不接在线支付。顾客提交订单后由后台人工确认并处理发货。商品的 brand/manufacturer 可用于展示卖家名称和筛选作品，但系统没有多商户入驻、独立店铺账号或店铺结算流程。
 
@@ -69,8 +69,10 @@ npm run seed:dev
 
 ```bash
 npm run server
-npm run dev
 ```
+```
+npm run dev
+
 
 前端默认地址为 `http://localhost:5173`，API 默认地址为 `http://localhost:3001`。健康检查地址：`/api/health`。
 

@@ -195,5 +195,19 @@ watch(()=>props.visible,async shown=>{
 .region-selects select { height:42px; padding:0 10px; border:1px solid #d9dde1; border-radius:7px; background:#fff; color:#161718 }
 .region-panel footer { justify-content:flex-end }
 @media(prefers-color-scheme:dark) { .address-dialog { --address-bg:#1c1e20; --address-ink:#f2f3f4; --address-line:#42464a }.address-primary { border-color:#f1f2f3; background:#f1f2f3; color:#17191b }.address-chips button.active { background:#eceeef; color:#17191b }.paste-address { background:#272a2d }.region-panel { background:#1c1e20; color:#f2f3f4 }.region-selects select { border-color:#42464a; background:#1c1e20; color:#f2f3f4 }.region-manual-toggle { color:#bec4c9 } }
-@media(max-width:600px) { .address-overlay { align-items:end; padding:0 }.address-dialog { width:100%; max-height:94vh; border-radius:16px 16px 0 0 }.address-dialog__body { grid-template-columns:1fr }.address-field--full { grid-column:1 }.region-overlay { align-items:end; padding:0 }.region-panel { width:100%; padding-bottom:max(18px,env(safe-area-inset-bottom)); border-radius:16px 16px 0 0 }.address-dialog__foot { padding-bottom:max(16px,env(safe-area-inset-bottom)) } }
+@media(max-width:600px) { .address-overlay { align-items:end; padding:0 }.address-dialog { width:100%; max-height:94vh; max-height:94dvh; border-radius:16px 16px 0 0 }.address-dialog__body { grid-template-columns:1fr; padding-bottom: 8px }.address-field--full { grid-column:1 }.region-overlay { align-items:end; padding:0 }.region-panel { width:100%; padding-bottom:max(18px,env(safe-area-inset-bottom)); border-radius:16px 16px 0 0 }.address-dialog__foot { padding-bottom:max(16px,env(safe-area-inset-bottom)) } }
+/* 手机端：字段字号 16px（iOS 聚焦不放大）、输入与按钮统一 44px 触控高度 */
+@media(max-width:600px) {
+  .address-field input, .address-field select, .address-field textarea, .region-trigger, .phone-input { height:44px; font-size:16px }
+  .address-field textarea { height:auto; min-height:76px }
+  .address-dialog__head button { width:44px; height:44px; display:inline-flex; align-items:center; justify-content:center; padding:0 }
+  .address-primary, .address-secondary { height:44px }
+  .paste-address input, .paste-address button { height:44px; font-size:16px }
+  .address-chips button { min-height:44px; padding:8px 14px }
+  .address-chips input { height:44px; font-size:16px }
+  .region-selects select { height:44px; font-size:16px }
+  .region-manual input { height:44px; font-size:16px }
+  .region-manual-toggle { min-height:44px }
+  .region-panel header button { width:44px; height:44px; display:inline-flex; align-items:center; justify-content:center; padding:0 }
+}
 </style>

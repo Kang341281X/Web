@@ -36,7 +36,17 @@ export const useLanguageStore = defineStore('language', {
     shippingLoaded: false,
   }),
   getters: {
-    t: state => key => translations[state.locale]?.[key] || translations.en[key] || key,
+    // 取词：支持 'brand.name' 这类点号路径；文本里的 {brand} 会替换成当前语言的品牌名，
+    // 保证品牌名只在 brand.name 一处维护（改名时不用逐个句子改）。
+    t: state => key => {
+      const read = (source, path) => path.split('.').reduce((value, part) => (value == null ? value : value[part]), source)
+      const dict = translations[state.locale]
+      const fallback = translations.en
+      const value = read(dict, key) || read(fallback, key) || key
+      if (typeof value !== 'string' || !value.includes('{brand}')) return value
+      const brand = read(dict, 'brand.name') || read(fallback, 'brand.name') || ''
+      return value.split('{brand}').join(brand)
+    },
     category: state => id => (categoryNames[state.locale] || categoryNames.en)[id] || categoryNames.en[id] || id,
     currency: state => getCurrency(state.locale),
     price: state => cnyAmount => formatPrice(cnyAmount, state.locale),

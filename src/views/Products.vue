@@ -16,9 +16,9 @@ const language = useLanguageStore()
 const route = useRoute()
 const seller = computed(() => String(route.query.seller || '').trim())
 const emptyTitle = computed(() => seller.value ? language.t('sellerEmpty') : language.t('noResults'))
-const filters = ref({ category: null, minPriceInput: '', maxPriceInput: '' })
+const filters = ref({ category: null, minPriceInput: '', maxPriceInput: '', priceOrderInput: '' })
 const sort = ref('recommended')
-const appliedPrice = ref({ min: null, max: null })
+const appliedPrice = ref({ min: null, max: null, priceOrder: '' })
 const products = ref([])
 const total = ref(0)
 const page = ref(1)
@@ -47,6 +47,8 @@ async function load() {
     const { minCny, maxCny } = priceBounds.value
     if (minCny != null) params.min_price = minCny
     if (maxCny != null) params.max_price = maxCny
+    // 第二种排列方式：选中价格方向时由价格主导，sort 退为同价商品的次序；未选时不传，完全按 sort 排列
+    if (appliedPrice.value.priceOrder) params.price_order = appliedPrice.value.priceOrder
     const { products: list, pagination } = await fetchProducts(params)
     if (requestId !== productsRequestId) return
     total.value = pagination.total

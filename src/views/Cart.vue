@@ -12,7 +12,7 @@ const cart = useCartStore(), language = useLanguageStore()
 const shopGroups = computed(() => {
   const groups = new Map()
   cart.items.forEach(item => {
-    const shop = item.product.seller || 'Craftora maker'
+    const shop = item.product.seller || language.t('brand.name')
     if (!groups.has(shop)) groups.set(shop, { name: shop, items: [], subtotal: 0 })
     const group = groups.get(shop)
     group.items.push(item)

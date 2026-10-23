@@ -5,6 +5,7 @@ import { useLanguageStore } from '../stores/language'
 import { useCartStore } from '../stores/cart'
 import { productBadge, productTitle, productDescription } from '../data/translations'
 import { htmlToPlainText } from '../utils/text'
+import { IMG_FALLBACK } from '../utils/image'
 import { fetchProduct, fetchProducts } from '../services/publicApi'
 import { useQuantityFeedback } from '../composables/useQuantityFeedback'
 import { useI18nTitle } from '../composables/useI18nTitle'
@@ -12,10 +13,18 @@ import ProductGallery from '../components/product/ProductGallery.vue'
 import ProductGrid from '../components/product/ProductGrid.vue'
 import FavoriteButton from '../components/product/FavoriteButton.vue'
 import ProductReviews from '../components/product/ProductReviews.vue'
+import AppImage from '../components/common/AppImage.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 const route = useRoute(), language = useLanguageStore(), cart = useCartStore()
 const product = ref(null); const related = ref([]); const quantity = ref(1); const added = ref(false); const loading = ref(false)
 const title = computed(() => product.value ? productTitle(product.value, language.locale) : '')
+// 「关于此作品」的补充图集：直接复用详情接口的 product.images（后端已用 storageService.getUrl
+// 按 PUBLIC_BASE_URL 拼好绝对地址，与顶部图集同一份数据），这里不重新取图。
+// 仅兜底「有主图但没有图集记录」的商品；过滤空值与占位图，保证没有真实图片时整块不渲染。
+const aboutImages = computed(() => {
+  const list = product.value?.images?.length ? product.value.images : [product.value?.image]
+  return [...new Set(list.filter(src => src && src !== IMG_FALLBACK))]
+})
 const stockMessage = computed(() => {
   if (!product.value) return ''
   if (product.value.stock <= 0) return language.t('sold')
@@ -120,10 +129,38 @@ onMounted(() => loadProduct(route.params.id))
 watch(() => route.params.id, (id) => { if (id) { quantity.value = 1; loadProduct(id) } })
 watch(() => language.locale, () => { if (route.params.id) loadProduct(route.params.id) })
 </script>
-<template><section v-if="loading" class="container page detail-page" role="status" aria-busy="true" aria-label="加载中"><div class="breadcrumbs skeleton-shimmer" style="width:140px;height:14px" /><div class="detail-layout"><div class="detail-skeleton-gallery skeleton-shimmer" /><div class="detail-skeleton-info"><div class="skeleton-shimmer skeleton-line" style="width:30%" /><div class="skeleton-shimmer skeleton-line tall" style="width:75%" /><div class="skeleton-shimmer skeleton-line short" style="width:50%" /><div class="skeleton-shimmer skeleton-line short" style="width:40%" /><div class="skeleton-shimmer skeleton-line" style="width:90%" /><div class="skeleton-shimmer skeleton-line" style="width:85%" /><div class="skeleton-shimmer skeleton-line short" style="width:35%" /></div></div></section><section v-else-if="product" class="container page detail-page"><div class="breadcrumbs"><RouterLink to="/products">{{ language.t('products') }}</RouterLink><span>/</span><RouterLink :to="`/category/${product.category}`">{{ language.category(product.category) }}</RouterLink></div><div class="detail-layout"><ProductGallery :product="product" /><div class="detail-info"><RouterLink class="detail-shop" :to="shopTarget"><span class="shop-avatar">{{ shopInitial }}</span>{{ product.seller }}</RouterLink><span class="eyebrow" :class="{ 'eyebrow--customizable': product.isCustomizable }">{{ product.isCustomizable ? language.t('customizable') : (badge || language.t('handmade')) }}</span><h1>{{ title }}</h1><div class="detail-rating" role="button" tabindex="0" @click="scrollToReviews" @keydown.enter="scrollToReviews"><span class="star-icon">★</span>{{ product.rating }} <u>{{ product.reviewCount }} {{ language.t('reviewCountUnit') }}</u></div><div class="detail-price"><strong>{{ language.price(product.price) }}</strong><del v-if="product.originalPrice > product.price">{{ language.price(product.originalPrice) }}</del><span v-if="product.originalPrice > product.price" class="discount-badge">-{{ Math.round((1 - product.price / product.originalPrice) * 100) }}%</span></div><p class="stock" :class="{ 'stock--limited': product.stock === 1, 'stock--sold': product.stock <= 0 }">● {{ stockMessage }}</p><div class="purchase-row"><div class="quantity-control"><button @click="quantity=Math.max(1,quantity-1)">−</button><span>{{ quantity }}</span><button @click="quantity=Math.min(product.stock,quantity+1)">+</button></div><button class="button primary" @click="add">{{ added ? language.t('added') : language.t('addCart') }}</button><FavoriteButton :product-id="product.id" /></div><div class="detail-shipping"><p class="shipping-note">✦ {{ shippingFree ? language.t('shippingFree') : `${language.t('shippingEstimate')} ${language.price(shipping.feeCny)}` }}</p><p class="shipping-hint">{{ language.t('shippingEstimateHint') }}</p></div></div></div><section class="detail-sections"><section class="detail-section"><h2>{{ language.t('description') }}</h2><p ref="descEl" class="detail-desc" :class="{ 'is-clamped': !descExpanded }">{{ description }}</p><button v-if="descOverflow" type="button" class="text-button detail-more" @click="descExpanded = !descExpanded">{{ descExpanded ? language.t('showLess') : language.t('showMore') }}</button></section><section v-if="detailText" class="detail-section"><h2>{{ language.t('details') }}</h2><p class="detail-text">{{ detailText }}</p></section><section class="detail-section" ref="reviewsEl"><h2>{{ language.t('reviews') }}</h2><ProductReviews :product-id="product.id" @changed="refreshProductRating" /></section></section><section class="section related-section"><div class="section-heading"><h2>{{ language.t('related') }}</h2></div><ProductGrid :products="related" /></section></section><section v-else-if="!loading" class="container page"><EmptyState :title="language.t('productNotFound')" :action="language.t('backHome')" /></section></template>
+<template><section v-if="loading" class="container page detail-page" role="status" aria-busy="true" aria-label="加载中"><div class="breadcrumbs skeleton-shimmer" style="width:140px;height:14px" /><div class="detail-layout"><div class="detail-skeleton-gallery skeleton-shimmer" /><div class="detail-skeleton-info"><div class="skeleton-shimmer skeleton-line" style="width:30%" /><div class="skeleton-shimmer skeleton-line tall" style="width:75%" /><div class="skeleton-shimmer skeleton-line short" style="width:50%" /><div class="skeleton-shimmer skeleton-line short" style="width:40%" /><div class="skeleton-shimmer skeleton-line" style="width:90%" /><div class="skeleton-shimmer skeleton-line" style="width:85%" /><div class="skeleton-shimmer skeleton-line short" style="width:35%" /></div></div></section><section v-else-if="product" class="container page detail-page"><div class="breadcrumbs"><RouterLink to="/products">{{ language.t('products') }}</RouterLink><span>/</span><RouterLink :to="`/category/${product.category}`">{{ language.category(product.category) }}</RouterLink></div><div class="detail-layout"><ProductGallery :product="product" /><div class="detail-info"><RouterLink class="detail-shop" :to="shopTarget"><span class="shop-avatar">{{ shopInitial }}</span>{{ product.seller }}</RouterLink><span class="eyebrow" :class="{ 'eyebrow--customizable': product.isCustomizable }">{{ product.isCustomizable ? language.t('customizable') : (badge || language.t('handmade')) }}</span><h1>{{ title }}</h1><div class="detail-rating" role="button" tabindex="0" @click="scrollToReviews" @keydown.enter="scrollToReviews"><span class="star-icon">★</span>{{ product.rating }} <u>{{ product.reviewCount }} {{ language.t('reviewCountUnit') }}</u></div><div class="detail-price"><strong>{{ language.price(product.price) }}</strong><del v-if="product.originalPrice > product.price">{{ language.price(product.originalPrice) }}</del><span v-if="product.originalPrice > product.price" class="discount-badge">-{{ Math.round((1 - product.price / product.originalPrice) * 100) }}%</span></div><p class="stock" :class="{ 'stock--limited': product.stock === 1, 'stock--sold': product.stock <= 0 }">● {{ stockMessage }}</p><div class="purchase-row"><div class="quantity-control"><button @click="quantity=Math.max(1,quantity-1)">−</button><span>{{ quantity }}</span><button @click="quantity=Math.min(product.stock,quantity+1)">+</button></div><button class="button primary" @click="add">{{ added ? language.t('added') : language.t('addCart') }}</button><FavoriteButton :product-id="product.id" /></div><div class="detail-shipping"><p class="shipping-note">✦ {{ shippingFree ? language.t('shippingFree') : `${language.t('shippingEstimate')} ${language.price(shipping.feeCny)}` }}</p><p class="shipping-hint">{{ language.t('shippingEstimateHint') }}</p></div></div></div><section class="detail-sections"><section class="detail-section"><h2>{{ language.t('description') }}</h2><p ref="descEl" class="detail-desc" :class="{ 'is-clamped': !descExpanded }">{{ description }}</p><button v-if="descOverflow" type="button" class="text-button detail-more" @click="descExpanded = !descExpanded">{{ descExpanded ? language.t('showLess') : language.t('showMore') }}</button></section><section v-if="detailText || aboutImages.length" class="detail-section"><h2>{{ language.t('details') }}</h2><p v-if="detailText" class="detail-text">{{ detailText }}</p><ul v-if="aboutImages.length" class="about-gallery" :aria-label="language.t('details')"><li v-for="(image, index) in aboutImages" :key="image" class="about-gallery__item"><AppImage class="about-gallery__img" :src="image" :alt="aboutImages.length > 1 ? `${title} ${index + 1}` : title" /></li></ul></section><section class="detail-section" ref="reviewsEl"><h2>{{ language.t('reviews') }}</h2><ProductReviews :product-id="product.id" @changed="refreshProductRating" /></section></section><section class="section related-section"><div class="section-heading"><h2>{{ language.t('related') }}</h2></div><ProductGrid :products="related" /></section></section><section v-else-if="!loading" class="container page"><EmptyState :title="language.t('productNotFound')" :action="language.t('backHome')" /></section></template>
 
 <style scoped>
 /* detail-shipping / shipping-hint styling handled by global main.css */
 /* 商品详情（detail）为纯文本，用 pre-line 安全保留换行分段，不走 v-html，避免 XSS */
 .detail-text { white-space: pre-line }
+
+/* 「关于此作品」补充图集：文字说明下方，桌面三列 / 平板两列 / 手机单列，
+   图片宽度自适应容器、按原始比例缩放（不裁切、不变形） */
+.about-gallery {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+.about-gallery__item { margin: 0; min-width: 0 }
+.about-gallery__img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line, #e0e0e0);
+  border-radius: 6px;
+  background: var(--cream, #f5f5f5);
+}
+@media (max-width: 900px) {
+  .about-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
+}
+@media (max-width: 640px) {
+  .about-gallery { grid-template-columns: 1fr; gap: 12px; margin-top: 16px }
+}
 </style>

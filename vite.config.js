@@ -29,7 +29,7 @@ export default defineConfig({
   ],
   build: {
     // 与 package.json 的 browserslist 保持同一套目标：
-    // 最新两版 Chrome / Firefox / Edge，外加 iOS 15 / Safari 15 / Android Chrome 100 / Samsung 20。
+    // 最新两版 Chrome / Firefox / Edge，外加 iOS 15 / Safari 15 / 最新两版 Android Chrome / Samsung 20。
     // 其中 Android Chrome 与 Samsung 浏览器走 Chrome 内核（esbuild 无独立 target 名），
     // 已被更高的 chrome120 覆盖，故此处仅补充 WebKit 侧的 safari15 / ios15。
     target: ['chrome120', 'firefox120', 'edge120', 'safari15', 'ios15'],

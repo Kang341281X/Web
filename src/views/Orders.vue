@@ -235,12 +235,12 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* 全局 .text-button 是零内边距的小号文字按钮，移动端点击区域不足，这里补足到 40px 以上 */
-.text-button { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 4px }
-.modal-close { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center }
+/* 全局 .text-button 是零内边距的小号文字按钮，移动端点击区域补足到 44px */
+.text-button { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 4px }
+.modal-close { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center }
 
 .orders-filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 20px; -webkit-overflow-scrolling: touch }
-.orders-filters button { flex: none; border: 1px solid var(--line); background: var(--paper); color: var(--muted); border-radius: 99px; padding: 9px 16px; font-size: .82rem; min-height: 40px; transition: border-color .18s, color .18s, background .18s }
+.orders-filters button { flex: none; border: 1px solid var(--line); background: var(--paper); color: var(--muted); border-radius: 99px; padding: 9px 16px; font-size: .82rem; min-height: 44px; transition: border-color .18s, color .18s, background .18s }
 .orders-filters button.active { border-color: var(--clay); background: rgba(199, 95, 62, .1); color: var(--clay); font-weight: 600 }
 .orders-hint { color: var(--muted); text-align: center; padding: 40px 0; font-size: .86rem }
 
@@ -265,10 +265,10 @@ onMounted(() => {
 .order-status.is-cancelled { background: #f4e4e2; color: #a4443b }
 
 .orders-pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 22px; color: var(--muted); font-size: .84rem }
-.orders-pagination button { width: 40px; height: 40px; border: 1px solid var(--line); background: var(--paper); border-radius: 50%; font-size: 1.1rem; line-height: 1 }
+.orders-pagination button { width: 44px; height: 44px; border: 1px solid var(--line); background: var(--paper); border-radius: 50%; font-size: 1.1rem; line-height: 1 }
 .orders-pagination button:disabled { opacity: .4 }
 
-.order-modal { position: relative; width: min(560px, calc(100% - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; background: var(--paper); padding: 30px; box-shadow: var(--shadow) }
+.order-modal { position: relative; width: min(560px, calc(100% - 32px)); max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); overflow-y: auto; overscroll-behavior: contain; background: var(--paper); padding: 30px; box-shadow: var(--shadow) }
 .order-modal h2 { font: 600 1.6rem 'Playfair Display', serif; letter-spacing: -.03em; margin: 14px 0 8px; word-break: break-all }
 .order-modal__status { display: flex; align-items: center; gap: 12px; margin: 0 0 6px; font-size: .78rem; color: var(--muted) }
 
@@ -314,7 +314,7 @@ onMounted(() => {
   .orders-filters { margin-inline: -16px; padding-inline: 16px }
   .order-card { padding: 15px }
   .order-card__amount { font-size: 1rem }
-  .order-modal { padding: 22px; width: calc(100% - 24px); max-height: calc(100vh - 24px) }
+  .order-modal { padding: 22px; width: calc(100% - 24px); max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px) }
   .order-modal__actions .button { flex: 1 }
   .order-items li { grid-template-columns: auto 1fr auto; row-gap: 4px }
   .order-item__thumb { grid-row: 1 / span 2 }

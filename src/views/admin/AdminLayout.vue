@@ -78,7 +78,7 @@ function handleMenuSelect(index) {
       :with-header="false"
       :size="210"
     >
-      <AdminSidebar title="Craftora" :collapsed="false" @select="handleMenuSelect" />
+      <AdminSidebar :collapsed="false" @select="handleMenuSelect" />
     </el-drawer>
 
     <!-- 桌面端侧边栏 -->
