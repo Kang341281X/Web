@@ -1,0 +1,1 @@
+var e={SELECTION:46,INDEX:56,RATING:72,STATUS_TAG:84,BOOL_TAG:80,PHONE:120,AMOUNT:88,DATETIME:168,THUMB:64};function t(e){return 12+e*56}export{t as n,e as t};

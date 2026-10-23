@@ -1,0 +1,1 @@
+var e=[{value:`pending`,label:`待确认`},{value:`confirmed`,label:`已确认`},{value:`shipped`,label:`已发货`},{value:`completed`,label:`已完成`},{value:`cancelled`,label:`已取消`}],t={pending:`warning`,confirmed:`primary`,shipped:`info`,completed:`success`,cancelled:`danger`};function n(e){return t[e]||`info`}function r(e){return`¥${Number(e||0).toFixed(2)}`}export{r as n,n as r,e as t};
