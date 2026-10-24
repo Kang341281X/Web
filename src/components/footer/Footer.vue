@@ -23,6 +23,17 @@ onMounted(async () => {
       <div>
         <RouterLink to="/" class="logo"><span>✦</span>{{ language.t('brand.name') }}</RouterLink>
         <p>{{ language.t('footerText') }}</p>
+        <div v-if="socialItems.length" class="footer-social">
+          <p class="footer-phone">
+            <span>{{ language.t('streaming') }}</span>
+          </p>
+          <div class="footer-qr-grid">
+            <figure v-for="item in socialItems" :key="item.id">
+              <AppImage :src="item.image_url" :alt="item.name" width="101" height="101" />
+              <figcaption>{{ item.name }}</figcaption>
+            </figure>
+          </div>
+        </div>
       </div>
       <div>
         <h4>{{ language.t('navShop') }}</h4>
@@ -42,15 +53,6 @@ onMounted(async () => {
           <a v-if="settings.contact_email" :href="`mailto:${settings.contact_email}`">{{ settings.contact_email }}</a>
           <a v-if="settings.contact_email2" :href="`mailto:${settings.contact_email2}`">{{ settings.contact_email2 }}</a>
         </p>
-        <p v-if="socialItems.length" class="footer-phone">
-          <span>{{ language.t('streaming') }}</span>
-        </p>
-        <div v-if="socialItems.length" class="footer-qr-grid">
-          <figure v-for="item in socialItems" :key="item.id">
-            <AppImage :src="item.image_url" :alt="item.name" width="88" height="88" />
-            <figcaption>{{ item.name }}</figcaption>
-          </figure>
-        </div>
       </div>
     </div>
     <div class="footer-bottom container">© 2026 {{ language.t('brand.name') }} · {{ language.t('rights') }}</div>

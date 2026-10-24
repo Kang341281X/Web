@@ -59,6 +59,11 @@ export const useCustomerStore = defineStore('customer', {
       return error.response?.data?.code || ''
     },
 
+    // 后端用 field 标明失败归属的字段（注册时的用户名 / 手机号冲突），前端据此就地提示
+    errorField(error) {
+      return error.response?.data?.field || ''
+    },
+
     // 注册：用户名 + 手机号 + 密码（+ 可选邮箱）。注册不需要验证码；
     // 后端注册即登录（直接签发 token），游客购物车/收藏的合并口径与登录一致
     async register({ username, phone, password, email }) {
@@ -75,7 +80,11 @@ export const useCustomerStore = defineStore('customer', {
         await Promise.all([useCartStore().fetchFromServer(), useFavoritesStore().fetchFromServer()])
         return { success: true, message: data.message || '注册成功', user: data.user }
       } catch (error) {
-        return { success: false, message: this.errorMessage(error, '注册失败，请稍后重试') }
+        return {
+          success: false,
+          message: this.errorMessage(error, '注册失败，请稍后重试'),
+          field: this.errorField(error),
+        }
       } finally {
         this.loading = false
       }

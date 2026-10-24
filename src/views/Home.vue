@@ -7,6 +7,8 @@ import ProductGridSkeleton from '../components/product/ProductGridSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
 const PAGE_SIZE = 60
+// 首页每行 5 个商品，精选板块固定两行（10 个），避免第二行只剩零星几个而显得空
+const SECTION_SIZE = 10
 
 const language = useLanguageStore()
 const products = ref([])
@@ -31,11 +33,11 @@ const curatedSections = computed(() => {
     .sort((a, b) => (1 - b.price / b.originalPrice) - (1 - a.price / a.originalPrice))
   const newArrivals = [...list].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
   return [
-    { title: language.t('bestSelling'), products: bestSelling.slice(0, 8) },
-    { title: language.t('topRated'), products: topRated.slice(0, 8) },
-    { title: language.t('specialOffers'), products: offers.slice(0, 8) },
-    { title: language.t('newArrivals'), products: newArrivals.slice(0, 8) }
-  ].filter(section => section.products.length === 8)
+    { title: language.t('bestSelling'), products: bestSelling.slice(0, SECTION_SIZE) },
+    { title: language.t('topRated'), products: topRated.slice(0, SECTION_SIZE) },
+    { title: language.t('specialOffers'), products: offers.slice(0, SECTION_SIZE) },
+    { title: language.t('newArrivals'), products: newArrivals.slice(0, SECTION_SIZE) }
+  ].filter(section => section.products.length === SECTION_SIZE)
 })
 
 async function load() {
@@ -103,7 +105,7 @@ watch(() => language.locale, () => { page.value = 1; load() })
 
     <!-- Loading Skeleton -->
     <div v-if="loading" class="container">
-      <ProductGridSkeleton v-for="n in 2" :key="n" style="margin-bottom:32px" />
+      <ProductGridSkeleton v-for="n in 2" :key="n" :count="SECTION_SIZE" style="margin-bottom:32px" />
     </div>
 
     <!-- Pagination -->

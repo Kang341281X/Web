@@ -24,11 +24,12 @@ router.post('/register', registerLimiter, async (req, res, next) => {
     const password = requiredPassword(req.body.password)
     const email = normalizeEmail(req.body.email)
 
+    // field 标明冲突落在哪个字段：前端据此把提示显示在对应输入框旁，而不是统一堆在表单底部
     const [sameUsername] = await db.execute('SELECT id FROM customer WHERE username = ?', [username])
-    if (sameUsername[0]) return res.status(409).json({ success: false, message: '用户名已被占用' })
+    if (sameUsername[0]) return res.status(409).json({ success: false, field: 'username', message: '用户名已被占用' })
 
     const [samePhone] = await db.execute('SELECT id FROM customer WHERE phone = ?', [phone])
-    if (samePhone[0]) return res.status(409).json({ success: false, message: '该手机号已注册' })
+    if (samePhone[0]) return res.status(409).json({ success: false, field: 'phone', message: '该手机号已注册' })
 
     const hashed = await bcrypt.hash(password, 12)
     try {
@@ -47,7 +48,12 @@ router.post('/register', registerLimiter, async (req, res, next) => {
       // 并发注册时可能同时通过上面的存在性检查，最终由唯一索引兜底。
       // username 与 phone 各有一个唯一索引，按报错信息区分到底撞的是哪一个。
       if (isUniqueViolation(error)) {
-        return res.status(409).json({ success: false, message: /username/i.test(error.message || '') ? '用户名已被占用' : '该手机号已注册' })
+        const duplicateUsername = /username/i.test(error.message || '')
+        return res.status(409).json({
+          success: false,
+          field: duplicateUsername ? 'username' : 'phone',
+          message: duplicateUsername ? '用户名已被占用' : '该手机号已注册',
+        })
       }
       throw error
     }

@@ -76,7 +76,6 @@ async function addToCart() {
         <strong>{{ language.price(product.price) }}</strong>
         <del v-if="isOnSale">{{ language.price(product.originalPrice) }}</del>
       </div>
-      <p v-if="product.seller" class="product-seller">{{ product.seller }}</p>
     </div>
   </article>
 </template>
